@@ -28,6 +28,18 @@ from .base import PLLBase
 TWOPI = 2.0 * np.pi
 
 
+def frac_spur_offsets(frac: float, fref: float, kmax: int = 6,
+                      fmin: float = 1e3) -> list[float]:
+    """Expected fractional-spur offsets: k*frac folded into [0, fref/2]."""
+    offs = set()
+    for k in range(1, kmax + 1):
+        x = (k * frac) % 1.0
+        fo = min(x, 1.0 - x) * fref
+        if fmin < fo < 0.45 * fref:
+            offs.add(round(fo, 3))
+    return sorted(offs)
+
+
 @dataclass
 class FracConfig:
     """Fractional-N configuration."""
@@ -36,7 +48,8 @@ class FracConfig:
     mash_order: int = 3               # 1, 2 or 3
     bits: int = 24
     dtc: "object | None" = None       # DTCConfig, wired by blocks.dtc
-    dtc_cal: "object | None" = None   # calibration object (LMS), optional
+    dtc_cal: "object | None" = None   # gain calibrator (LMSGainCal/SignSignLMS)
+    dtc_lut_cal: "object | None" = None   # INL calibrator (LUTCal, seconds)
 
     def make_mash(self):
         return {1: Efm1, 2: Mash11, 3: Mash111}[self.mash_order](self.bits)
@@ -191,14 +204,17 @@ class CPPLL(PLLBase):
         # optional DTC (wired when blocks.dtc present in config)
         dtc = None
         dtc_cal = None
+        lut_cal = None
         if c.frac is not None and c.frac.dtc is not None:
             from ..blocks.dtc import DTC
             dtc = DTC(c.frac.dtc, rng, noise=noise,
                       gain_error=dtc_gain_init_error)
-            if calibration and c.frac.dtc_cal is not None:
+            if calibration:
                 dtc_cal = c.frac.dtc_cal
+                lut_cal = c.frac.dtc_lut_cal
 
         t_div = 0.0
+        phi_out = 0.0        # true output phase deviation vs ideal fout timebase
         phase_err = np.empty(n_cycles)
         freq_out = np.empty(n_cycles)
         vctrl_rec = np.empty(n_cycles)
@@ -217,7 +233,10 @@ class CPPLL(PLLBase):
                 # positive residual = divider has counted extra cycles = its edge
                 # is late by residual*Tvco; delay the reference edge to match
                 # (DTC adds a static mid-range offset, absorbed as phase offset)
-                t_ref += dtc.delay(residual_ui / c.fout)
+                t_target = residual_ui / c.fout
+                if lut_cal is not None:
+                    t_target += lut_cal.correction(residual_ui)
+                t_ref += dtc.delay(t_target)
             dt = t_div + jit_div[n] - t_ref
             dt_eff = float(np.clip(dt, -0.45 * tref, 0.45 * tref))  # PFD slip clamp
             dq = cp.charge(dt_eff)
@@ -227,9 +246,13 @@ class CPPLL(PLLBase):
             fv = max(fv, 0.05 * c.osc.f0)
 
             if dtc_cal is not None:
-                dtc_cal.step(np.sign(dt), residual_ui - 0.5)
+                # under-delayed reference (gain_corr low) makes dt correlate
+                # positively with the requested delay -> positive-sign update
+                dtc_cal.step(np.sign(dt), residual_ui)
                 dtc.gain_corr = dtc_cal.value
                 cal_trace[n] = dtc_cal.value
+            if lut_cal is not None:
+                lut_cal.step(dt, residual_ui)
 
             if mash is not None:
                 n_next = int(c.fout // c.fref) + mash.step(frac_word)
@@ -239,7 +262,11 @@ class CPPLL(PLLBase):
             prev_osc_phi = osc_noise[n]
             t_div += n_next / fv - d_osc / (TWOPI * fv)
 
-            phase_err[n] = TWOPI * c.fout * (t_div - (n + 1) * tref)
+            # output phase deviation = integrated frequency error + osc noise
+            # (the divider-edge wobble from the DSM is NOT output phase — the
+            # loop lowpasses it; the VCO only sees it through vctrl)
+            phi_out += TWOPI * (fv - c.fout) * tref + d_osc
+            phase_err[n] = phi_out
             freq_out[n] = fv
             vctrl_rec[n] = lf.vctrl
 
@@ -252,7 +279,7 @@ class CPPLL(PLLBase):
             sim.cal_traces["dtc_gain"] = cal_trace
         spur_offsets = None
         if c.frac is not None:
-            fo = min(c.frac.frac, 1.0 - c.frac.frac) * c.fref
-            spur_offsets = [k * fo for k in (1, 2, 3) if k * fo < 0.45 * c.fref]
+            spur_offsets = frac_spur_offsets(c.frac.frac, c.fref,
+                                             fmin=8.0 * c.fref / n_cycles)
         return postprocess(sim, settle_frac=0.25, int_band=c.int_band,
                            spur_offsets=spur_offsets)

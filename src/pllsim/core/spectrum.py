@@ -55,6 +55,9 @@ def find_spurs(f: np.ndarray, s_phi: np.ndarray, expected_offsets,
         ghi = min(f.size, idx + guard_bins + 1)
         noise_bins = np.concatenate([s[glo:lo], s[hi:ghi]])
         noise = float(np.median(noise_bins)) if noise_bins.size else 0.0
-        p_spur = max(p_cluster - noise * (hi - lo) * df, 1e-300)
-        out[float(fo)] = float(10.0 * np.log10(p_spur / 2.0))
+        p_spur = p_cluster - noise * (hi - lo) * df
+        if p_spur <= 0:
+            out[float(fo)] = float("nan")   # below local noise floor
+        else:
+            out[float(fo)] = float(10.0 * np.log10(p_spur / 2.0))
     return out
