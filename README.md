@@ -71,6 +71,16 @@ field -> analyze/simulate with plots), loop synthesis, architecture
 selector, spur prediction, measured-PN fitting, two-point modulation, hop
 settling, drift tracking, Monte Carlo, VAMS export, benchmarks.
 
+**Windows executables** (no Python needed): the `windows-exe` GitHub
+Actions workflow builds ONEFILE exes for both GUIs with PyInstaller and
+smoke-tests them on the runner.  Trigger it from Actions -> windows-exe ->
+Run workflow; download `pllsim-gui-qt.exe` (desktop, windowed) and
+`pllsim-gui-web.exe` (starts the local server and opens your browser;
+its console window is the server log) from the run's artifacts, or pass
+an existing release tag to attach them as release assets.  Expect large
+files (PyInstaller bundles Python + numpy/scipy/matplotlib; the web exe
+also carries streamlit).
+
 Quick start:
 
 ```python

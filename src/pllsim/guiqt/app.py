@@ -43,10 +43,15 @@ class MainWindow(QMainWindow):
 
 
 def main():
+    import os
     app = QApplication.instance() or QApplication(sys.argv)
     app.setApplicationName("pllsim")
     win = MainWindow()
     win.show()
+    if os.environ.get("PLLSIM_SMOKE"):
+        # CI packaging smoke: open, render, exit clean after a few seconds
+        from PySide6.QtCore import QTimer
+        QTimer.singleShot(4000, app.quit)
     sys.exit(app.exec())
 
 

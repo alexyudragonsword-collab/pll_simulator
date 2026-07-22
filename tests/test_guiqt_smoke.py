@@ -11,7 +11,7 @@ import pytest
 
 os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 QtWidgets = pytest.importorskip(
-    "PySide6.QtWidgets",
+    "PySide6.QtWidgets", exc_type=ImportError,
     reason="PySide6 not installed or system GL libraries missing")
 QApplication = QtWidgets.QApplication
 
