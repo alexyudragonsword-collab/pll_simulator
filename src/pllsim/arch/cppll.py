@@ -71,6 +71,9 @@ class CPPLLConfig:
     div_pn_dbchz: float = -160.0      # divider floor (at divider output)
     div_pn_fc: float = 100e3
     frac: FracConfig | None = None
+    # reference doubler: fref is the DOUBLED rate; duty-cycle error of the
+    # crystal (duty-0.5) makes every other edge early/late -> fref/2 spur
+    ref_doubler_duty_err: float = 0.0
     int_band: tuple[float, float] = (1e3, 100e6)
 
     @property
@@ -99,7 +102,10 @@ class CPPLL(PLLBase):
         n = c.n_div
         lf = LoopFilter(c.filt, 1.0 / c.fref)
         z = FreqResponse(f, lf.transimpedance(f))
-        vco_int = FreqResponse.integrator(f, TWOPI * c.osc.gain)   # rad/V
+        # small-signal Kvco at the actual operating point (nonlinearity-aware)
+        v_op = c.osc.v_for(c.fout)
+        kvco = c.osc.kvco_at(v_op)
+        vco_int = FreqResponse.integrator(f, TWOPI * kvco)         # rad/V
         gol = z * vco_int * (c.cp.icp / TWOPI) * (1.0 / n)
         h_lp = gol.feedback()             # phi_ref -> phi_div closed loop
         err = 1.0 / (1.0 + gol)
@@ -143,6 +149,13 @@ class CPPLL(PLLBase):
         if m.f_ugb > c.fref / 10:
             notes.append(f"UGB {m.f_ugb / 1e6:.1f} MHz > fref/10: continuous-time "
                          "approximation degrading")
+        if kvco != c.osc.gain:
+            notes.append(f"Kvco at v_op={v_op:.3f} V: {kvco / 1e6:.1f} MHz/V "
+                         f"(nominal {c.osc.gain / 1e6:.1f})")
+            if kvco < 0.2 * c.osc.gain:
+                notes.append("WARNING: Kvco collapsed >5x at this operating "
+                             "point — target near the edge of the tuning "
+                             "range; loop gain and stability unreliable")
         bd = output_psd(paths, f)
         jit = rms_jitter_fs(f, bd["total"], c.fout, *c.int_band)
         spurs = {"ref_spur": self._ref_spur_dbc(z)}
@@ -176,17 +189,42 @@ class CPPLL(PLLBase):
     # ----------------------------------------------------------- simulation
     def simulate(self, n_cycles: int, *, noise: bool = True, calibration: bool = True,
                  seed: int = 0, f_start_offset: float = 0.0,
-                 dtc_gain_init_error: float = 0.0) -> SimResult:
+                 dtc_gain_init_error: float = 0.0,
+                 supply_ripple: tuple[float, float] | None = None,
+                 band_select: bool = True) -> SimResult:
+        """supply_ripple: (amplitude_v, freq_hz) sine on the VCO supply,
+        converted to frequency via osc.pushing_hz_v.
+        band_select: run the coarse binary band search before closing the
+        loop when the oscillator has multiple bands."""
         c = self.cfg
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
         n_nom = c.n_div
 
         lf = LoopFilter(c.filt, tref)
-        vctrl_lock = (c.fout - c.osc.f0) / c.osc.gain
-        lf.reset(vctrl_lock + f_start_offset / c.osc.gain)
         osc = Oscillator(c.osc, c.fref, rng, noise=noise)
+        band_trace = None
+        if c.osc.n_bands > 1 and band_select:
+            from ..calibration.gain_cal import BandSelect
+            bs = BandSelect(c.osc.n_bands, c.fout)
+            while not bs.done:
+                osc.band = bs.band
+                f_meas = osc.freq(0.0)
+                if noise:   # counter accuracy over meas_n reference cycles
+                    f_meas += rng.normal(0.0, c.fref / (bs.meas_n * np.sqrt(12)))
+                bs.observe(f_meas)
+            osc.band = bs.band
+            band_trace = np.asarray(bs.trace, dtype=float)
+            lf.reset(f_start_offset / c.osc.gain)   # vctrl starts mid-band
+        else:
+            lf.reset(c.osc.v_for(c.fout) + f_start_offset / c.osc.gain)
         cp = ChargePump(c.cp, tref, rng, noise=noise)
+
+        if supply_ripple is not None:
+            amp_sup, f_sup = supply_ripple
+            v_sup = amp_sup * np.sin(TWOPI * f_sup * np.arange(n_cycles) * tref)
+        else:
+            v_sup = np.zeros(n_cycles)
 
         # pre-synthesized reference + divider phase-noise time jitter [s]
         if noise:
@@ -197,6 +235,11 @@ class CPPLL(PLLBase):
         else:
             jit_ref = np.zeros(n_cycles)
             jit_div = np.zeros(n_cycles)
+        if c.ref_doubler_duty_err != 0.0:
+            # alternating edge displacement: (duty-0.5)*T_xtal = err*2*tref,
+            # split +/- around the mean -> square wave at fref/2
+            jit_ref = jit_ref + c.ref_doubler_duty_err * tref \
+                * np.where(np.arange(n_cycles) % 2 == 0, 1.0, -1.0)
 
         mash = c.frac.make_mash() if c.frac is not None else None
         frac_word = c.frac.frac_word if c.frac is not None else 0
@@ -221,7 +264,7 @@ class CPPLL(PLLBase):
         cal_trace = np.empty(n_cycles) if dtc_cal is not None else None
         osc_noise = osc.noise_steps(n_cycles) if noise else np.zeros(n_cycles)
         prev_osc_phi = 0.0
-        fv = osc.freq(lf.vctrl)
+        fv = osc.freq(lf.vctrl, v_sup[0])
         n_next = n_nom if mash is None else int(c.fout // c.fref)
 
         for n in range(n_cycles):
@@ -242,7 +285,7 @@ class CPPLL(PLLBase):
             dq = cp.charge(dt_eff)
             t_on = min(abs(dt_eff) + c.cp.t_reset, 0.9 * tref)
             lf.update_pulse(dq / t_on, t_on)
-            fv = osc.freq(lf.vctrl)
+            fv = osc.freq(lf.vctrl, v_sup[n])
             fv = max(fv, 0.05 * c.osc.f0)
 
             if dtc_cal is not None:
@@ -277,9 +320,16 @@ class CPPLL(PLLBase):
                         lock_time_s=lock)
         if dtc_cal is not None:
             sim.cal_traces["dtc_gain"] = cal_trace
+        if band_trace is not None:
+            sim.cal_traces["band_select"] = band_trace
+            sim.extra["band"] = osc.band
         spur_offsets = None
         if c.frac is not None:
             spur_offsets = frac_spur_offsets(c.frac.frac, c.fref,
                                              fmin=8.0 * c.fref / n_cycles)
+        if supply_ripple is not None and supply_ripple[1] < 0.45 * c.fref:
+            spur_offsets = (spur_offsets or []) + [supply_ripple[1]]
+        if c.ref_doubler_duty_err != 0.0:
+            spur_offsets = (spur_offsets or []) + [c.fref / 2.0]
         return postprocess(sim, settle_frac=0.25, int_band=c.int_band,
                            spur_offsets=spur_offsets)

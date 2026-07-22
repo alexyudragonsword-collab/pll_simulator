@@ -73,6 +73,44 @@ class KdcoCal:
         return self.value
 
 
+class BandSelect:
+    """Binary-search coarse-band selection (pre-lock, open loop).
+
+    Assumes band index -> frequency is monotonic (band pitch band_step_hz).
+    Each trial band is measured for meas_n reference cycles by the counter
+    (accuracy ~ fref/meas_n); ~log2(n_bands) trials.
+    """
+
+    def __init__(self, n_bands: int, f_target: float, meas_n: int = 64):
+        self.f_target = f_target
+        self.meas_n = meas_n
+        self.lo, self.hi = 0, n_bands - 1
+        self.band = (self.lo + self.hi) // 2
+        self.best_band = self.band
+        self.best_err = float("inf")
+        self.trace: list[int] = []
+        self.done = n_bands <= 1
+
+    def observe(self, f_meas: float) -> int:
+        """Feed the measured frequency of the current trial band; returns the
+        next band to try (or the final choice once .done)."""
+        self.trace.append(self.band)
+        err = f_meas - self.f_target
+        if abs(err) < self.best_err:
+            self.best_err = abs(err)
+            self.best_band = self.band
+        if err < 0:
+            self.lo = self.band + 1
+        else:
+            self.hi = self.band - 1
+        if self.lo > self.hi:
+            self.done = True
+            self.band = self.best_band
+        else:
+            self.band = (self.lo + self.hi) // 2
+        return self.band
+
+
 class TdcPeriodCal:
     """EMA of TDC codes-per-DCO-period; .value converts code -> UI."""
 
