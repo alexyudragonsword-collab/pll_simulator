@@ -91,6 +91,7 @@
     <li><a href="#comparison"><span class="en">Results comparison</span><span class="zh">结果比较</span></a></li>
     <li><a href="#caveats"><span class="en">Caveats and lessons learned</span><span class="zh">注意事项与经验教训</span></a></li>
     <li><a href="#repro"><span class="en">Reproducing everything</span><span class="zh">复现方法</span></a></li>
+    <li><a href="#ext"><span class="en">Extensions: synthesis, fractional SSPLL, impairments, benchmark</span><span class="zh">扩展篇：环路综合、小数N SSPLL、二阶效应、文献对标</span></a></li>
   </ol>
 </div>
 
@@ -461,9 +462,78 @@ sim = pll.simulate(300_000, seed=1, f_start_offset=-25e6)
 from pllsim.plotting import plot_pn_breakdown
 plot_pn_breakdown(ar, sim, save="pn.png")</code></pre>
 <p class="sub">
-  <span class="en">All figures in this document are the committed outputs of ex01–ex06 (copied to <code>docs/img/</code>). Repository layout, NTF tables and further details: see the top-level <code>README.md</code>.</span>
-  <span class="zh">本文档全部插图均为 ex01–ex06 的实际输出（复制于 <code>docs/img/</code>）。仓库结构、NTF 表与更多细节见顶层 <code>README.md</code>。</span>
+  <span class="en">All figures in this document are the committed outputs of the example scripts (copied to <code>docs/img/</code>). Repository layout, NTF tables and further details: see the top-level <code>README.md</code>.</span>
+  <span class="zh">本文档全部插图均为示例脚本的实际输出（复制于 <code>docs/img/</code>）。仓库结构、NTF 表与更多细节见顶层 <code>README.md</code>。</span>
 </p>
+
+<!-- ================================================================ -->
+<h2 id="ext"><span class="num">11</span><span class="en">Extensions</span><span class="zh">扩展篇</span></h2>
+
+<h3><span class="en">11.1 Loop synthesis and the bandwidth optimum (ex07)</span><span class="zh">11.1 环路综合与最优带宽（ex07）</span></h3>
+<p>
+  <span class="en"><code>pllsim.synth</code> turns the library from a set of models into a design tool: <code>design_cp_filter()</code> synthesizes passive filter components numerically against the real network response (three degrees of freedom — total capacitance, zero constant, C2 split — so C3 loading is honored; hits UGB/PM within 6%/3.5&deg;). <code>design_sspll_filter()</code> solves on the exact discrete sub-sampling loop (the CT approximation lands ~30% low at UGB/f<sub>ref</sub> = 1/16), and <code>design_adpll_dlf()</code> places (&alpha;, &rho;) on the exact z-domain loop. <code>sweep_bandwidth()</code> then answers the classic question by machine.</span>
+  <span class="zh"><code>pllsim.synth</code> 把这个库从模型集合变成设计工具：<code>design_cp_filter()</code> 对真实网络响应数值综合无源滤波器（三个自由度——总电容、零点常数、C2 占比——因此 C3 负载效应被完整计入；命中 UGB/PM 精度 6%/3.5&deg;）。<code>design_sspll_filter()</code> 在精确离散亚采样环路上求解（CT 近似在 UGB/f<sub>ref</sub>=1/16 时低约 30%），<code>design_adpll_dlf()</code> 在精确 z 域环路上配置 (&alpha;, &rho;)。<code>sweep_bandwidth()</code> 让机器回答那个经典问题。</span>
+</p>
+<figure>
+  <img src="img/ex07_jitter_vs_bw.png" alt="jitter vs bandwidth">
+  <figcaption>
+    <span class="en">Jitter vs UGB for the 19.2 MHz &rarr; 4.8 GHz CPPLL, PM held at 58&deg; by synthesis at every point. The U-shape is the crossover between N-multiplied in-band sources and the VCO.</span>
+    <span class="zh">19.2 MHz &rarr; 4.8 GHz CPPLL 的 jitter–UGB 曲线，每个点都由综合器把 PM 锁定在 58&deg;。U 形即 N 倍增带内噪声与 VCO 噪声的交叠点。</span>
+  </figcaption>
+</figure>
+
+<h3><span class="en">11.2 DTC-assisted fractional-N SSPLL (ex08)</span><span class="zh">11.2 DTC 辅助小数N SSPLL（ex08）</span></h3>
+<p>
+  <span class="en">The modern low-jitter synthesizer: a 1st-order EFM residue drives a 10-bit/250 fs DTC that shifts the sampling instant onto a VCO zero crossing every cycle. EFM1 — not MASH-2/3 — because its residue spans exactly 1 UI (208 ps), a practical DTC range; the config enforces this. Fractional operation is nearly free (137 vs 135 fs integer-N); an 8% DTC gain error costs 1.3 ps and a −34 dBc in-band spur, and sign-sign LMS recovers 149 fs with the gain estimate landing on 1/(1+&epsilon;) to four decimal places. Found along the way: the DTC's bipolar mid-range offset clips 38% of codes for a one-sided EFM residue — the target must cancel it.</span>
+  <span class="zh">现代低抖动频综形态：一阶 EFM 残差驱动 10 位/250 fs DTC，每周期把采样时刻移到 VCO 过零点上。用 EFM1 而非 MASH-2/3——其残差跨度恰为 1 UI（208 ps），匹配现实 DTC 量程；配置层强制此约束。小数化几乎免费（137 vs 整数N 135 fs）；8% DTC 增益误差代价是 1.3 ps 和 −34 dBc 带内杂散，符号-符号 LMS 恢复到 149 fs，增益估计精确到 1/(1+&epsilon;) 小数点后四位。过程中发现：DTC 的双极中程偏移会把单边 EFM 残差的 38% 目标码钳位到零——目标值必须抵消该偏移。</span>
+</p>
+<figure>
+  <img src="img/ex08_sspll_frac.png" alt="fractional SSPLL">
+  <figcaption>
+    <span class="en">Fractional SSPLL spectra: perfect DTC / 8% gain error / after LMS calibration.</span>
+    <span class="zh">小数N SSPLL 频谱：理想 DTC / 8% 增益误差 / LMS 校准后。</span>
+  </figcaption>
+</figure>
+<figure>
+  <img src="img/ex08_ilcm_timing_cal.png" alt="ILCM timing calibration">
+  <figcaption>
+    <span class="en">ILCM: a 3 ps FTL-detector offset parks the FTL with residual drift (−32 dBc spur); a second detector observing the injection's own phase jump corrects it to −3.00 ps — spur &rarr; −96 dBc.</span>
+    <span class="zh">ILCM：3 ps 的 FTL 检测器偏置使 FTL 带残余漂移驻留（−32 dBc 杂散）；观测注入自身相位跳变的第二检测器把偏置校正到 −3.00 ps——杂散降至 −96 dBc。</span>
+  </figcaption>
+</figure>
+
+<h3><span class="en">11.3 Second-order impairments (ex09)</span><span class="zh">11.3 二阶效应（ex09）</span></h3>
+<p>
+  <span class="en">Four hardware realities added to the CPPLL: (a) K<sub>vco</sub> nonlinearity — <code>analyze()</code> evaluates the loop at the true operating point (−5%/V compression at the tuning-range top: K<sub>vco</sub> 60&rarr;35 MHz/V, UGB 0.95&rarr;0.61 MHz), warning on &gt;5&times; gain collapse; (b) supply pushing — 50 MHz/V &times; 5 mV ripple produces an FM spur matching the |E(f)|-shaped narrowband-FM analytic within 2 dB, in-band and out; (c) reference-doubler duty-cycle error — alternating edges give the f<sub>ref</sub>/2 spur with exact 20 dB/dec scaling vs duty error; (d) 32-band coarse tuning — binary band search from counter measurements, 5 trials, then normal lock.</span>
+  <span class="zh">给 CPPLL 加入四种硬件现实：(a) K<sub>vco</sub> 非线性——<code>analyze()</code> 在真实工作点求环路（调谐高端 −5%/V 压缩：K<sub>vco</sub> 60&rarr;35 MHz/V，UGB 0.95&rarr;0.61 MHz），增益塌陷 &gt;5 倍时告警；(b) 电源推挤——50 MHz/V &times; 5 mV 纹波产生的调频杂散与 |E(f)| 整形的窄带 FM 解析式带内带外都在 2 dB 内吻合；(c) 参考倍频器占空比误差——交替沿产生 f<sub>ref</sub>/2 杂散，对占空比误差精确 20 dB/dec 标度；(d) 32 频段粗调——计数器驱动的二分频段搜索，5 次试探后正常锁定。</span>
+</p>
+<figure>
+  <img src="img/ex09_doubler_spur.png" alt="doubler duty error spur">
+  <figcaption>
+    <span class="en">Doubler duty-error spur at f<sub>ref</sub>/2 vs duty error: measured 20 dB/dec, as physics demands.</span>
+    <span class="zh">f<sub>ref</sub>/2 处倍频器占空比误差杂散 vs 占空比误差：实测 20 dB/dec，与物理一致。</span>
+  </figcaption>
+</figure>
+<figure>
+  <img src="img/ex09_band_select.png" alt="band selection">
+  <figcaption>
+    <span class="en">Binary coarse-band search (32 bands) followed by fine lock.</span>
+    <span class="zh">二分频段搜索（32 段）后进入细锁定。</span>
+  </figcaption>
+</figure>
+
+<h3><span class="en">11.4 Literature benchmark: Gao et al., JSSC 2009/2010 (ex10)</span><span class="zh">11.4 文献对标：Gao 等，JSSC 2009/2010（ex10）</span></h3>
+<p>
+  <span class="en">The credibility check. Published measurements of the landmark 55.25 MHz &rarr; 2.21 GHz sub-sampling PLL (in-band −126 dBc/Hz, 0.15 ps rms over 10 kHz–100 MHz, companion chip BW = f<sub>ref</sub>/20) are used as targets; sampler and filter values are technology-plausible assumptions (not published), and the filter is synthesized by <code>design_sspll_filter</code>. The model lands at −126.8 dBc/Hz and 0.122–0.139 ps. The same reference/VCO in a classic CPPLL at comparable PD-path current: −106.8 dBc/Hz and 0.40 ps — the paper's central claim (no N&sup2; on PD/CP noise) reproduced quantitatively as a ~19 dB in-band gap.</span>
+  <span class="zh">可信度背书。以里程碑式的 55.25 MHz &rarr; 2.21 GHz 亚采样 PLL 的发表实测为目标（带内 −126 dBc/Hz，10 kHz–100 MHz 积分 0.15 ps rms，姊妹芯片 BW = f<sub>ref</sub>/20）；采样器与滤波器取工艺合理假设值（论文未完整公开），滤波器由 <code>design_sspll_filter</code> 综合。模型落在 −126.8 dBc/Hz 与 0.122–0.139 ps。相同参考/VCO 放进同等 PD 路径电流的经典 CPPLL：−106.8 dBc/Hz、0.40 ps——论文的核心论点（PD/CP 噪声无 N&sup2; 惩罚）以约 19 dB 带内差距被定量重现。</span>
+</p>
+<figure>
+  <img src="img/ex10_benchmark_gao.png" alt="Gao benchmark">
+  <figcaption>
+    <span class="en">Benchmark PN breakdown with the time-domain periodogram overlaid; in-band set by reference &times;N with sampler/gm well below — the signature of a correct sub-sampling noise budget.</span>
+    <span class="zh">对标相噪分解与时域周期图叠加；带内由参考 &times;N 决定、采样器/gm 远在其下——正确的亚采样噪声预算特征。</span>
+  </figcaption>
+</figure>
 
 </div>
 <script>

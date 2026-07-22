@@ -10,10 +10,17 @@ examples with plots, cross-domain result comparisons and lessons learned.
 | Architecture | Frequency domain | Time domain | Example | Jitter class |
 |---|---|---|---|---|
 | Charge-pump PLL (int-N / frac-N + DTC) | s-domain linear phase model | ref-edge event-driven | ex01, ex02 | ~170–260 fs |
-| Sub-sampling PLL (+ FLL) | **exact discrete z-domain** | ref-edge event-driven | ex03 | ~150 fs |
+| Sub-sampling PLL (+ FLL, int-N & **frac-N/DTC**) | **exact discrete z-domain** | ref-edge event-driven | ex03, ex08 | ~135–150 fs |
 | Sampling PLL (reference-sampling) | s-domain | ref-edge event-driven | ex04 | ~200 fs |
 | ADPLL (counter+TDC / DTC+BBPD) | exact z-domain | ref-edge event-driven | ex05 | ~110 fs |
-| Injection-locked clock multiplier (+ FTL) | z-domain realignment model | per-cycle recursion (+intra-period spur sampling) | ex06 | ~115 fs |
+| Injection-locked clock multiplier (+ FTL, timing cal) | z-domain realignment model | per-cycle recursion (+intra-period spur sampling) | ex06, ex08 | ~115 fs |
+
+Beyond the architectures: **loop synthesis** (`pllsim.synth` — filter/DLF
+component values from UGB/PM targets, jitter-vs-bandwidth optimization, ex07),
+**second-order impairments** (Kvco nonlinearity, supply pushing, reference-
+doubler duty error, coarse band selection — ex09), and a **literature
+benchmark** reproducing Gao et al.'s JSSC'09/'10 sub-sampling PLL published
+measurements (ex10, in-band −126 dBc/Hz / 0.15 ps class).
 
 Coverage targets: fref = 19.2–250 MHz, fout up to 12 GHz, integrated jitter
 50–200 fs (1 kHz–100 MHz band, configurable).
