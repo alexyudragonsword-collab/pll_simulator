@@ -123,3 +123,20 @@ class LoopFilter:
         for i, wi in enumerate(w):
             z[i] = self.c @ np.linalg.solve(wi * eye - self.a, self.b)
         return z
+
+    def charge_tf_z(self, f: np.ndarray) -> np.ndarray:
+        """Exact discrete charge -> vctrl transfer [V/C] at z = e^{j2πf·tstep}.
+
+        Matches update_impulse exactly: x[n] = Ad (x[n-1] + b dq[n])
+        => H(z) = C (I - Ad z^-1)^-1 Ad b.  Use this for loops with aggressive
+        BW/fref ratios where the continuous 1/s approximation misses the
+        sampled-loop rolloff.
+        """
+        zinv = np.exp(-2j * np.pi * np.asarray(f, dtype=float) * self.tstep)
+        n = self.a.shape[0]
+        adb = self.ad @ self.b
+        eye = np.eye(n)
+        out = np.empty(zinv.shape, dtype=complex)
+        for i, zi in enumerate(zinv):
+            out[i] = self.c @ np.linalg.solve(eye - self.ad * zi, adb)
+        return out
