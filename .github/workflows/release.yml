@@ -3,6 +3,11 @@ name: Release
 on:
   push:
     tags: ["v*"]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Version to tag and release (e.g. v0.1.0); notes are read from docs/release-notes/<version>.md"
+        required: true
 
 permissions:
   contents: write
@@ -12,11 +17,42 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - name: Create GitHub Release from the annotated tag message
+        with:
+          fetch-depth: 0
+      - name: Resolve version and notes
+        id: v
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            VERSION="$INPUT_VERSION"
+          else
+            VERSION="$GITHUB_REF_NAME"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          NOTES="docs/release-notes/$VERSION.md"
+          if [ ! -f "$NOTES" ]; then
+            echo "release notes file $NOTES not found" >&2; exit 1
+          fi
+          echo "notes=$NOTES" >> "$GITHUB_OUTPUT"
+      - name: Create tag if missing (workflow_dispatch)
+        if: github.event_name == 'workflow_dispatch'
+        run: |
+          V="${{ steps.v.outputs.version }}"
+          if ! git rev-parse -q --verify "refs/tags/$V" >/dev/null; then
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag -a "$V" -F "${{ steps.v.outputs.notes }}"
+            git push origin "$V"
+          fi
+      - name: Create GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          git tag -l --format='%(contents)' "$GITHUB_REF_NAME" > notes.md
-          gh release create "$GITHUB_REF_NAME" \
-            --title "pllsim $GITHUB_REF_NAME" \
-            --notes-file notes.md
+          V="${{ steps.v.outputs.version }}"
+          if gh release view "$V" >/dev/null 2>&1; then
+            echo "release $V already exists"; exit 0
+          fi
+          gh release create "$V" --title "pllsim $V" \
+            --target "$GITHUB_SHA" \
+            --notes-file "${{ steps.v.outputs.notes }}"
