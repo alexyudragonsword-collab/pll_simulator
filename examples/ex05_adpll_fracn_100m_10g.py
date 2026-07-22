@@ -8,9 +8,20 @@ Part 1 — counter-assisted (TDC) ADPLL:
 Part 2 — DTC + bang-bang fractional ADPLL:
   * MASH 1-1 + 12-bit DTC, sign-sign LMS DTC gain calibration
   * self-consistently linearized BBPD in analyze()
+
+Part 3 — domain cross-check figure: both modes side by side, frequency-domain
+linear model (total + per-source) overlaid with the time-domain periodogram.
+TDC mode matches within ~0.3 dB band-averaged; the BB mode sits ~3 dB above
+the model in-band — the expected accuracy limit of Gaussian BBPD
+linearization against the deterministic MASH/DTC residual pattern (the
+time-domain result is the reference for BB loops).
 """
 import os
 
+import matplotlib
+
+matplotlib.use("Agg")
+import matplotlib.pyplot as plt
 import numpy as np
 
 from pllsim.arch.adpll import ADPLL, ADPLLConfig, DLFConfig
@@ -58,7 +69,9 @@ plot_cal_convergence(sim1, save=f"{OUT}/ex05_gain_cals.png")
 
 # ---- Part 2: DTC + bang-bang fractional ADPLL -----------------------------
 print("\n=== DTC + BBPD fractional ADPLL ===")
-cal = SignSignLMS(init=1.0, mu=1e-5, gear_shift_n=100_000, mu_final=1e-6)
+# gear shift before the PSD analysis window (last 75%) so the large-mu
+# convergence wander does not contaminate the low-frequency periodogram
+cal = SignSignLMS(init=1.0, mu=1e-5, gear_shift_n=60_000, mu_final=1e-6)
 cfg2 = ADPLLConfig(
     fref=FREF, fout=FOUT, osc=DCO,
     dlf=DLFConfig(alpha=2.0, rho=2**-6),
@@ -78,4 +91,51 @@ print(f"jitter (t-dom) = {sim2.jitter_fs:.1f} fs vs linear {ar2.jitter_fs:.1f} f
       "(linear model is conservative for BB loops)")
 
 plot_pn_breakdown(ar2, sim2, save=f"{OUT}/ex05_bb_pn_breakdown.png")
+
+# ---- Part 3: frequency-domain vs time-domain overlay, both modes ----------
+from pllsim.core.jitter import ldbc_from_sphi
+
+# the FCAL corrected Kdco at runtime -> compare against the CALIBRATED model
+ar1 = ADPLL(ADPLLConfig(**{**cfg1.__dict__, "kdco_est_error": 0.0})).analyze()
+
+fig, axes = plt.subplots(1, 2, figsize=(13.5, 5.6), sharey=True)
+for ax, ar, sim, title in [
+        (axes[0], ar1, sim1,
+         f"counter-assisted TDC mode\n(lin {ar1.jitter_fs:.0f} fs vs "
+         f"sim {sim1.jitter_fs:.0f} fs)"),
+        (axes[1], ar2, sim2,
+         f"DTC + bang-bang mode\n(lin {ar2.jitter_fs:.0f} fs vs "
+         f"sim {sim2.jitter_fs:.0f} fs)")]:
+    ax.semilogx(sim.f_psd, ldbc_from_sphi(sim.s_phi_psd), color="0.6", lw=0.7,
+                label="time-domain periodogram")
+    for k in ar.pn_breakdown:
+        if k != "total":
+            ax.semilogx(ar.f, ldbc_from_sphi(ar.pn_breakdown[k]), lw=0.8,
+                        alpha=0.8, label=k)
+    ax.semilogx(ar.f, ldbc_from_sphi(ar.pn_breakdown["total"]), "k", lw=2.2,
+                label="linear model total")
+    ax.set_xlim(1e3, 5e7)
+    ax.set_ylim(-160, -85)
+    ax.set_xlabel("offset frequency [Hz]")
+    ax.set_title(title, fontsize=10)
+    ax.grid(True, which="both", alpha=0.3)
+    ax.legend(fontsize=7, loc="lower left")
+axes[0].set_ylabel("L(f) [dBc/Hz]")
+fig.suptitle("ADPLL 100 MHz -> 10.0503 GHz: frequency-domain model vs "
+             "time-domain simulation", fontsize=12)
+fig.tight_layout()
+fig.savefig(f"{OUT}/ex05_domain_comparison.png", dpi=150)
+
+for tag, ar, sim in [("TDC", ar1, sim1), ("BB ", ar2, sim2)]:
+    m = (sim.f_psd > 2e4) & (sim.f_psd < 2.5e7)
+    fm, sm = sim.f_psd[m], sim.s_phi_psd[m]
+    tgt = np.interp(np.log10(fm), np.log10(ar.f), ar.pn_breakdown["total"])
+    edges = np.logspace(np.log10(2e4), np.log10(2.5e7), 7)
+    errs = []
+    for a, b in zip(edges[:-1], edges[1:]):
+        mm = (fm >= a) & (fm < b)
+        errs.append(f"{a / 1e6:.2f}-{b / 1e6:.2f}M: "
+                    f"{10 * np.log10(np.mean(sm[mm]) / np.mean(tgt[mm])):+.1f} dB")
+    print(f"domain match [{tag}]: " + " | ".join(errs))
+
 print(f"\nplots saved to {OUT}/ex05_*.png")
