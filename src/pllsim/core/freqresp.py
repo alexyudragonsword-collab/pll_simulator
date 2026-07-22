@@ -204,8 +204,10 @@ def loop_metrics(gol: FreqResponse) -> LoopMetrics:
     hdb = hcl.db()
     ref_db = hdb[0]
     peaking = float(np.max(hdb) - ref_db)
+    # first downward crossing: z-domain responses are periodic in f, so the
+    # last crossing would land near an alias image instead of the loop BW
     c3 = _log_interp_crossing(f, hdb, ref_db - 3.0)
-    f3 = c3[-1] if c3 else float("nan")
+    f3 = c3[0] if c3 else float("nan")
     return LoopMetrics(
         f_ugb=float(f_ugb),
         pm_deg=float(pm),

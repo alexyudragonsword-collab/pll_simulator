@@ -147,6 +147,26 @@ class ShapedQuantization(NoiseSource):
 
 
 @dataclass
+class DcoQuantPhase(NoiseSource):
+    """DCO frequency-quantization noise converted to phase.
+
+    S_df(f) = kdco^2/(6*fs) * |2 sin(pi f/fs)|^(2*order)   [Hz^2/Hz]
+    S_phi(f) = S_df(f) / f^2                                [rad^2/Hz]
+    order=0: plain quantization; order=m: m-th order dithered at fs.
+    """
+
+    kdco: float = 1e3      # Hz per LSB
+    fs: float = 100e6      # dither/update rate
+    order: int = 1
+
+    def psd(self, f: np.ndarray) -> np.ndarray:
+        f = np.asarray(f, dtype=float)
+        s_df = self.kdco**2 / (6.0 * self.fs) * \
+            np.abs(2.0 * np.sin(np.pi * f / self.fs)) ** (2 * self.order)
+        return s_df / f**2
+
+
+@dataclass
 class TabulatedPhase(NoiseSource):
     """Piecewise log-log interpolated S_phi from (f, L_dbc) pairs."""
 
