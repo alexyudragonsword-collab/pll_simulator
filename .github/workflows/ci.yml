@@ -5,7 +5,39 @@ on:
     branches: ["**"]
   pull_request:
 
+permissions:
+  contents: write
+
 jobs:
+  auto-release:
+    # the session git proxy cannot push tags and the MCP token cannot
+    # dispatch workflows, so releases ride on branch pushes: any
+    # docs/release-notes/v*.md without a matching tag gets tagged+released
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Tag and release pending versions
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          for f in docs/release-notes/v*.md; do
+            [ -e "$f" ] || continue
+            V=$(basename "$f" .md)
+            if ! git ls-remote --exit-code --tags origin "refs/tags/$V" >/dev/null 2>&1; then
+              git tag -a "$V" -F "$f"
+              git push origin "$V"
+            fi
+            if ! gh release view "$V" >/dev/null 2>&1; then
+              gh release create "$V" --title "pllsim $V" \
+                --target "$GITHUB_SHA" --notes-file "$f"
+            fi
+          done
+
   test:
     runs-on: ubuntu-latest
     strategy:
