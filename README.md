@@ -3,6 +3,10 @@
 Python behavioral models of five PLL architectures with phase-noise budgeting,
 spurious analysis and built-in calibration algorithms.
 
+**Illustrated design guide** (bilingual EN/中文): open
+[`docs/index.html`](docs/index.html) in a browser — design rationale, worked
+examples with plots, cross-domain result comparisons and lessons learned.
+
 | Architecture | Frequency domain | Time domain | Example | Jitter class |
 |---|---|---|---|---|
 | Charge-pump PLL (int-N / frac-N + DTC) | s-domain linear phase model | ref-edge event-driven | ex01, ex02 | ~170–260 fs |

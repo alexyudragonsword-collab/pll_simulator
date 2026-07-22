@@ -1,0 +1,489 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pllsim — PLL Behavioral Simulation Library</title>
+<style>
+  :root {
+    --fg: #1a1d21; --bg: #ffffff; --muted: #5c6570; --accent: #0b63c4;
+    --card: #f5f7fa; --border: #dde3ea; --code-bg: #eef1f5; --warn: #9a4b00;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; color: var(--fg); background: var(--bg);
+    font: 16px/1.65 -apple-system, "Segoe UI", Roboto, "Helvetica Neue",
+          "PingFang SC", "Microsoft YaHei", sans-serif;
+  }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 24px 20px 80px; }
+  h1 { font-size: 1.9em; margin: 0.4em 0 0.2em; }
+  h2 { font-size: 1.45em; margin-top: 2.2em; border-bottom: 2px solid var(--border);
+       padding-bottom: 6px; }
+  h3 { font-size: 1.15em; margin-top: 1.8em; color: var(--accent); }
+  p { margin: 0.7em 0; }
+  .sub { color: var(--muted); }
+  code, pre { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+              font-size: 0.92em; }
+  code { background: var(--code-bg); padding: 1px 5px; border-radius: 4px; }
+  pre { background: var(--code-bg); padding: 12px 16px; border-radius: 8px;
+        overflow-x: auto; line-height: 1.5; }
+  pre code { background: none; padding: 0; }
+  table { border-collapse: collapse; width: 100%; margin: 1em 0; font-size: 0.93em; }
+  th, td { border: 1px solid var(--border); padding: 7px 10px; text-align: left; }
+  th { background: var(--card); }
+  figure { margin: 1.4em 0; text-align: center; }
+  figure img { max-width: 100%; border: 1px solid var(--border); border-radius: 8px; }
+  figcaption { font-size: 0.88em; color: var(--muted); margin-top: 8px; }
+  .formula { background: var(--card); border-left: 3px solid var(--accent);
+             padding: 8px 14px; margin: 0.9em 0; font-family: ui-monospace, Menlo,
+             Consolas, monospace; font-size: 0.93em; overflow-x: auto; }
+  .callout { background: #fff7ed; border-left: 4px solid var(--warn);
+             padding: 10px 16px; border-radius: 0 8px 8px 0; margin: 1.1em 0; }
+  .callout.blue { background: #eef6ff; border-left-color: var(--accent); }
+  .lang-btn {
+    position: fixed; top: 16px; right: 18px; z-index: 10;
+    background: var(--accent); color: #fff; border: none; border-radius: 999px;
+    padding: 8px 18px; font-size: 15px; cursor: pointer; font-weight: 600;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.18);
+  }
+  .lang-btn:hover { filter: brightness(1.12); }
+  /* language switching */
+  body.lang-en .zh { display: none !important; }
+  body.lang-zh .en { display: none !important; }
+  .toc { background: var(--card); border-radius: 10px; padding: 14px 22px; }
+  .toc a { color: var(--accent); text-decoration: none; }
+  .toc a:hover { text-decoration: underline; }
+  .toc li { margin: 3px 0; }
+  .num { color: var(--muted); font-weight: 600; margin-right: 6px; }
+  @media (prefers-color-scheme: dark) {
+    :root { --fg: #e6e9ed; --bg: #14171b; --muted: #98a2ad; --accent: #58a6ff;
+            --card: #1d2228; --border: #313941; --code-bg: #22282f; }
+    .callout { background: #2b2113; }
+    .callout.blue { background: #14243a; }
+    figure img { background: #fff; }
+  }
+</style>
+</head>
+<body class="lang-zh">
+<button class="lang-btn" id="langBtn" onclick="toggleLang()">English</button>
+<div class="wrap">
+
+<h1>pllsim</h1>
+<p class="sub">
+  <span class="en">System-level / behavioral simulation models for five PLL architectures — design rationale, worked examples, cross-checked results, and pitfalls.</span>
+  <span class="zh">五种 PLL 架构的系统级/行为级仿真模型 —— 设计思路、实例分析、结果比较与注意事项。</span>
+</p>
+<p class="sub">
+  <span class="en">Scope: f<sub>ref</sub> = 19.2–250 MHz, f<sub>out</sub> up to 12 GHz, integrated jitter targets 50–200 fs. Python (numpy/scipy/matplotlib), 49 unit/regression tests.</span>
+  <span class="zh">覆盖范围：f<sub>ref</sub> = 19.2–250 MHz，f<sub>out</sub> 最高 12 GHz，积分 jitter 目标 50–200 fs。Python 实现（numpy/scipy/matplotlib），49 项单元/回归测试。</span>
+</p>
+
+<div class="toc">
+  <b><span class="en">Contents</span><span class="zh">目录</span></b>
+  <ol>
+    <li><a href="#philosophy"><span class="en">Design philosophy</span><span class="zh">设计思路</span></a></li>
+    <li><a href="#cppll"><span class="en">Charge-pump PLL (integer-N / fractional-N + DTC)</span><span class="zh">电荷泵 PLL（整数N / 小数N + DTC）</span></a></li>
+    <li><a href="#sspll"><span class="en">Sub-sampling PLL + FLL</span><span class="zh">亚采样 PLL + FLL</span></a></li>
+    <li><a href="#spll"><span class="en">Reference-sampling PLL</span><span class="zh">参考采样 PLL</span></a></li>
+    <li><a href="#adpll"><span class="en">All-digital PLL (TDC / DTC+BBPD)</span><span class="zh">全数字 PLL（TDC / DTC+BBPD）</span></a></li>
+    <li><a href="#ilcm"><span class="en">Injection-locked clock multiplier + FTL</span><span class="zh">注入锁定时钟倍频器 + FTL</span></a></li>
+    <li><a href="#calibration"><span class="en">Calibration algorithms</span><span class="zh">校准算法</span></a></li>
+    <li><a href="#comparison"><span class="en">Results comparison</span><span class="zh">结果比较</span></a></li>
+    <li><a href="#caveats"><span class="en">Caveats and lessons learned</span><span class="zh">注意事项与经验教训</span></a></li>
+    <li><a href="#repro"><span class="en">Reproducing everything</span><span class="zh">复现方法</span></a></li>
+  </ol>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="philosophy"><span class="num">1</span><span class="en">Design philosophy</span><span class="zh">设计思路</span></h2>
+
+<h3><span class="en">1.1 One contract, two domains</span><span class="zh">1.1 统一接口，双域建模</span></h3>
+<p>
+  <span class="en">Every architecture implements the same contract: <code>analyze()</code> returns a linear phase-domain model (loop metrics, per-source phase-noise breakdown, analytic spurs, integrated jitter) and <code>simulate()</code> runs a nonlinear behavioral time-domain model (lock acquisition, cycle slips, quantization patterns, calibration convergence). The two are not independent artifacts — every dual-domain architecture carries a regression test forcing the settled time-domain periodogram to match the linear model within 2–3 dB band-averaged. When the two disagree, one of them is wrong, and finding out which one taught us most of the lessons in §9.</span>
+  <span class="zh">每种架构实现同一接口：<code>analyze()</code> 返回线性相位域模型（环路指标、分源相噪分解、解析杂散、积分 jitter），<code>simulate()</code> 运行非线性行为级时域模型（锁定捕获、周期滑移、量化图样、校准收敛）。两者不是各自独立的产物——每个双域架构都带一条回归测试，强制时域稳态周期图与线性模型在带平均意义下 2–3 dB 内吻合。两者不一致时必有一方是错的，而查明是哪一方错了，正是第 9 节大部分经验教训的来源。</span>
+</p>
+
+<h3><span class="en">1.2 Grid-evaluated frequency responses, not polynomial transfer functions</span><span class="zh">1.2 网格求值频响，而非多项式传函</span></h3>
+<p>
+  <span class="en">A 12 GHz carrier with a 100 kHz-class loop bandwidth puts ~10<sup>5</sup> of dynamic range into polynomial coefficients and makes <code>scipy.signal.TransferFunction</code> numerically fragile. Instead, every response is a complex array evaluated on a log frequency grid (<code>core/freqresp.py</code>), with operator algebra (+ − × ÷, <code>feedback()</code>). s-domain integrators, z-domain accumulators, pure delays e<sup>−sT</sup> and ZOH sinc responses mix freely in one expression — which is exactly what sampled PLL loops need.</span>
+  <span class="zh">12 GHz 载波配 100 kHz 量级环路带宽，多项式系数动态范围高达 ~10<sup>5</sup>，<code>scipy.signal.TransferFunction</code> 在数值上不可靠。因此所有频响都是在对数频率网格上求值的复数数组（<code>core/freqresp.py</code>），支持运算符代数（+ − × ÷、<code>feedback()</code>）。s 域积分器、z 域累加器、纯延迟 e<sup>−sT</sup>、ZOH sinc 可以在同一表达式中自由混合——这正是采样型 PLL 环路所需要的。</span>
+</p>
+
+<h3><span class="en">1.3 One PSD convention, locked by tests</span><span class="zh">1.3 全库统一 PSD 约定，测试锁定</span></h3>
+<div class="formula">
+  S<sub>&phi;</sub>(f) [rad&sup2;/Hz, DSB] &nbsp;&harr;&nbsp; L(f) = S<sub>&phi;</sub>(f)/2 [dBc/Hz] &nbsp;&nbsp;|&nbsp;&nbsp;
+  &sigma;<sub>t</sub> = &radic;(&int;S<sub>&phi;</sub>df) / (2&pi;f<sub>out</sub>)
+</div>
+<p>
+  <span class="en">Internal PSDs are double-sideband S<sub>&phi;</sub> in rad&sup2;/Hz; plots and spot numbers are L(f) in dBc/Hz. A unit test pins the convention (a flat −100 dBc/Hz profile must produce the textbook jitter number), eliminating the classic factor-of-2 bug family at the root.</span>
+  <span class="zh">内部 PSD 为双边带 S<sub>&phi;</sub>（rad&sup2;/Hz），绘图与点值用 L(f)（dBc/Hz）。单元测试锁定该约定（平坦 −100 dBc/Hz 曲线必须积出教科书 jitter 数值），从根上消灭经典的 2 倍系数错误。</span>
+</p>
+
+<h3><span class="en">1.4 Reference-edge-driven time domain — no nanosecond time stepping</span><span class="zh">1.4 参考沿驱动的时域引擎——不做纳秒级步进</span></h3>
+<p>
+  <span class="en">Simulating a 12 GHz output with brute-force time steps is hopeless in Python. The engine advances one step per reference cycle: divider/counter edges come from closed-form phase accumulation; the passive loop filter uses exact discrete state-space updates (precomputed e<sup>AT</sup>, verified against <code>solve_ivp</code> to 10<sup>−6</sup>); oscillator noise is injected as per-cycle phase increments from a Leeson-profile generator (random-walk white FM + FFT-shaped flicker FM + additive floor, PSD-verified to ±1 dB). 400k reference cycles simulate in tens of seconds.</span>
+  <span class="zh">用暴力时间步进在 Python 里仿 12 GHz 输出毫无希望。引擎每参考周期推进一步：分频器/计数器沿由闭式相位累加求出；无源环路滤波器用精确离散状态空间更新（预计算 e<sup>AT</sup>，对 <code>solve_ivp</code> 验证到 10<sup>−6</sup>）；振荡器噪声由 Leeson 模型发生器按周期注入相位增量（随机游走白频调噪声 + FFT 整形闪烁频调噪声 + 加性噪底，PSD 验证 ±1 dB）。40 万参考周期数十秒仿完。</span>
+</p>
+
+<h3><span class="en">1.5 Spur analysis: analytic where sampling hides it, FFT where it shows</span><span class="zh">1.5 杂散分析：采样看不见的用解析式，看得见的用 FFT</span></h3>
+<p>
+  <span class="en">A reference-rate simulation aliases any spur at &ge; f<sub>ref</sub>/2 to DC — so reference spurs are estimated analytically (ripple charge &rarr; control-line first harmonic &rarr; narrowband-FM sideband). Fractional spurs (&lt; f<sub>ref</sub>/2) are measured from the full-length periodogram with local-noise-floor subtraction. The ILCM additionally records the intra-period phase ramp analytically at M&times; oversampling so the f<sub>ref</sub>-offset injection spur becomes visible in the FFT — and it lands within 1 dB of the sawtooth-ripple analytic formula (§6).</span>
+  <span class="zh">参考速率采样会把 &ge; f<sub>ref</sub>/2 处的杂散混叠到直流——因此参考杂散用解析式估计（纹波电荷 &rarr; 控制线一次谐波 &rarr; 窄带调频边带）。小数杂散（&lt; f<sub>ref</sub>/2）从全长周期图测量并扣除局部噪底。ILCM 额外以 M 倍过采样解析记录周期内相位斜坡，使 f<sub>ref</sub> 偏移处的注入杂散在 FFT 中可见——它与锯齿纹波解析式吻合在 1 dB 内（见第 6 节）。</span>
+</p>
+
+<!-- ================================================================ -->
+<h2 id="cppll"><span class="num">2</span><span class="en">Charge-pump PLL</span><span class="zh">电荷泵 PLL</span></h2>
+
+<h3><span class="en">2.1 Model</span><span class="zh">2.1 模型</span></h3>
+<div class="formula">
+  G<sub>ol</sub>(s) = I<sub>cp</sub>&middot;K<sub>vco</sub>&middot;Z(s) / (N&middot;s)
+</div>
+<p>
+  <span class="en">Classic type-II loop with a 2nd/3rd-order passive filter. Noise transfer functions: reference and divider &times;N&middot;H (lowpass), CP current &times;(2&pi;N/I<sub>cp</sub>)&middot;H with an on-time duty factor, filter resistors through (2&pi;K<sub>vco</sub>/s)&middot;E, VCO &times;E (highpass), and MASH-m &Delta;&Sigma; quantization shaped |2sin(&pi;f/f<sub>ref</sub>)|<sup>2(m−1)</sup> through H. The time domain models the PFD tri-state with a slip clamp, CP mismatch/leakage/noise-charge, and pulse-width-aware exact filter updates during acquisition.</span>
+  <span class="zh">经典 type-II 环路，2/3 阶无源滤波器。噪声传函：参考与分频器 &times;N&middot;H（低通）；CP 电流 &times;(2&pi;N/I<sub>cp</sub>)&middot;H 并含导通占空比因子；滤波电阻经 (2&pi;K<sub>vco</sub>/s)&middot;E；VCO &times;E（高通）；MASH-m &Delta;&Sigma; 量化按 |2sin(&pi;f/f<sub>ref</sub>)|<sup>2(m−1)</sup> 整形后经 H。时域模型含 PFD 三态与滑移钳位、CP 失配/泄漏/噪声电荷，以及捕获期脉宽感知的精确滤波器更新。</span>
+</p>
+
+<h3><span class="en">2.2 Example: 19.2 MHz &rarr; 4.8 GHz integer-N (ex01)</span><span class="zh">2.2 实例：19.2 MHz &rarr; 4.8 GHz 整数N（ex01）</span></h3>
+<figure>
+  <img src="img/ex01_pn_breakdown.png" alt="CPPLL phase noise breakdown">
+  <figcaption>
+    <span class="en">Per-source breakdown (linear model) overlaid with the time-domain periodogram (grey). UGB 0.95 MHz, PM 55&deg;, ~260 fs. In-band is set by N&sup2;-multiplied reference/divider/CP noise — the number to remember when reading §3.</span>
+    <span class="zh">分源分解（线性模型）与时域周期图（灰色）叠加。UGB 0.95 MHz，PM 55&deg;，约 260 fs。带内由 N&sup2; 倍增的参考/分频器/CP 噪声决定——读第 3 节时请记住这个数。</span>
+  </figcaption>
+</figure>
+<figure>
+  <img src="img/ex01_transient.png" alt="CPPLL lock transient">
+  <figcaption>
+    <span class="en">Lock acquisition from a −30 MHz start: frequency error, control voltage and output phase error; lock in ~30 &mu;s.</span>
+    <span class="zh">从 −30 MHz 起始的锁定捕获：频差、控制电压与输出相位误差；约 30 &mu;s 锁定。</span>
+  </figcaption>
+</figure>
+
+<h3><span class="en">2.3 Example: fractional-N with DTC cancellation (ex02)</span><span class="zh">2.3 实例：小数N + DTC 对消（ex02）</span></h3>
+<p>
+  <span class="en">38.4 MHz &rarr; 6.0001 GHz, N = 156.2525, MASH 1-1 with a 12-bit / 250 fs DTC delaying the reference edge by the exact accumulated quantization residue (computed bit-true by the modulator). The staircase of results tells the whole story:</span>
+  <span class="zh">38.4 MHz &rarr; 6.0001 GHz，N = 156.2525，MASH 1-1 配 12 位 / 250 fs DTC，由调制器位真计算的累积量化残差直接给出参考沿延迟量。三级结果对比即完整故事：</span>
+</p>
+<table>
+  <tr><th><span class="en">Configuration</span><span class="zh">配置</span></th>
+      <th><span class="en">Integrated jitter</span><span class="zh">积分 jitter</span></th></tr>
+  <tr><td><span class="en">No DTC (raw MASH noise through the loop)</span><span class="zh">无 DTC（MASH 噪声直接过环路）</span></td><td>~5000 fs</td></tr>
+  <tr><td><span class="en">DTC with 10% gain error, uncalibrated</span><span class="zh">DTC 增益误差 10%，未校准</span></td><td>~530 fs</td></tr>
+  <tr><td><span class="en">DTC + sign-sign LMS gain calibration</span><span class="zh">DTC + 符号-符号 LMS 增益校准</span></td><td><b>~167 fs</b></td></tr>
+</table>
+<figure>
+  <img src="img/ex02_dtc_comparison.png" alt="DTC cancellation comparison">
+  <figcaption>
+    <span class="en">Spectra of the three cases. The uncalibrated 10% gain error leaks shaped DSM noise broadband; LMS calibration recovers nearly the integer-N floor.</span>
+    <span class="zh">三种情况的频谱。未校准的 10% 增益误差把整形 DSM 噪声宽带泄漏出来；LMS 校准后几乎恢复到整数N噪底。</span>
+  </figcaption>
+</figure>
+<figure>
+  <img src="img/ex02_lms_convergence.png" alt="LMS convergence">
+  <figcaption>
+    <span class="en">Sign-sign LMS gain trace: converges to 1/(1+&epsilon;) = 0.909 within ~0.3%, gear-shifted step size after convergence.</span>
+    <span class="zh">符号-符号 LMS 增益轨迹：收敛到 1/(1+&epsilon;) = 0.909，误差 ~0.3%，收敛后齿轮换挡减小步长。</span>
+  </figcaption>
+</figure>
+<figure>
+  <img src="img/ex02_lut_cal.png" alt="LUT INL calibration">
+  <figcaption>
+    <span class="en">A 2 ps sinusoidal DTC INL costs 344 &rarr; 244 fs; a 32-segment LUT recovers most of it (residual set by bin granularity — see §9).</span>
+    <span class="zh">2 ps 正弦 DTC INL 使 jitter 从 344 fs 恶化；32 段 LUT 校准恢复到 244 fs（残余由 bin 分辨率决定——见第 9 节）。</span>
+  </figcaption>
+</figure>
+
+<!-- ================================================================ -->
+<h2 id="sspll"><span class="num">3</span><span class="en">Sub-sampling PLL + FLL</span><span class="zh">亚采样 PLL + FLL</span></h2>
+
+<h3><span class="en">3.1 Why it wins — stated precisely</span><span class="zh">3.1 优势所在——精确表述</span></h3>
+<p>
+  <span class="en">The reference edge samples the VCO waveform directly: v<sub>s</sub> = A&middot;sin(&phi;<sub>err</sub>), so the PD gain A [V/rad] is referred to <b>output</b> phase. Charge-pump and loop-filter noise are therefore <em>not</em> multiplied by N — that is the entire advantage. Reference noise still multiplies by N (inherent to &times;N frequency multiplication; no architecture escapes it). With the same reference and VCO class as ex01, in-band drops enough for ~150 fs.</span>
+  <span class="zh">参考沿直接采样 VCO 波形：v<sub>s</sub> = A&middot;sin(&phi;<sub>err</sub>)，鉴相增益 A [V/rad] 以<b>输出</b>相位为基准。因此电荷泵与环路滤波器噪声<em>不</em>被 N 倍增——这就是全部优势所在。参考噪声仍然 &times;N（&times;N 倍频固有属性，任何架构都躲不掉）。与 ex01 相同的参考和 VCO 等级下，带内噪声下降到约 150 fs。</span>
+</p>
+<div class="formula">
+  G<sub>ol</sub> = A&middot;g<sub>m</sub>&middot;G&middot;Z&middot;2&pi;K<sub>vco</sub>/s &nbsp;(no 1/N)&nbsp;&nbsp;|&nbsp;&nbsp;
+  <span class="en">implemented exactly in z:</span><span class="zh">z 域精确实现：</span>
+  G<sub>ol</sub>(z) = K<sub>q</sub>&middot;H<sub>q</sub>(z)&middot;2&pi;K<sub>vco</sub>T&middot;z<sup>−1</sup>/(1−z<sup>−1</sup>)
+</div>
+<p>
+  <span class="en">Because SSPLLs run aggressive UGB/f<sub>ref</sub> ratios (1/16 here), <code>analyze()</code> uses the <b>exact discrete loop</b>: H<sub>q</sub>(z) = C(I−A<sub>d</sub>z<sup>−1</sup>)<sup>−1</sup>A<sub>d</sub>B is derived from the same state-space matrices the simulator steps — model and simulation share one update law by construction. Loop-injected noise images beyond f<sub>ref</sub>/2 are ZOH-attenuated; the continuous VCO keeps E&rarr;1 there (the sampled model's image dips are not physical for it).</span>
+  <span class="zh">由于 SSPLL 运行激进的 UGB/f<sub>ref</sub> 比（此处 1/16），<code>analyze()</code> 使用<b>精确离散环路</b>：H<sub>q</sub>(z) = C(I−A<sub>d</sub>z<sup>−1</sup>)<sup>−1</sup>A<sub>d</sub>B 由仿真器逐拍使用的同一组状态空间矩阵导出——模型与仿真在构造上共享同一更新律。环内注入噪声在 f<sub>ref</sub>/2 以上的镜像按 ZOH 衰减；连续 VCO 在该区域保持 E&rarr;1（采样模型的镜像凹陷对它不物理）。</span>
+</p>
+
+<h3><span class="en">3.2 Example: 19.2 MHz &rarr; 4.8 GHz (ex03)</span><span class="zh">3.2 实例：19.2 MHz &rarr; 4.8 GHz（ex03）</span></h3>
+<figure>
+  <img src="img/ex03_pn_breakdown.png" alt="SSPLL phase noise breakdown">
+  <figcaption>
+    <span class="en">Same reference/VCO as ex01: 152 fs (linear) / 135 fs (simulated) vs the CPPLL's 260 fs. Note gm and sampler-kT/C sources sitting far below where CP noise sat in ex01.</span>
+    <span class="zh">与 ex01 相同的参考/VCO：152 fs（线性）/135 fs（仿真），对比 CPPLL 的 260 fs。注意 gm 与采样器 kT/C 噪声远低于 ex01 中 CP 噪声的位置。</span>
+  </figcaption>
+</figure>
+<figure>
+  <img src="img/ex03_transient.png" alt="SSPLL FLL acquisition">
+  <figcaption>
+    <span class="en">Acquisition from −25 MHz: the counter-based FLL drives frequency into the capture range and hands off at ~283 &mu;s with hysteresis; the SSPD finishes the lock. Without the FLL the same start parks exactly one f<sub>ref</sub> away (false lock at N = 249) — the sine PD locks happily at any integer multiple of f<sub>ref</sub>.</span>
+    <span class="zh">从 −25 MHz 捕获：计数器型 FLL 把频率拉进捕获范围，约 283 &mu;s 带迟滞交接，SSPD 完成锁定。同样起点关掉 FLL，会精确停在偏离一个 f<sub>ref</sub> 处（N = 249 假锁）——正弦鉴相器对任意 f<sub>ref</sub> 整数倍都能"锁定"。</span>
+  </figcaption>
+</figure>
+
+<!-- ================================================================ -->
+<h2 id="spll"><span class="num">4</span><span class="en">Reference-sampling PLL</span><span class="zh">参考采样 PLL</span></h2>
+<p>
+  <span class="en">The exact dual of §3: a divided VCO edge samples the <em>reference</em> sine, so PD gain is referred to <b>reference</b> phase and the identical sampler front-end noise now multiplies by N to the output. Wider capture (&plusmn;&pi; at the reference carrier), a conventional divider for acquisition — but ~20logN worse in-band PD noise. The two chapters together are the honest architecture comparison.</span>
+  <span class="zh">第 3 节的严格对偶：分频后的 VCO 沿采样<em>参考</em>正弦，鉴相增益以<b>参考</b>相位为基准，同样的采样器前端噪声此时 &times;N 到输出。捕获范围更宽（参考载波上 &plusmn;&pi;），且有常规分频器辅助捕获——代价是带内 PD 噪声差约 20logN。两章合起来即是诚实的架构对比。</span>
+</p>
+<figure>
+  <img src="img/ex04_pn_breakdown.png" alt="SPLL phase noise breakdown">
+  <figcaption>
+    <span class="en">100 MHz &rarr; 8 GHz (N = 80), ~200 fs. The dominant in-band source is sampler kT/C — the very source that was negligible in ex03. Test-enforced: kT/C carries &gt;20% of the integrated phase power here.</span>
+    <span class="zh">100 MHz &rarr; 8 GHz（N = 80），约 200 fs。带内主导源是采样器 kT/C——正是 ex03 中可忽略的那一项。测试强制断言：此处 kT/C 占积分相位功率 &gt;20%。</span>
+  </figcaption>
+</figure>
+
+<!-- ================================================================ -->
+<h2 id="adpll"><span class="num">5</span><span class="en">All-digital PLL</span><span class="zh">全数字 PLL</span></h2>
+
+<h3><span class="en">5.1 Two variants, one exact z-domain model</span><span class="zh">5.1 两种变体，同一套精确 z 域模型</span></h3>
+<div class="formula">
+  G<sub>ol</sub>(z) = L(z)&middot;(K<sub>dco</sub>/K&#770;<sub>dco</sub>)&middot;z<sup>−1</sup>/(1−z<sup>−1</sup>),
+  &nbsp; L(z) = &alpha; + &rho;/(1−z<sup>−1</sup>) &nbsp;(&times; IIR stages)
+</div>
+<p>
+  <span class="en"><b>Counter-assisted (TDC) mode</b>: FCW accumulator vs DCO counter + flash TDC fractional readout — fractional FCW is native, no MASH needed. Noise: TDC quantization (2&pi;t<sub>res</sub>f<sub>out</sub>)&sup2;/6f<sub>ref</sub> through H, DCO quantization with first-order &Delta;&Sigma; dither (shaped f&sup2;-converted, through E), DCO Leeson through E, reference &times;N&middot;H. <b>DTC+BBPD mode</b>: MASH + DTC edge alignment and a 1-bit PD; <code>analyze()</code> linearizes it self-consistently — K<sub>bb</sub> = &radic;(2/&pi;)/&sigma;<sub>t</sub> where &sigma;<sub>t</sub> itself depends on the closed loop, solved by fixed-point iteration.</span>
+  <span class="zh"><b>计数器辅助（TDC）型</b>：FCW 累加器对 DCO 计数器 + flash TDC 小数相位读出——原生支持小数 FCW，无需 MASH。噪声：TDC 量化 (2&pi;t<sub>res</sub>f<sub>out</sub>)&sup2;/6f<sub>ref</sub> 经 H；DCO 量化含一阶 &Delta;&Sigma; 抖动（整形后经 f&sup2; 转换、过 E）；DCO Leeson 经 E；参考 &times;N&middot;H。<b>DTC+BBPD 型</b>：MASH + DTC 沿对齐加 1 位鉴相器；<code>analyze()</code> 对其自洽线性化——K<sub>bb</sub> = &radic;(2/&pi;)/&sigma;<sub>t</sub>，而 &sigma;<sub>t</sub> 本身依赖闭环，用定点迭代求解。</span>
+</p>
+
+<h3><span class="en">5.2 Example: 100 MHz &rarr; 10.0503 GHz (ex05)</span><span class="zh">5.2 实例：100 MHz &rarr; 10.0503 GHz（ex05）</span></h3>
+<figure>
+  <img src="img/ex05_gain_cals.png" alt="KDCO and TDC calibration">
+  <figcaption>
+    <span class="en">Gain calibrations: open-loop two-point KDCO FCAL corrects a 30% initial error to the exact 20 kHz/LSB, and TDC period normalization (codes-per-period EMA) absorbs a 5% TDC gain error — the code/CPP ratio cancels the error exactly.</span>
+    <span class="zh">增益校准：开环两点 KDCO FCAL 把 30% 初始误差校准到精确的 20 kHz/LSB；TDC 周期归一化（每周期码数 EMA）吸收 5% 的 TDC 增益误差——码值/每周期码数之比使误差严格对消。</span>
+  </figcaption>
+</figure>
+<figure>
+  <img src="img/ex05_domain_comparison.png" alt="ADPLL domain comparison">
+  <figcaption>
+    <span class="en">The domain cross-check, both modes. Left (TDC): model and simulation agree within 0.5 dB band-averaged everywhere. Right (BBPD): +2…4 dB in-band — the accuracy limit of Gaussian BBPD linearization against the deterministic MASH/DTC residual pattern. For BB loops the time domain is the reference; the linear model is for design scaling.</span>
+    <span class="zh">双模式的跨域交叉验证。左（TDC 型）：模型与仿真全频段带平均 0.5 dB 内吻合。右（BBPD 型）：带内 +2…4 dB——高斯 BBPD 线性化面对确定性 MASH/DTC 残差图样的精度极限。BB 环路以时域为准，线性模型用于设计定标。</span>
+  </figcaption>
+</figure>
+
+<!-- ================================================================ -->
+<h2 id="ilcm"><span class="num">6</span><span class="en">Injection-locked clock multiplier + FTL</span><span class="zh">注入锁定时钟倍频器 + FTL</span></h2>
+
+<h3><span class="en">6.1 The realignment recursion</span><span class="zh">6.1 重排递推模型</span></h3>
+<div class="formula">
+  e[n+1] = (1−&beta;)&middot;wrap<sub>&plusmn;&pi;</sub>(e[n] + &Delta;&phi;<sub>drift</sub> + &phi;<sub>osc</sub>[n]) + &beta;&middot;&phi;<sub>inj</sub>[n]
+</div>
+<p>
+  <span class="en">Exact for pulse injection at reference rate. Oscillator noise enters as per-cycle phase <em>increments</em>, giving the phase-PSD NTF (1−&beta;)(1−z<sup>−1</sup>)/(1−(1−&beta;)z<sup>−1</sup>) — a highpass with injection bandwidth &asymp; &beta;f<sub>ref</sub>/2&pi; (36 MHz at &beta;=0.6, f<sub>ref</sub>=250 MHz); the reference path is the complementary lowpass &times;N. The &plusmn;&pi; wrap is essential: injection realigns toward the <em>nearest</em> edge, which is what limits the lock range to &beta;f<sub>ref</sub>/2 (75 MHz here; a linear recursion never slips — see §9). The Adler LC-tank bound f<sub>0</sub>I<sub>inj</sub>/(2QI<sub>osc</sub>) is reported alongside as a cross-check.</span>
+  <span class="zh">对参考速率的脉冲注入是精确的。振荡器噪声以每周期相位<em>增量</em>进入，相位 PSD 的 NTF 为 (1−&beta;)(1−z<sup>−1</sup>)/(1−(1−&beta;)z<sup>−1</sup>)——高通，注入带宽 &asymp; &beta;f<sub>ref</sub>/2&pi;（&beta;=0.6、f<sub>ref</sub>=250 MHz 时为 36 MHz）；参考路径为互补低通 &times;N。&plusmn;&pi; 卷绕不可省略：注入只能向<em>最近的</em>沿重排，这正是锁定范围被限制在 &beta;f<sub>ref</sub>/2（此处 75 MHz）的原因——线性递推永远不会失锁（见第 9 节）。Adler LC 谐振腔界 f<sub>0</sub>I<sub>inj</sub>/(2QI<sub>osc</sub>) 一并给出作为交叉校验。</span>
+</p>
+
+<h3><span class="en">6.2 Example: 250 MHz &rarr; 12 GHz (ex06)</span><span class="zh">6.2 实例：250 MHz &rarr; 12 GHz（ex06）</span></h3>
+<figure>
+  <img src="img/ex06_pn_breakdown.png" alt="ILCM phase noise">
+  <figcaption>
+    <span class="en">~115 fs with the FTL active. Reference lowpass &times;48 up to ~36 MHz, oscillator highpass beyond — injection locking is a very wide-band PLL in disguise.</span>
+    <span class="zh">FTL 工作时约 115 fs。参考低通 &times;48 延伸到 ~36 MHz，振荡器高通在其外——注入锁定本质上是一个极宽带的 PLL。</span>
+  </figcaption>
+</figure>
+<figure>
+  <img src="img/ex06_spur_vs_ferr.png" alt="Injection spur vs frequency error">
+  <figcaption>
+    <span class="en">The headline plot: injection spur at f<sub>ref</sub> offset vs free-running frequency error, FFT measurement (from analytic intra-period oversampling) vs the sawtooth-ripple formula — within 1 dB over 0.25–8 MHz. At 2 MHz error the spur is already −42 dBc: an ILCM lives or dies by its FTL.</span>
+    <span class="zh">核心结论图：f<sub>ref</sub> 偏移处注入杂散 vs 自由振荡频差，FFT 测量（来自周期内解析过采样）与锯齿纹波公式对比——0.25–8 MHz 全程 1 dB 内。频差 2 MHz 时杂散已达 −42 dBc：ILCM 的生死系于 FTL。</span>
+  </figcaption>
+</figure>
+<figure>
+  <img src="img/ex06_ftl_convergence.png" alt="FTL convergence">
+  <figcaption>
+    <span class="en">Bang-bang FTL walks a 3 MHz initial free-running error down to &lt; 1 LSB (20 kHz) residual; the corresponding spur drops below −90 dBc.</span>
+    <span class="zh">Bang-bang FTL 把 3 MHz 初始自由振荡频差步进到 &lt; 1 LSB（20 kHz）残差；对应杂散降到 −90 dBc 以下。</span>
+  </figcaption>
+</figure>
+
+<!-- ================================================================ -->
+<h2 id="calibration"><span class="num">7</span><span class="en">Calibration algorithms</span><span class="zh">校准算法</span></h2>
+<table>
+  <tr>
+    <th><span class="en">Algorithm</span><span class="zh">算法</span></th>
+    <th><span class="en">Used by</span><span class="zh">应用</span></th>
+    <th><span class="en">Key implementation detail</span><span class="zh">关键实现细节</span></th>
+  </tr>
+  <tr>
+    <td><code>LMSGainCal</code> / <code>SignSignLMS</code></td>
+    <td><span class="en">DTC gain (CPPLL, ADPLL-BB)</span><span class="zh">DTC 增益（CPPLL、ADPLL-BB）</span></td>
+    <td><span class="en">Error <b>and</b> regressor DC-removed by EMA: the loop's equilibrium phase error is nonzero (CP mismatch/leakage), which would otherwise saturate sign(err) at &plusmn;1 and blind the correlator.</span><span class="zh">误差<b>与</b>回归量都经 EMA 去直流：环路平衡点相位误差非零（CP 失配/泄漏），否则 sign(err) 恒饱和于 &plusmn;1，相关器失明。</span></td>
+  </tr>
+  <tr>
+    <td><code>LUTCal</code></td>
+    <td><span class="en">DTC INL</span><span class="zh">DTC INL</span></td>
+    <td><span class="en">Piecewise LUT; mean/ramp projection is visit-weighted and restricted to visited bins — otherwise projection residue piles up in bins that never receive corrective updates.</span><span class="zh">分段 LUT；均值/斜坡投影按访问计数加权且仅作用于被访问的 bin——否则投影残余会堆积在永远得不到修正更新的 bin 里。</span></td>
+  </tr>
+  <tr>
+    <td><code>KdcoCal</code></td>
+    <td>ADPLL</td>
+    <td><span class="en"><b>Open-loop</b> two-point FCAL. A closed-loop two-point measurement is information-free: the integrator absorbs the perturbation exactly, erasing the gain from the steady state.</span><span class="zh"><b>开环</b>两点 FCAL。闭环两点测量不含信息：积分器把扰动精确吸收，稳态中不再残留增益信息。</span></td>
+  </tr>
+  <tr>
+    <td><code>TdcPeriodCal</code></td>
+    <td>ADPLL</td>
+    <td><span class="en">Staszewski period normalization: code/(codes-per-period) — the TDC gain error cancels exactly in the ratio.</span><span class="zh">Staszewski 周期归一化：码值/(每周期码数)——TDC 增益误差在比值中严格对消。</span></td>
+  </tr>
+  <tr>
+    <td><code>FLLStateMachine</code></td>
+    <td>SSPLL / SPLL</td>
+    <td><span class="en">Counter FD (resolution f<sub>ref</sub>/W), hysteretic engage/release, and a proportional taper inside the release band — hard bang-bang there limit-cycles against the SSPD; zero drive hands off sitting at the band edge.</span><span class="zh">计数器鉴频（分辨率 f<sub>ref</sub>/W），迟滞接入/释放，释放带内比例衰减——带内硬 bang-bang 会与 SSPD 形成极限环；完全不驱动又会停在带边沿交接。</span></td>
+  </tr>
+  <tr>
+    <td><code>FTL</code> / <code>InjTimingCal</code></td>
+    <td>ILCM</td>
+    <td><span class="en">Bang-bang free-running frequency tracking from the pre-injection drift sign; residual sets the injection spur floor.</span><span class="zh">由注入前漂移符号驱动的 bang-bang 自由振荡频率跟踪；残差决定注入杂散底。</span></td>
+  </tr>
+  <tr>
+    <td><code>BBPD Kbb</code></td>
+    <td>ADPLL-BB</td>
+    <td><span class="en">Not a runtime cal but a model step: K<sub>bb</sub> = &radic;(2/&pi;)/&sigma;<sub>t</sub> solved self-consistently with the loop (fixed-point).</span><span class="zh">非运行时校准而是建模步骤：K<sub>bb</sub> = &radic;(2/&pi;)/&sigma;<sub>t</sub> 与环路自洽求解（定点迭代）。</span></td>
+  </tr>
+</table>
+
+<!-- ================================================================ -->
+<h2 id="comparison"><span class="num">8</span><span class="en">Results comparison</span><span class="zh">结果比较</span></h2>
+<table>
+  <tr>
+    <th><span class="en">Preset</span><span class="zh">预置配置</span></th>
+    <th>f<sub>ref</sub> &rarr; f<sub>out</sub></th>
+    <th><span class="en">Jitter (linear / sim)</span><span class="zh">Jitter（线性/仿真）</span></th>
+    <th><span class="en">Dominant source</span><span class="zh">主导噪声源</span></th>
+    <th><span class="en">Domain match</span><span class="zh">跨域吻合度</span></th>
+  </tr>
+  <tr><td>CPPLL int-N</td><td>19.2M &rarr; 4.8G</td><td>258 / 235 fs</td>
+      <td><span class="en">divider+ref (&times;N&sup2;)</span><span class="zh">分频器+参考（&times;N&sup2;）</span></td><td>&le;1.2 dB</td></tr>
+  <tr><td>CPPLL frac-N+DTC</td><td>38.4M &rarr; 6.0001G</td><td>188 / 167 fs</td>
+      <td><span class="en">divider+DTC quant.</span><span class="zh">分频器+DTC 量化</span></td><td>&le;2.5 dB</td></tr>
+  <tr><td>SSPLL+FLL</td><td>19.2M &rarr; 4.8G</td><td>152 / 135 fs</td>
+      <td><span class="en">reference (&times;N, irreducible)</span><span class="zh">参考（&times;N，不可避免）</span></td><td>&le;2.5 dB</td></tr>
+  <tr><td>SPLL</td><td>100M &rarr; 8G</td><td>201 / 195 fs</td>
+      <td><span class="en">sampler kT/C (&times;N)</span><span class="zh">采样器 kT/C（&times;N）</span></td><td>&le;2 dB</td></tr>
+  <tr><td>ADPLL TDC</td><td>100M &rarr; 10.0503G</td><td>129 / 106 fs</td><td>DCO</td><td><b>&le;0.5 dB</b></td></tr>
+  <tr><td>ADPLL BBPD</td><td>100M &rarr; 10.0503G</td><td>138 / 119 fs</td>
+      <td><span class="en">ref + BBPD quant.</span><span class="zh">参考 + BBPD 量化</span></td>
+      <td><span class="en">+2…4 dB in-band (linearization limit)</span><span class="zh">带内 +2…4 dB（线性化极限）</span></td></tr>
+  <tr><td>ILCM+FTL</td><td>250M &rarr; 12G</td><td>113 / 115 fs</td>
+      <td><span class="en">reference (&times;48, wide BW)</span><span class="zh">参考（&times;48，宽带宽）</span></td><td>&le;0.7 dB</td></tr>
+</table>
+<p>
+  <span class="en">Reading the table as a designer: with the same 19.2 MHz reference and VCO class, sub-sampling buys ~4.6 dB of integrated phase power over the classic CPPLL purely by removing the N&sup2; penalty on CP/LF noise. The ADPLL and ILCM reach the ~110 fs class by different routes — the ADPLL by a clean digital loop with calibrated gains, the ILCM by brute injection bandwidth (36 MHz) at the price of total dependence on free-running frequency accuracy. The SPLL sits between: it shares the SSPLL's front-end but pays &times;N on it.</span>
+  <span class="zh">从设计者角度读表：同样的 19.2 MHz 参考与 VCO 等级下，亚采样仅靠去掉 CP/LF 噪声的 N&sup2; 惩罚就比经典 CPPLL 改善约 4.6 dB 积分相位功率。ADPLL 与 ILCM 以不同路径到达 ~110 fs 量级——ADPLL 靠干净的数字环路加增益校准，ILCM 靠粗暴的 36 MHz 注入带宽，代价是完全依赖自由振荡频率精度。SPLL 居中：前端与 SSPLL 相同，但要为其付出 &times;N。</span>
+</p>
+
+<!-- ================================================================ -->
+<h2 id="caveats"><span class="num">9</span><span class="en">Caveats and lessons learned</span><span class="zh">注意事项与经验教训</span></h2>
+
+<div class="callout blue">
+  <span class="en"><b>Model validity boundaries</b> (also in the README):</span>
+  <span class="zh"><b>模型有效边界</b>（README 中亦有记载）：</span>
+  <ul>
+    <li><span class="en">CPPLL/SPLL <code>analyze()</code> is continuous-time (warned when UGB &gt; f<sub>ref</sub>/10); SSPLL and ADPLL use exact discrete models.</span>
+        <span class="zh">CPPLL/SPLL 的 <code>analyze()</code> 为连续时间近似（UGB &gt; f<sub>ref</sub>/10 时告警）；SSPLL 与 ADPLL 用精确离散模型。</span></li>
+    <li><span class="en">Reference-rate simulation cannot show spurs at &ge; f<sub>ref</sub>/2 — reported analytically instead.</span>
+        <span class="zh">参考速率仿真无法显示 &ge; f<sub>ref</sub>/2 的杂散——改用解析式报告。</span></li>
+    <li><span class="en">TDC/DTC quantization is white in the linear model; its deterministic (tonal) component appears only in the time domain.</span>
+        <span class="zh">TDC/DTC 量化在线性模型中按白噪声处理；其确定性（音调性）成分只出现在时域。</span></li>
+    <li><span class="en">BBPD linearization is &plusmn;3 dB-class in-band; the time domain is the reference for BB loops.</span>
+        <span class="zh">BBPD 线性化带内精度约 &plusmn;3 dB；BB 环路以时域为准。</span></li>
+  </ul>
+</div>
+
+<p>
+  <span class="en">The following six issues were exposed by simulation, not anticipated on paper. Each is now encoded in the library and its tests.</span>
+  <span class="zh">以下六个问题都是仿真暴露的，纸面设计阶段未能预见。每一条现已固化在库代码与测试中。</span>
+</p>
+
+<h3><span class="en">9.1 Divider-edge timing is not output phase</span><span class="zh">9.1 分频器沿时序不是输出相位</span></h3>
+<p>
+  <span class="en">In a fractional-N loop the divider edge wobbles by the full DSM residue (~1 UI &asymp; 166 ps at 6 GHz), but the loop lowpasses that wobble — the VCO output never follows it. Recording divider-edge timing as "output phase" inflated jitter by 600&times;. The fix: accumulate true output phase as &int;(f<sub>v</sub>−f<sub>out</sub>)dt + oscillator noise.</span>
+  <span class="zh">小数N环路中分频器沿抖动幅度等于完整 DSM 残差（~1 UI，6 GHz 下约 166 ps），但环路会低通滤除这一抖动——VCO 输出从不跟随它。把分频器沿时序当"输出相位"记录，jitter 虚高 600 倍。修正：以 &int;(f<sub>v</sub>−f<sub>out</sub>)dt + 振荡器噪声累加真实输出相位。</span>
+</p>
+
+<h3><span class="en">9.2 Sign correlators go blind at a biased equilibrium</span><span class="zh">9.2 平衡点偏置使符号相关器失明</span></h3>
+<p>
+  <span class="en">CP mismatch + leakage shift the locked PD error to &asymp; −1.5 ps, so sign(&Delta;t) = −1 essentially always and sign-sign LMS stops discriminating. Standard hardware practice — remove the error DC with an EMA before taking the sign — is now built into every correlator in <code>calibration/lms.py</code>.</span>
+  <span class="zh">CP 失配 + 泄漏把锁定点鉴相误差偏移到约 −1.5 ps，sign(&Delta;t) 几乎恒为 −1，符号-符号 LMS 失去鉴别力。硬件的标准做法——取符号前先用 EMA 去除误差直流——现已内建于 <code>calibration/lms.py</code> 的所有相关器。</span>
+</p>
+
+<h3><span class="en">9.3 DTC range must cover the MASH residue span</span><span class="zh">9.3 DTC 量程必须覆盖 MASH 残差跨度</span></h3>
+<p>
+  <span class="en">MASH-3 residue spans ~8 UI = 1.33 ns at 6 GHz — far beyond a 512 ps DTC. The DTC saturated, cancellation failed at the extremes, and the LUT calibration chased the saturation error divergently. Real DTC-based synthesizers choose MASH 1-1 (or EFM1) for exactly this reason; so does ex02.</span>
+  <span class="zh">MASH-3 残差跨度约 8 UI，即 6 GHz 下 1.33 ns——远超 512 ps 的 DTC 量程。DTC 饱和，两端对消失效，LUT 校准追逐饱和误差而发散。真实 DTC 型频综正是因此选择 MASH 1-1（或 EFM1）；ex02 亦然。</span>
+</p>
+
+<h3><span class="en">9.4 Closed-loop two-point K<sub>DCO</sub> measurement carries no information</span><span class="zh">9.4 闭环两点 K<sub>DCO</sub> 测量不含信息</span></h3>
+<p>
+  <span class="en">The loop integrator absorbs an OTW perturbation exactly, so the steady state is independent of K<sub>DCO</sub> — the estimator collapsed to zero and the loop diverged on the division. FCAL must run open-loop (as real ADPLLs sequence it), then close the loop.</span>
+  <span class="zh">环路积分器把 OTW 扰动精确吸收，稳态与 K<sub>DCO</sub> 无关——估计值坍缩到零，除法发散。FCAL 必须开环进行（真实 ADPLL 正是如此排序），然后再闭环。</span>
+</p>
+
+<h3><span class="en">9.5 An acquisition aid can fight the loop it serves</span><span class="zh">9.5 捕获辅助环路可能与主环打架</span></h3>
+<p>
+  <span class="en">A hard bang-bang FLL kept pushing full current during its hysteresis wait, drove the frequency back out of the SSPD capture range, and the pair limit-cycled at 150 kHz forever. A dead zone instead handed off parked at the band edge — also bad. The working answer: bang-bang outside the release band, proportional taper inside.</span>
+  <span class="zh">硬 bang-bang FLL 在迟滞等待期持续满电流输出，把频率重新推出 SSPD 捕获范围，两个环路以 150 kHz 永久极限环振荡。改成死区则停在带边沿交接——同样不行。可行答案：释放带外 bang-bang，带内比例衰减。</span>
+</p>
+
+<h3><span class="en">9.6 A linear injection-locking model never loses lock</span><span class="zh">9.6 线性注入锁定模型永不失锁</span></h3>
+<p>
+  <span class="en">The realignment recursion is linear and converges for <em>any</em> frequency error — physically absurd. The missing piece is the nearest-edge &plusmn;&pi; wrap: with it, the model slips beyond |&Delta;f| = &beta;f<sub>ref</sub>/2, matching the classical result, and the simulator counts slips explicitly.</span>
+  <span class="zh">重排递推是线性的，对<em>任意</em>频差都收敛——物理上荒谬。缺的是"最近沿 &plusmn;&pi; 卷绕"：加上之后，模型在 |&Delta;f| = &beta;f<sub>ref</sub>/2 之外失锁，与经典结果一致，仿真器并显式计数滑移。</span>
+</p>
+
+<div class="callout">
+  <span class="en"><b>Honest deviations from the original plan.</b> The planned "&gt;15 dB spur improvement" assertion for DTC gain calibration turned out to be the wrong metric: uncalibrated gain error leaks <em>broadband</em> shaped noise, not a narrow spur. The enforced criteria became jitter recovery (5 ps &rarr; 528 fs &rarr; 167 fs, ~30 dB of phase power) and, for INL, a &gt;20% jitter reduction with the spur improvement (~8 dB) limited by LUT bin granularity. <code>InjTimingCal</code> is provided but not wired into the ex06 main flow.</span>
+  <span class="zh"><b>与原计划的诚实偏差。</b>原计划对 DTC 增益校准断言"杂散改善 &gt;15 dB"，后证明指标选错了：未校准增益误差泄漏的是<em>宽带</em>整形噪声而非窄带杂散。实际测试判据改为 jitter 恢复（5 ps &rarr; 528 fs &rarr; 167 fs，相位功率约 30 dB），INL 部分为 jitter 降低 &gt;20%、杂散改善约 8 dB（受 LUT bin 分辨率限制）。<code>InjTimingCal</code> 已提供但未接入 ex06 主流程。</span>
+</div>
+
+<!-- ================================================================ -->
+<h2 id="repro"><span class="num">10</span><span class="en">Reproducing everything</span><span class="zh">复现方法</span></h2>
+<pre><code>pip install -e .            # numpy, scipy, matplotlib
+pytest tests/               # 49 tests: closed-form math + architecture regressions
+python examples/ex01_cppll_intn_19p2m_4p8g.py     # each ex writes plots to examples/out/
+python examples/ex02_cppll_fracn_dtc_38p4m_6g.py
+python examples/ex03_sspll_19p2m_4p8g.py
+python examples/ex04_spll_100m_8g.py
+python examples/ex05_adpll_fracn_100m_10g.py
+python examples/ex06_ilcm_250m_12g.py</code></pre>
+<pre><code>from pllsim import presets
+pll = presets.sspll_19p2m_4p8g()      # or any of the six presets
+ar  = pll.analyze();  print(pll.design_report(ar))
+sim = pll.simulate(300_000, seed=1, f_start_offset=-25e6)
+from pllsim.plotting import plot_pn_breakdown
+plot_pn_breakdown(ar, sim, save="pn.png")</code></pre>
+<p class="sub">
+  <span class="en">All figures in this document are the committed outputs of ex01–ex06 (copied to <code>docs/img/</code>). Repository layout, NTF tables and further details: see the top-level <code>README.md</code>.</span>
+  <span class="zh">本文档全部插图均为 ex01–ex06 的实际输出（复制于 <code>docs/img/</code>）。仓库结构、NTF 表与更多细节见顶层 <code>README.md</code>。</span>
+</p>
+
+</div>
+<script>
+function setLang(l) {
+  document.body.className = 'lang-' + l;
+  document.getElementById('langBtn').textContent = (l === 'zh') ? 'English' : '中文';
+  document.documentElement.lang = (l === 'zh') ? 'zh-CN' : 'en';
+  try { localStorage.setItem('pllsim-doc-lang', l); } catch (e) {}
+}
+function toggleLang() {
+  setLang(document.body.className === 'lang-zh' ? 'en' : 'zh');
+}
+(function () {
+  var saved = null;
+  try { saved = localStorage.getItem('pllsim-doc-lang'); } catch (e) {}
+  if (!saved) {
+    saved = (navigator.language || '').toLowerCase().indexOf('zh') === 0 ? 'zh' : 'en';
+  }
+  setLang(saved);
+})();
+</script>
+</body>
+</html>
