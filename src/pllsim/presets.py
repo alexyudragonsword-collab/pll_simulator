@@ -137,6 +137,26 @@ def sspll_frac_19p2m_4p806g() -> SSPLL:
                                             mu_final=5e-7))))
 
 
+def spll_frac_52m_6p253g() -> SPLL:
+    """DTC-assisted fractional-N sampling PLL (Wu-style, ex14), ~240 fs."""
+    frac = 0.2503
+    return SPLL(SPLLConfig(
+        fref=52e6, fout=(120 + frac) * 52e6,
+        osc=OscConfig(f0=6.2e9, gain=60e6, pn_dbchz=-118.0, pn_foffset=1e6,
+                      pn_f1f3=3e5, pn_floor_dbchz=-152.0),
+        sampler=SamplerConfig(amp_v=0.5, c_samp=150e-15, gm=4e-3,
+                              pulse_width=600e-12, pedestal_v=1e-3),
+        filt=FilterDesign(c1=470e-12, r2=12e3, c2=2.2e-12, r3=1.5e3, c3=1e-12),
+        ref_pn_dbchz=-160.0,
+        fll_i=2e-6, fll_engage=3e6, fll_release=600e3,
+        frac=FracConfig(frac=frac, mash_order=1,
+                        dtc=DTCConfig(t_res=250e-15, n_bits=10,
+                                      jitter_rms_s=30e-15),
+                        dtc_cal=SignSignLMS(init=1.0, mu=5e-6,
+                                            gear_shift_n=60_000,
+                                            mu_final=5e-7))))
+
+
 def mdll_150m_2p4g() -> MDLL:
     """Multiplying DLL on a -95 dBc/Hz ring (ex12)."""
     return MDLL(MDLLConfig(
@@ -152,6 +172,7 @@ ALL_PRESETS = {
     "sspll_19p2m_4p8g": sspll_19p2m_4p8g,
     "sspll_frac_19p2m_4p806g": sspll_frac_19p2m_4p806g,
     "spll_100m_8g": spll_100m_8g,
+    "spll_frac_52m_6p253g": spll_frac_52m_6p253g,
     "adpll_100m_10g": adpll_100m_10g,
     "adpll_bb_100m_10g": adpll_bb_100m_10g,
     "ilcm_250m_12g": ilcm_250m_12g,

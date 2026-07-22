@@ -110,18 +110,29 @@ def golden_spll(cfg: SPLLConfig, n: int) -> dict[str, np.ndarray]:
     lf = LoopFilter(cfg.filt, tref)
     lf.reset(cfg.osc.v_for(cfg.fout))
     s = cfg.sampler
-    nd = cfg.n_div
+    frac = cfg.frac is not None
+    mash = _mash(1, cfg.frac.bits) if frac else None
+    frac_word = cfg.frac.frac_word if frac else 0
+    dtc = DTC(cfg.frac.dtc, np.random.default_rng(0), noise=False) \
+        if frac else None
+    n_int = int(cfg.fout // cfg.fref) if frac else int(round(cfg.n_div))
     t_div = 0.0
     fv = cfg.osc.freq_law(lf.vctrl)
     cols = {k: np.zeros(n) for k in ("perr", "dq", "vctrl", "fv")}
     for i in range(n):
-        perr = TWOPI * cfg.fref * (t_div - i * tref)
+        d_dtc = 0.0
+        if mash is not None:
+            residual = mash.residual_ui()
+            t_target = -residual / cfg.fout - cfg.frac.dtc.range_s / 2.0
+            d_dtc = dtc.delay(t_target)
+        perr = TWOPI * cfg.fref * (t_div + d_dtc - i * tref)
         perr = ((perr + np.pi) % TWOPI) - np.pi
         vs = s.amp_v * np.sin(perr) + s.pedestal_v
         dq = s.gm * vs * s.pulse_width
         lf.update_impulse(dq)
         fv = max(cfg.osc.freq_law(lf.vctrl), 0.05 * cfg.osc.f0)
-        t_div += nd / fv
+        n_next = (n_int + mash.step(frac_word)) if mash else n_int
+        t_div += n_next / fv
         cols["perr"][i] = perr
         cols["dq"][i] = dq
         cols["vctrl"][i] = lf.vctrl

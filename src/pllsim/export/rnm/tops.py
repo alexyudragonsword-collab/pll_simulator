@@ -18,7 +18,7 @@ from ..formatting import module_header, vreal
 TWOPI = 2.0 * np.pi
 
 RNM_ARCHS = ("cppll_int", "cppll_frac", "sspll_int", "sspll_frac", "spll",
-             "adpll_tdc", "adpll_bbpd", "ilcm", "mdll")
+             "spll_frac", "adpll_tdc", "adpll_bbpd", "ilcm", "mdll")
 
 
 def _p(name: str, value: float, comment: str) -> str:
@@ -331,9 +331,11 @@ endmodule
 
 
 def _top_spll(cfg, name: str) -> tuple[str, list[str]]:
+    frac = cfg.frac is not None
     cols = ["perr", "dq", "vctrl", "fv"]
     ports, dbg = _dbg_ports(cols)
     c, s = cfg, cfg.sampler
+    n_int = int(c.fout // c.fref) if frac else int(round(c.n_div))
     params = (
         _p("FREF", c.fref, "cfg.fref [Hz]") +
         _p("TREF", 1.0 / c.fref, "") +
@@ -343,34 +345,69 @@ def _top_spll(cfg, name: str) -> tuple[str, list[str]]:
         _p("TPUL", s.pulse_width, "") + _p("VPED", s.pedestal_v, "") +
         _p("VINIT", c.osc.v_for(c.fout), "") +
         _lf_params(c.filt, c.fref) +
-        _pi("N_DIV", c.n_div, "divider") +
+        _pi("N_INT", n_int, "integer divide ratio") +
         _pi("EN_NOISE", 0, "") + _pi("SEED", 3, ""))
+    mash_decl = mash_init = mash_body = dtc_par = ""
+    if frac:
+        f = c.frac
+        dtc_par = (
+            _pi("FRAC_WORD", f.frac_word, "cfg.frac.frac_word") +
+            _p("DTC_TRES", f.dtc.t_res, "DTC LSB [s]") +
+            _pi("DTC_CODEMAX", (1 << f.dtc.n_bits) - 1, "") +
+            _p("DTC_RANGE", f.dtc.range_s, "DTC full-scale [s]") +
+            _p("DTC_GAINERR", 0.0, "true DTC gain error") +
+            _p("DTC_INL_AMP", 0.0, "") + _p("DTC_INL_CYC", 0.0, "") +
+            _p("DTC_INL_PH", 0.0, "") +
+            _p("DTC_JITTER", f.dtc.jitter_rms_s, "") +
+            _p("FOUT_NOM", c.fout, "nominal output [Hz]"))
+        mash_decl = _MASH_DECL
+        mash_init = _MASH_INIT
+        mash_body = _mash_body(1, f.bits)
+    frac_pre = ""
+    if frac:
+        frac_pre = f"""\
+      residual = (res_num)*1.0/(1<<{c.frac.bits});
+      t_target = -residual/FOUT_NOM - DTC_RANGE/2.0;
+{_DTC_CALC}\
+      if (EN_NOISE) d_dtc = d_dtc + $rdist_normal(seed,0,1000000)/1.0e6*DTC_JITTER;
+"""
+    frac_step = ""
+    if frac:
+        frac_step = mash_body + f"""\
+      res_num = res_num + (y_mash<<{c.frac.bits}) - FRAC_WORD;
+      n_next = N_INT + y_mash;
+"""
+    else:
+        frac_step = "      n_next = N_INT;\n"
     body = f"""\
 `timescale 1fs/1fs
 module {name}_top_rnm #(
-{params}  parameter integer EMIT_UNUSED = 0
+{params}{dtc_par}  parameter integer EMIT_UNUSED = 0
 ) (
   input ref_clk{ports}
 );
-{dbg}{_wrap_pm()}{_LF_DECL}\
+{dbg}{_wrap_pm()}{_LF_DECL}{mash_decl}\
   real t_div, perr, vs, dq, fv, vctrl;
-  integer cyc, seed;
+  real residual, t_target, t_req, xdtc, d_dtc, gain_corr;
+  integer code, n_next, cyc, seed;
 
   initial begin
-{_LF_INIT}\
-    t_div = 0.0; cyc = 0; seed = SEED;
+{_LF_INIT}{mash_init}\
+    t_div = 0.0; cyc = 0; seed = SEED; gain_corr = 1.0; d_dtc = 0.0;
     vctrl = VINIT;
     fv = F0 + KVCO*vctrl*(1.0 + NL1*vctrl + NL2*vctrl*vctrl);
   end
 
   always @(posedge ref_clk) begin
-    perr = wrap_pm(6.283185307179586*FREF*(t_div - cyc*TREF));
-    vs = AMP*$sin(perr) + VPED;
-    dq = GM*vs*TPUL;
+{frac_pre}\
+      perr = wrap_pm(6.283185307179586*FREF*(t_div + d_dtc - cyc*TREF));
+      vs = AMP*$sin(perr) + VPED;
+      dq = GM*vs*TPUL;
 {_LF_STEP}\
       fv = F0 + KVCO*vctrl*(1.0 + NL1*vctrl + NL2*vctrl*vctrl);
       if (fv < 0.05*F0) fv = 0.05*F0;
-      t_div = t_div + N_DIV*1.0/fv;
+{frac_step}\
+      t_div = t_div + n_next*1.0/fv;
       cyc = cyc + 1;
       r_perr = perr;  r_dq = dq;  r_vctrl = vctrl;  r_fv = fv;
   end
@@ -616,7 +653,7 @@ def emit_rnm_top(kind: str, cfg, name: str) -> tuple[str, list[str]]:
         return _top_cppll(cfg, name)
     if kind in ("sspll_int", "sspll_frac"):
         return _top_sspll(cfg, name)
-    if kind == "spll":
+    if kind in ("spll", "spll_frac"):
         return _top_spll(cfg, name)
     if kind == "adpll_tdc":
         return _top_adpll_tdc(cfg, name)

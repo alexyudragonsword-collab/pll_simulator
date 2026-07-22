@@ -522,7 +522,7 @@ plot_pn_breakdown(ar, sim, save="pn.png")</code></pre>
   </figcaption>
 </figure>
 
-<h3><span class="en">11.4 Literature benchmark: Gao et al., JSSC 2009/2010 (ex10)</span><span class="zh">11.4 文献对标：Gao 等，JSSC 2009/2010（ex10）</span></h3>
+<h3><span class="en">11.4 Literature benchmarks: four JSSC papers (ex10, ex14)</span><span class="zh">11.4 文献对标：四篇 JSSC（ex10、ex14）</span></h3>
 <p>
   <span class="en">The credibility check. Published measurements of the landmark 55.25 MHz &rarr; 2.21 GHz sub-sampling PLL (in-band −126 dBc/Hz, 0.15 ps rms over 10 kHz–100 MHz, companion chip BW = f<sub>ref</sub>/20) are used as targets; sampler and filter values are technology-plausible assumptions (not published), and the filter is synthesized by <code>design_sspll_filter</code>. The model lands at −126.8 dBc/Hz and 0.122–0.139 ps. The same reference/VCO in a classic CPPLL at comparable PD-path current: −106.8 dBc/Hz and 0.40 ps — the paper's central claim (no N&sup2; on PD/CP noise) reproduced quantitatively as a ~19 dB in-band gap.</span>
   <span class="zh">可信度背书。以里程碑式的 55.25 MHz &rarr; 2.21 GHz 亚采样 PLL 的发表实测为目标（带内 −126 dBc/Hz，10 kHz–100 MHz 积分 0.15 ps rms，姊妹芯片 BW = f<sub>ref</sub>/20）；采样器与滤波器取工艺合理假设值（论文未完整公开），滤波器由 <code>design_sspll_filter</code> 综合。模型落在 −126.8 dBc/Hz 与 0.122–0.139 ps。相同参考/VCO 放进同等 PD 路径电流的经典 CPPLL：−106.8 dBc/Hz、0.40 ps——论文的核心论点（PD/CP 噪声无 N&sup2; 惩罚）以约 19 dB 带内差距被定量重现。</span>
@@ -532,6 +532,35 @@ plot_pn_breakdown(ar, sim, save="pn.png")</code></pre>
   <figcaption>
     <span class="en">Benchmark PN breakdown with the time-domain periodogram overlaid; in-band set by reference &times;N with sampler/gm well below — the signature of a correct sub-sampling noise budget.</span>
     <span class="zh">对标相噪分解与时域周期图叠加；带内由参考 &times;N 决定、采样器/gm 远在其下——正确的亚采样噪声预算特征。</span>
+  </figcaption>
+</figure>
+<p>
+  <span class="en">ex14 extends the anchor from one point to four, covering the three dominant modern low-jitter fractional-N paradigms with the most recent verifiable JSSC data: a DTC + bang-bang digital PLL (Dartizio et al., JSSC Dec. 2023 — 28 nm, ~9.25 GHz, &lt;77 fs, in-band fractional spur &lt;−70 dBc), a DTC-based fractional-N sub-sampling PLL (Markuli&cacute; et al., JSSC Dec. 2016 — 65 nm imec, 40 MHz &rarr; 10.24 GHz, 176 fs integer / 198 fs worst fractional; chosen over newer DTC-SSPLLs because its public parameter set is the most complete), and an analog fractional-N <em>sampling</em> PLL (Wu et al., JSSC May 2019 — Samsung 28 nm, 52 MHz &rarr; ~6.25 GHz, 75 fs over the paper's 10 kHz–10 MHz band, spur &lt;−64 dBc). The last one motivated a functional addition: <code>SPLLConfig.frac</code> — an EFM1 + DTC that delays the <em>divided</em> edge so it always samples the reference sine at the same phase, with the same sign-sign LMS background gain calibration as the paper (the model's LMS converges to exactly 1/(1+&epsilon;)). Two architecture-specific behaviors reproduce: the linearized model under-reads bang-bang loops, so the time domain is the reference for Dartizio (it lands on the published 77 fs); and Markuli&cacute;'s central claim — calibrated fractionalization is nearly free — appears as a +0.8% time-domain penalty, while the linear model with its conservative 1% post-cal residual reads as the published worst channel.</span>
+  <span class="zh">ex14 把背书从单点扩展到四点，用可核实数据最新的 JSSC 论文覆盖三大现代低抖动小数N范式：DTC + bang-bang 数字 PLL（Dartizio 等，JSSC 2023.12——28 nm，~9.25 GHz，&lt;77 fs，带内小数杂散 &lt;−70 dBc）、DTC 辅助小数N亚采样 PLL（Markuli&cacute; 等，JSSC 2016.12——65 nm imec，40 MHz &rarr; 10.24 GHz，整数 176 fs / 最差小数通道 198 fs；不选更新的 DTC-SSPLL 是因为这篇公开参数最完整），以及模拟小数N<em>采样</em> PLL（Wu 等，JSSC 2019.5——三星 28 nm，52 MHz &rarr; ~6.25 GHz，论文自己的 10 kHz–10 MHz 积分带上 75 fs，杂散 &lt;−64 dBc）。最后一篇带来一个功能补全：<code>SPLLConfig.frac</code>——EFM1 + DTC 延迟<em>分频</em>沿，使其始终在同一相位采样参考正弦，并接上与论文相同的符号-符号 LMS 后台增益校准（模型的 LMS 恰好收敛到 1/(1+&epsilon;)）。两个架构特有的行为如实重现：线性化模型低估 bang-bang 环路，Dartizio 以时域为准（正好落在发表的 77 fs 上）；Markuli&cacute; 的核心论点——校准后小数化几乎免费——在时域表现为 +0.8% 的代价，而带保守 1% 校准残差的线性模型读作发表的最差通道。</span>
+</p>
+<table>
+  <tr><th><span class="en">Paper / architecture</span><span class="zh">论文 / 架构</span></th>
+      <th><span class="en">Published [fs]</span><span class="zh">发表值 [fs]</span></th>
+      <th><span class="en">Linear model [fs]</span><span class="zh">线性模型 [fs]</span></th>
+      <th><span class="en">Time domain [fs]</span><span class="zh">时域 [fs]</span></th></tr>
+  <tr><td><span class="en">Gao'09 SSPLL, 2.21 GHz integer-N (10 k–100 M)</span><span class="zh">Gao'09 SSPLL，2.21 GHz 整数N（10 k–100 M）</span></td><td>150</td><td>122</td><td>139</td></tr>
+  <tr><td><span class="en">Dartizio'23 DTC-BB digital PLL, 9.25 GHz frac-N</span><span class="zh">Dartizio'23 DTC-BB 数字 PLL，9.25 GHz 小数N</span></td><td>77</td><td>57</td><td><b>77</b></td></tr>
+  <tr><td><span class="en">Markuli&cacute;'16 SSPLL, 10.24 GHz integer-N</span><span class="zh">Markuli&cacute;'16 SSPLL，10.24 GHz 整数N</span></td><td>176</td><td>165</td><td>154</td></tr>
+  <tr><td><span class="en">Markuli&cacute;'16 SSPLL, 10.24 GHz fractional-N</span><span class="zh">Markuli&cacute;'16 SSPLL，10.24 GHz 小数N</span></td><td>198 (worst)</td><td>199</td><td>155</td></tr>
+  <tr><td><span class="en">Wu'19 sampling PLL, 6.25 GHz frac-N (10 k–10 M)</span><span class="zh">Wu'19 采样 PLL，6.25 GHz 小数N（10 k–10 M）</span></td><td>75</td><td>77</td><td>78</td></tr>
+</table>
+<figure>
+  <img src="img/ex14_dartizio23.png" alt="Dartizio 2023 benchmark">
+  <figcaption>
+    <span class="en">Dartizio'23 class DTC-BBPD digital PLL: the time-domain periodogram sits 2–4 dB above the Gaussian-linearized BBPD model in-band — the honest signature of a bang-bang loop — and integrates to the published 77 fs.</span>
+    <span class="zh">Dartizio'23 类 DTC-BBPD 数字 PLL：时域周期图带内高出高斯线性化 BBPD 模型 2–4 dB——bang-bang 环路的真实特征——积分正好落在发表的 77 fs。</span>
+  </figcaption>
+</figure>
+<figure>
+  <img src="img/ex14_wu19.png" alt="Wu 2019 benchmark">
+  <figcaption>
+    <span class="en">Wu'19 class fractional sampling PLL (new <code>spll_frac</code>): reference-referred PD noise &times;N, DTC on the divided edge, background LMS gain cal — 77/78 fs over the paper's 10 kHz–10 MHz band vs 75 fs published.</span>
+    <span class="zh">Wu'19 类小数采样 PLL（新增 <code>spll_frac</code>）：参考基准 PD 噪声 &times;N、DTC 作用于分频沿、后台 LMS 增益校准——论文 10 kHz–10 MHz 积分带上 77/78 fs，发表值 75 fs。</span>
   </figcaption>
 </figure>
 

@@ -11,7 +11,7 @@ examples with plots, cross-domain result comparisons and lessons learned.
 |---|---|---|---|---|
 | Charge-pump PLL (int-N / frac-N + DTC) | s-domain linear phase model | ref-edge event-driven | ex01, ex02 | ~170–260 fs |
 | Sub-sampling PLL (+ FLL, int-N & **frac-N/DTC**) | **exact discrete z-domain** | ref-edge event-driven | ex03, ex08 | ~135–150 fs |
-| Sampling PLL (reference-sampling) | s-domain | ref-edge event-driven | ex04 | ~200 fs |
+| Sampling PLL (reference-sampling, int-N & **frac-N/DTC**) | s-domain | ref-edge event-driven | ex04, ex14 | ~75–200 fs |
 | ADPLL (counter+TDC / DTC+BBPD) | exact z-domain | ref-edge event-driven | ex05 | ~110 fs |
 | Injection-locked clock multiplier (+ FTL, timing cal) | z-domain realignment model | per-cycle recursion (+intra-period spur sampling) | ex06, ex08 | ~115 fs |
 | Multiplying DLL (edge replacement + digital tuning) | 1−ZOH oscillator NTF | per-cycle recursion (+intra-period sampling) | ex12 | ring-limited |
@@ -19,9 +19,13 @@ examples with plots, cross-domain result comparisons and lessons learned.
 Beyond the architectures: **loop synthesis** (`pllsim.synth` — filter/DLF
 component values from UGB/PM targets, jitter-vs-bandwidth optimization, ex07),
 **second-order impairments** (Kvco nonlinearity, supply pushing, reference-
-doubler duty error, coarse band selection — ex09), a **literature benchmark**
-reproducing Gao et al.'s JSSC'09/'10 sub-sampling PLL published measurements
-(ex10, in-band −126 dBc/Hz / 0.15 ps class), **Monte Carlo yield analysis**
+doubler duty error, coarse band selection — ex09), **literature benchmarks
+against four JSSC papers** — Gao'09/'10 integer-N SSPLL (ex10, in-band
+−126 dBc/Hz / 0.15 ps class), Dartizio'23 DTC+BBPD digital PLL (77 fs @
+9.25 GHz), Markulić'16 fractional DTC-SSPLL (176/198 fs @ 10.24 GHz) and
+Wu'19 fractional sampling PLL (75 fs @ 6.25 GHz, 10 kHz–10 MHz band) — all
+landing on the published jitter with labelled technology-plausible
+assumptions (ex14), **Monte Carlo yield analysis**
 (`pllsim.montecarlo` — multiprocess mismatch/corner sweeps with calibration
 running per chip, ex11: 100 chips in ~77 s), and a **Verilog-AMS export
 bridge** (`pllsim.export`, ex13 — per config: bit-true synthesizable RTL for

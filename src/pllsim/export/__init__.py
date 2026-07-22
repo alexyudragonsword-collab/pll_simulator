@@ -62,7 +62,7 @@ def _kind_of(pll) -> str:
     if isinstance(pll, SSPLL):
         return "sspll_frac" if pll.cfg.frac is not None else "sspll_int"
     if isinstance(pll, SPLL):
-        return "spll"
+        return "spll_frac" if pll.cfg.frac is not None else "spll"
     if isinstance(pll, ADPLL):
         return "adpll_tdc" if pll.cfg.mode == "tdc" else "adpll_bbpd"
     if isinstance(pll, ILCM):
@@ -119,7 +119,7 @@ def _export_rtl(pll, kind: str, outdir: Path, rep: ExportReport,
             rep.warnings.append(
                 "DLF coefficients are not powers of two: RTL DLF not "
                 "emitted (RNM top carries the real-coefficient filter)")
-    if kind in ("sspll_int", "sspll_frac", "spll"):
+    if kind in ("sspll_int", "sspll_frac", "spll", "spll_frac"):
         window = c.fll_window
         n_t = int(round(c.fout / c.fref)) * window
         th_eng = max(int(round(c.fll_engage / c.fref * window)), 1)
@@ -167,7 +167,8 @@ def _export_rnm(pll, kind: str, name: str, outdir: Path, rep: ExportReport,
 
     engine = {"cppll_int": rg.golden_cppll, "cppll_frac": rg.golden_cppll,
               "sspll_int": rg.golden_sspll, "sspll_frac": rg.golden_sspll,
-              "spll": rg.golden_spll, "adpll_tdc": rg.golden_adpll_tdc,
+              "spll": rg.golden_spll, "spll_frac": rg.golden_spll,
+              "adpll_tdc": rg.golden_adpll_tdc,
               "adpll_bbpd": rg.golden_adpll_bbpd, "ilcm": rg.golden_ilcm,
               "mdll": rg.golden_mdll}[kind]
     if kind in ("ilcm", "mdll"):

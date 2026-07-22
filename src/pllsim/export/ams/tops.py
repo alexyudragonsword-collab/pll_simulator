@@ -14,13 +14,13 @@ from __future__ import annotations
 from ..formatting import module_header, vreal
 
 AMS_FULL_ELECTRICAL = ("cppll_int", "cppll_frac", "sspll_int", "sspll_frac",
-                       "spll")
+                       "spll", "spll_frac")
 
 
 def emit_ams_top(kind: str, cfg, name: str) -> str:
     if kind in ("cppll_int", "cppll_frac"):
         return _ams_cppll(cfg, name, frac=kind.endswith("frac"))
-    if kind in ("sspll_int", "sspll_frac", "spll"):
+    if kind in ("sspll_int", "sspll_frac", "spll", "spll_frac"):
         return _ams_sampling(cfg, name, kind)
     # digital-core architectures: RNM top + electrical oscillator shell
     return _ams_digital_core(cfg, name, kind)

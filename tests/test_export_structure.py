@@ -1,4 +1,4 @@
-"""Structural checks on the full export of every preset (all 9 kinds)."""
+"""Structural checks on the full export of every preset (all 10 kinds)."""
 import re
 
 import pytest
@@ -20,7 +20,8 @@ def reports(tmp_path_factory):
 def test_all_kinds_covered(reports):
     kinds = {r.kind for r in reports}
     assert kinds == {"cppll_int", "cppll_frac", "sspll_int", "sspll_frac",
-                     "spll", "adpll_tdc", "adpll_bbpd", "ilcm", "mdll"}
+                     "spll", "spll_frac", "adpll_tdc", "adpll_bbpd", "ilcm",
+                     "mdll"}
 
 
 def test_files_exist_and_balanced(reports):

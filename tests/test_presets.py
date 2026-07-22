@@ -11,6 +11,9 @@ BOUNDS = {
     # calibrated time domain lands ~150 fs
     "sspll_frac_19p2m_4p806g": (80, 320),
     "spll_100m_8g": (120, 300),
+    # SPLL fractional: reference-referred PD puts DTC noise x N at the
+    # output; analyze() carries the conservative 1% post-cal DSM residual
+    "spll_frac_52m_6p253g": (120, 400),
     "adpll_100m_10g": (60, 200),
     "adpll_bb_100m_10g": (60, 260),
     "ilcm_250m_12g": (60, 200),
