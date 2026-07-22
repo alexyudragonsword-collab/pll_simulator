@@ -29,3 +29,5 @@ jobs:
         run: |
           python examples/ex01_cppll_intn_19p2m_4p8g.py
           test -f examples/out/ex01_pn_breakdown.png
+          python examples/ex13_export_vams.py
+          test -f examples/out/export/INDEX.md

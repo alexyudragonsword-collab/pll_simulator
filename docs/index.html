@@ -568,6 +568,16 @@ plot_pn_breakdown(ar, sim, save="pn.png")</code></pre>
   </figcaption>
 </figure>
 
+<h3><span class="en">11.7 Verilog-AMS export bridge (ex13)</span><span class="zh">11.7 Verilog-AMS 导出桥（ex13）</span></h3>
+<p>
+  <span class="en"><code>pllsim.export</code> turns every configuration into Cadence-ready behavioral models, parameters flowing from the same Python Config (full-precision literals, each annotated with its config path and unit).  Three layers per instance: <b>RTL</b> — bit-true synthesizable Verilog for the digital blocks (MASH &times;3, DLF, sign-sign LMS, FLL/FTL/band-select), verified at export time with iverilog against fixed-point Python mirrors at <em>zero tolerance</em>; <b>RNM/wreal</b> — a cycle-true single-block recursion transplanting the validated engine (the loop filter carries the exact e<sup>AT</sup> matrix as parameters), shipped with a noise-free golden CSV its testbench replays cycle by cycle, plus $rdist_normal jitter injection mapped from the Leeson profile for noise runs; <b>electrical VAMS</b> — the real R/C filter netlist, switched-current charge pump, idtmod phase-integrating VCO and sampling front-end for block-level AMS verification with scalar golden checks.  Honest boundaries are generated into each README: flicker is not representable event-driven (the ignored fs are computed and printed), electrical transient runs are deterministic (use RNM for jitter), and no open-source VAMS simulator exists — the wreal/electrical testbenches self-check on the user's Xcelium.</span>
+  <span class="zh"><code>pllsim.export</code> 把每个配置变成可直接进 Cadence 的行为模型，参数从同一 Python Config 流出（全精度字面量，逐条注释来源路径与单位）。每实例三层：<b>RTL</b>——数字块（MASH ×3、DLF、符号-符号 LMS、FLL/FTL/频段选择）的位真可综合 Verilog，导出时即用 iverilog 对定点 Python 镜像<em>零容差</em>验证；<b>RNM/wreal</b>——cycle-true 单块递推移植已验证引擎（环路滤波器以参数形式携带精确 e<sup>AT</sup> 矩阵），附带无噪声黄金 CSV 由测试台逐拍回放比对，噪声运行时按 Leeson 轮廓映射 $rdist_normal 抖动注入；<b>电气级 VAMS</b>——真实 R/C 网表、开关电流电荷泵、idtmod 相位积分 VCO 与采样前端，用于块级 AMS 验证（标量黄金自检）。诚实边界写进每份生成的 README：闪烁噪声无法事件驱动表达（被忽略的 fs 数会计算打印）、电气级瞬态是确定性的（抖动请用 RNM 层）、且不存在开源 VAMS 仿真器——wreal/电气级测试台在用户的 Xcelium 上自检。</span>
+</p>
+<div class="callout blue">
+  <span class="en"><b>Why Verilog-AMS (not Verilog-A), and the wreal layer:</b> VA is analog-only — it drags the analog kernel into digital-top regressions and cannot express the PLL's digital half.  VAMS mixes both domains in one module, and its wreal/RNM idiom runs entirely in the digital event kernel (100&ndash;1000&times; faster) — the standard UVM-MS methodology for digital-top verification.  ex13 exports all 9 configurations; every generated RTL testbench passes bit-true in place.</span>
+  <span class="zh"><b>为什么是 Verilog-AMS（而非 Verilog-A）以及 wreal 层：</b>VA 纯模拟——进 digital-top 回归会拖入模拟内核，且无法表达 PLL 的数字半边。VAMS 单模块混合双域，其 wreal/RNM 写法完全跑在数字事件内核（快 100&ndash;1000&times;）——即 digital-top 验证的标准 UVM-MS 方法学。ex13 导出全部 9 种配置；每个生成的 RTL 测试台就地位真通过。</span>
+</div>
+
 </div>
 <script>
 function setLang(l) {

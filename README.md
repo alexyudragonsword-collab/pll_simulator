@@ -21,9 +21,13 @@ component values from UGB/PM targets, jitter-vs-bandwidth optimization, ex07),
 **second-order impairments** (Kvco nonlinearity, supply pushing, reference-
 doubler duty error, coarse band selection — ex09), a **literature benchmark**
 reproducing Gao et al.'s JSSC'09/'10 sub-sampling PLL published measurements
-(ex10, in-band −126 dBc/Hz / 0.15 ps class), and **Monte Carlo yield
-analysis** (`pllsim.montecarlo` — multiprocess mismatch/corner sweeps with
-calibration running per chip, ex11: 100 chips in ~77 s).
+(ex10, in-band −126 dBc/Hz / 0.15 ps class), **Monte Carlo yield analysis**
+(`pllsim.montecarlo` — multiprocess mismatch/corner sweeps with calibration
+running per chip, ex11: 100 chips in ~77 s), and a **Verilog-AMS export
+bridge** (`pllsim.export`, ex13 — per config: bit-true synthesizable RTL for
+the digital blocks verified with iverilog at zero tolerance, a cycle-true
+wreal/RNM top with golden-CSV testbench for Cadence digital-top regressions,
+and an electrical VAMS netlist for block-level AMS verification).
 
 Coverage targets: fref = 19.2–250 MHz, fout up to 12 GHz, integrated jitter
 50–200 fs (1 kHz–100 MHz band, configurable).

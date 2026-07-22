@@ -7,9 +7,14 @@ BOUNDS = {
     "cppll_19p2m_4p8g": (150, 320),
     "cppll_frac_38p4m_6g": (120, 260),
     "sspll_19p2m_4p8g": (80, 220),
+    # analyze() assumes a conservative 1% post-cal DSM residual; the
+    # calibrated time domain lands ~150 fs
+    "sspll_frac_19p2m_4p806g": (80, 320),
     "spll_100m_8g": (120, 300),
     "adpll_100m_10g": (60, 200),
+    "adpll_bb_100m_10g": (60, 260),
     "ilcm_250m_12g": (60, 200),
+    "mdll_150m_2p4g": (150, 600),
 }
 
 
