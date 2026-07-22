@@ -162,6 +162,13 @@ class CPPLL(PLLBase):
         if c.frac is not None:
             fo = min(c.frac.frac, 1 - c.frac.frac) * c.fref
             spurs["frac_offset_hz"] = fo
+            if c.frac.dtc is not None:
+                from ..core.dtcspurs import dtc_spur_table
+                eps = getattr(c.frac.dtc, "gain_error_residual", 0.01)
+                for off, dbc in dtc_spur_table(
+                        c.frac, lambda r: r / c.fout, c.fref, c.fout,
+                        ntf=h_lp, gain_eps=eps).items():
+                    spurs[f"frac_spur@{off:.0f}Hz"] = dbc
         return AnalysisResult(
             f=f, f0=c.fout, pn_breakdown=bd, loop=m,
             jitter_fs=jit, ipn_dbc=ipn_dbc(f, bd["total"], *c.int_band),

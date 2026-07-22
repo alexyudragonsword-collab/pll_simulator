@@ -143,6 +143,15 @@ class SSPLL(PLLBase):
         zf = np.interp(np.log10(c.fref), np.log10(f), np.abs(z.h))
         beta = c.osc.gain * 2.0 * dq * c.fref * zf / (2.0 * c.fref)
         spurs = {"ref_spur": float(20 * np.log10(max(beta / 2, 1e-30)))}
+        if c.frac is not None:
+            from ..core.dtcspurs import dtc_spur_table
+            d = c.frac.dtc
+            eps = getattr(d, "gain_error_residual", 0.01)
+            for off, dbc in dtc_spur_table(
+                    c.frac,
+                    lambda r: (1.0 + r) / c.fout - d.range_s / 2.0,
+                    c.fref, c.fout, ntf=h, gain_eps=eps).items():
+                spurs[f"frac_spur@{off:.0f}Hz"] = dbc
         notes = [f"PD gain referred to output phase: CP/LF noise not multiplied "
                  f"by N={n} (the SSPLL advantage)"]
         return AnalysisResult(f=f, f0=c.fout, pn_breakdown=bd, loop=m,

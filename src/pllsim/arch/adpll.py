@@ -140,9 +140,18 @@ class ADPLL(PLLBase):
         jit = rms_jitter_fs(f, bd["total"], c.fout, *c.int_band)
         if m.f_ugb > c.fref / 10:
             notes.append("UGB > fref/10: discrete loop peaking significant")
+        spurs = {}
+        if c.mode == "dtc_bbpd" and c.frac.dtc is not None:
+            from ..core.dtcspurs import dtc_spur_table
+            eps = getattr(c.frac.dtc, "gain_error_residual", 0.01)
+            for off, dbc in dtc_spur_table(
+                    c.frac, lambda r: r / c.fout, c.fref, c.fout,
+                    ntf=h, gain_eps=eps).items():
+                spurs[f"frac_spur@{off:.0f}Hz"] = dbc
         return AnalysisResult(
             f=f, f0=c.fout, pn_breakdown=bd, loop=m, jitter_fs=jit,
             ipn_dbc=ipn_dbc(f, bd["total"], *c.int_band), int_band=c.int_band,
+            spurs_analytic=spurs,
             ntfs={"gol": gol, "h": h, "err": err}, notes=notes)
 
     def _gol_tdc(self, f):
