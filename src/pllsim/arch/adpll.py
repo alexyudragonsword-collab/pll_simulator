@@ -192,11 +192,17 @@ class ADPLL(PLLBase):
     # ------------------------------------------------------------ simulate
     def simulate(self, n_cycles: int, *, noise: bool = True, calibration: bool = True,
                  seed: int = 0, f_start_offset: float = 0.0,
-                 kdco_cal=None, tdc_cal=None, dtc_gain_init_error: float = 0.0
+                 kdco_cal=None, tdc_cal=None, dtc_gain_init_error: float = 0.0,
+                 mod_freq: np.ndarray | None = None, mod_dp_gain: float = 1.0
                  ) -> SimResult:
+        """mod_freq: two-point modulation frequency trajectory [Hz] on the
+        fref grid (see pllsim.modulation); injected at the FCW (lowpass)
+        and DCO (highpass) points.  mod_dp_gain scales the direct point:
+        1.0 = matched, 1+eps models a direct-path gain error.  TDC mode."""
         if self.cfg.mode == "tdc":
             return self._sim_tdc(n_cycles, noise, calibration, seed,
-                                 f_start_offset, kdco_cal, tdc_cal)
+                                 f_start_offset, kdco_cal, tdc_cal,
+                                 mod_freq, mod_dp_gain)
         return self._sim_bbpd(n_cycles, noise, calibration, seed,
                               f_start_offset, dtc_gain_init_error)
 
@@ -208,7 +214,7 @@ class ADPLL(PLLBase):
         return synth_from_psd(src.psd, c.fref, n_cycles, rng) / (TWOPI * c.fref)
 
     def _sim_tdc(self, n_cycles, noise, calibration, seed, f_start_offset,
-                 kdco_cal, tdc_cal):
+                 kdco_cal, tdc_cal, mod_freq=None, mod_dp_gain=1.0):
         c = self.cfg
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
@@ -240,6 +246,10 @@ class ADPLL(PLLBase):
             prev_phi_n = osc_noise[n]
             phi_v += fv * tref + d_phi_n
             r_acc += fcw
+            if mod_freq is not None:
+                # lowpass point [UI] — one cycle behind the direct point:
+                # the fv used for phi_v this cycle carries mod_freq[n-1]
+                r_acc += (mod_freq[n - 1] if n > 0 else 0.0) * tref
             # reference jitter shifts the sampling instant of the DCO phase
             phi_sample = phi_v + jit_ref[n] * fv
             count = np.floor(phi_sample)
@@ -271,6 +281,8 @@ class ADPLL(PLLBase):
                     iir_state[i] += lam * (x - iir_state[i])
                     x = iir_state[i]
                 otw = x * c.fref / kdco_hat + otw_center
+            if mod_freq is not None:                 # highpass (direct) point
+                otw += mod_freq[n] * mod_dp_gain / kdco_hat
             # DCO quantization with optional 1st-order dither
             if c.dco_dither_order > 0:
                 otw_q = np.floor(otw + qerr)

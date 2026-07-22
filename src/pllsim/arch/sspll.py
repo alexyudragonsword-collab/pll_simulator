@@ -171,7 +171,14 @@ class SSPLL(PLLBase):
     def simulate(self, n_cycles: int, *, noise: bool = True, calibration: bool = True,
                  seed: int = 0, f_start_offset: float = 0.0,
                  fll_enable: bool = True,
-                 dtc_gain_init_error: float = 0.0) -> SimResult:
+                 dtc_gain_init_error: float = 0.0,
+                 mod_freq: np.ndarray | None = None,
+                 mod_dp_gain: float = 1.0) -> SimResult:
+        """mod_freq: two-point modulation trajectory [Hz] on the fref grid
+        (pllsim.modulation).  Lowpass point: the sampling instant is shifted
+        by the accumulated modulation phase (DTC path, Markulic-style);
+        highpass point: direct VCO frequency push scaled by mod_dp_gain
+        (1.0 = matched two-point)."""
         c = self.cfg
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
@@ -215,12 +222,23 @@ class SSPLL(PLLBase):
         fll_state = np.empty(n_cycles)
         cal_trace = np.empty(n_cycles) if dtc_cal is not None else None
         prev_extra = 0.0
+        phi_m = 0.0                     # accumulated modulation phase [rad]
 
         for nn in range(n_cycles):
             d_osc = osc_noise[nn] - prev_on
             prev_on = osc_noise[nn]
             # sampling-instant shift this cycle: ref jitter + DTC alignment
             extra = jit_ref[nn]
+            if mod_freq is not None:
+                # lowpass point: expect the VCO zero crossing at +phi_m —
+                # sample earlier by phi_m (wrapped to one VCO period; a
+                # wrap only renumbers the sampled edge).  One cycle behind
+                # the direct point: fv carries mod_freq[nn-1] this cycle.
+                phi_m += TWOPI * (mod_freq[nn - 1] if nn > 0 else 0.0) * tref
+                phi_w = ((phi_m + np.pi) % TWOPI) - np.pi
+                # convert with the CURRENT VCO frequency: using the nominal
+                # fout leaks 2*pi*mod/fv per wrap, data-correlated
+                extra -= phi_w / (TWOPI * fv)
             residual_ui = 0.0
             if mash is not None:
                 residual_ui = mash.residual_ui()
@@ -257,6 +275,8 @@ class SSPLL(PLLBase):
             lf.update_pulse(dq / max(c.sampler.pulse_width, 1e-12),
                             c.sampler.pulse_width)
             fv = max(osc.freq(lf.vctrl), 0.05 * c.osc.f0)
+            if mod_freq is not None:    # highpass point: direct VCO push
+                fv += mod_freq[nn] * mod_dp_gain
 
             phi_out += TWOPI * (fv - c.fout) * tref + d_osc
             phase_err[nn] = phi_out
