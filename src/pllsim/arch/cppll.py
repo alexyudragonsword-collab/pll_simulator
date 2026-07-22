@@ -281,7 +281,7 @@ class CPPLL(PLLBase):
                     t_target += lut_cal.correction(residual_ui)
                 t_ref += dtc.delay(t_target)
             dt = t_div + jit_div[n] - t_ref
-            dt_eff = float(np.clip(dt, -0.45 * tref, 0.45 * tref))  # PFD slip clamp
+            dt_eff = min(max(dt, -0.45 * tref), 0.45 * tref)   # PFD slip clamp
             dq = cp.charge(dt_eff)
             t_on = min(abs(dt_eff) + c.cp.t_reset, 0.9 * tref)
             lf.update_pulse(dq / t_on, t_on)

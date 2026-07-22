@@ -66,14 +66,19 @@ class LoopFilter:
         self.a, self.b, self.c = a, b, c
         self.ad = expm(a * self.tstep)
         self.x = np.zeros(a.shape[0])
-        self._expm_cache: dict[float, np.ndarray] = {}
+        # eigendecomposition for cheap per-cycle e^{At}: A = V diag(w) V^-1
+        # (passive RC: distinct eigenvalues incl. the type-II zero eigenvalue)
+        self._w, self._v = np.linalg.eig(a)
+        self._vinv = np.linalg.inv(self._v)
+        self._vinv_b = self._vinv @ b
 
     def reset(self, vctrl: float = 0.0):
         self.x = np.full(self.a.shape[0], vctrl)
 
     @property
     def vctrl(self) -> float:
-        return float(self.c @ self.x)
+        # both topologies take vctrl at the last state (C @ x == x[-1])
+        return float(self.x[-1])
 
     def update_impulse(self, dq: float) -> float:
         """One tstep with the CP charge dq applied as an impulse at the start.
@@ -84,33 +89,33 @@ class LoopFilter:
         self.x = self.ad @ (self.x + self.b * dq)
         return self.vctrl
 
-    def _phi(self, t: float) -> np.ndarray:
-        m = self._expm_cache.get(t)
-        if m is None:
-            m = expm(self.a * t)
-            if len(self._expm_cache) < 64:
-                self._expm_cache[t] = m
-        return m
-
     def update_pulse(self, i_cp: float, t_on: float) -> float:
         """One tstep with constant current i_cp for t_on, then free evolution.
 
         A is singular (the type-II integrator pole: total charge is conserved
-        with zero input), so the zero-order-hold input integral is computed via
-        the augmented-matrix exponential rather than A^-1(e^{At}-I)b.
+        with zero input); the input integral is evaluated per eigenvalue with
+        the d->0 limit handled explicitly.  For t_on << tstep the charge
+        impulse approximation (precomputed e^{A T}) is exact to O(t_on/tau)
+        and avoids the per-cycle eigen-reconstruction entirely.
         """
         t_on = min(abs(t_on), self.tstep)
-        n = self.a.shape[0]
-        # augmented exponential: [[A, b],[0,0]] -> e gives both Phi and Gamma
-        m = np.zeros((n + 1, n + 1))
-        m[:n, :n] = self.a * t_on
-        m[:n, n] = self.b * t_on
-        em = expm(m)
-        phi, gamma = em[:n, :n], em[:n, n]
-        self.x = phi @ self.x + gamma * i_cp
+        if t_on < 0.02 * self.tstep:
+            return self.update_impulse(i_cp * t_on)
+        # e^{A t_on} and gamma = int_0^t e^{As} ds b via the eigenbasis;
+        # (e^{wt}-1)/w cancels catastrophically for the near-zero (type-II)
+        # eigenvalue, so use the Taylor branch there
+        wt = self._w * t_on
+        ew = np.exp(wt)
+        small = np.abs(wt) < 1e-8
+        g = np.where(small,
+                     t_on * (1.0 + wt / 2.0 + wt * wt / 6.0),
+                     (ew - 1.0) / np.where(small, 1.0, self._w))
+        xe = self._vinv @ self.x
+        xe = ew * xe + g * self._vinv_b * i_cp
         rest = self.tstep - t_on
         if rest > 0:
-            self.x = self._phi(rest) @ self.x
+            xe = np.exp(self._w * rest) * xe
+        self.x = np.real(self._v @ xe)
         return self.vctrl
 
     # ------------------------------------------------------------ freq domain
