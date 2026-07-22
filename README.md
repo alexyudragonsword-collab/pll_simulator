@@ -56,17 +56,20 @@ pytest tests/             # 150 tests: closed-form math + architecture behavior
 python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 ```
 
-**GUI** — every capability behind a browser workbench (bilingual zh/EN):
+**GUI** — every capability behind a workbench, in two flavors:
 
 ```bash
-pip install -e .[gui]     # adds streamlit
+pip install -e .[gui]     # browser (streamlit), bilingual zh/EN
 streamlit run gui/Home.py
+
+pip install -e .[guiqt]   # native desktop (PySide6), English
+pllsim-gui                # or: python -m pllsim.guiqt
 ```
 
-Pages: architecture workbench (preset -> edit every Config field ->
-analyze/simulate with plots), loop synthesis, architecture selector, spur
-prediction, measured-PN fitting, two-point modulation, hop settling, drift
-tracking, Monte Carlo, VAMS export (zip download), benchmarks.
+Pages (both flavors): architecture workbench (preset -> edit every Config
+field -> analyze/simulate with plots), loop synthesis, architecture
+selector, spur prediction, measured-PN fitting, two-point modulation, hop
+settling, drift tracking, Monte Carlo, VAMS export, benchmarks.
 
 Quick start:
 
