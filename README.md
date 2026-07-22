@@ -52,9 +52,21 @@ Coverage targets: fref = 19.2–250 MHz, fout up to 12 GHz, integrated jitter
 
 ```bash
 pip install -e .          # numpy, scipy, matplotlib
-pytest tests/             # 124 tests: closed-form math + architecture behavior
+pytest tests/             # 150 tests: closed-form math + architecture behavior
 python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 ```
+
+**GUI** — every capability behind a browser workbench (bilingual zh/EN):
+
+```bash
+pip install -e .[gui]     # adds streamlit
+streamlit run gui/Home.py
+```
+
+Pages: architecture workbench (preset -> edit every Config field ->
+analyze/simulate with plots), loop synthesis, architecture selector, spur
+prediction, measured-PN fitting, two-point modulation, hop settling, drift
+tracking, Monte Carlo, VAMS export (zip download), benchmarks.
 
 Quick start:
 
