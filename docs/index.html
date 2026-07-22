@@ -671,6 +671,12 @@ plot_pn_breakdown(ar, sim, save="pn.png")</code></pre>
   </figcaption>
 </figure>
 
+<h3><span class="en">11.14 GUI: the browser workbench</span><span class="zh">11.14 GUI：浏览器工作台</span></h3>
+<p>
+  <span class="en">Every capability above is now reachable without writing Python: <code>pip install -e .[gui]; streamlit run gui/Home.py</code> opens a bilingual (zh/EN) multi-page workbench.  The architecture workbench auto-generates parameter forms from the Config dataclass trees (every field editable, units annotated, calibrators rebuilt fresh per run — <code>pllsim.guiutil</code>, unit-tested without streamlit), runs analyze()/simulate() with the full plot set, and the other pages wire up synthesis, the selector, spur prediction, measured-CSV fitting, two-point modulation, hop settling (with the live FLL-stability check), drift tracking, Monte Carlo and the VAMS export as a zip download.  All pages are smoke-tested headless in CI via streamlit's AppTest.</span>
+  <span class="zh">以上全部能力现在不写 Python 也能用：<code>pip install -e .[gui]; streamlit run gui/Home.py</code> 打开中英双语多页工作台。架构工作台从 Config dataclass 树自动生成参数表单（每个字段可编辑、带单位标注、校准器每次运行重建——<code>pllsim.guiutil</code>，不依赖 streamlit 即可单测），运行 analyze()/simulate() 并给出全套图；其余页面接通综合、选型、杂散预测、实测 CSV 拟合、两点调制、跳频建立（带在线 FLL 稳定性检查）、温漂跟踪、Monte Carlo 与 VAMS 导出（zip 下载）。所有页面在 CI 中用 streamlit AppTest 无浏览器冒烟测试。</span>
+</p>
+
 </div>
 <script>
 function setLang(l) {
