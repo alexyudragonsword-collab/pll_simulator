@@ -7,6 +7,7 @@ simulate() (reference-edge-driven behavioral time domain with calibration).
 from .arch.adpll import ADPLL, ADPLLConfig, DLFConfig
 from .arch.cppll import CPPLL, CPPLLConfig, FracConfig
 from .arch.ilcm import ILCM, ILCMConfig
+from .arch.mdll import MDLL, MDLLConfig
 from .arch.spll import SPLL, SPLLConfig
 from .arch.sspll import SSPLL, SSPLLConfig
 from .blocks.chargepump import CPConfig
@@ -23,6 +24,7 @@ __all__ = [
     "ADPLL", "ADPLLConfig", "DLFConfig",
     "CPPLL", "CPPLLConfig", "FracConfig",
     "ILCM", "ILCMConfig",
+    "MDLL", "MDLLConfig",
     "SPLL", "SPLLConfig",
     "SSPLL", "SSPLLConfig",
     "CPConfig", "DTCConfig", "FilterDesign", "OscConfig", "SamplerConfig",

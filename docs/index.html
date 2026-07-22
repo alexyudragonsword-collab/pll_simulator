@@ -535,6 +535,39 @@ plot_pn_breakdown(ar, sim, save="pn.png")</code></pre>
   </figcaption>
 </figure>
 
+<h3><span class="en">11.5 Engine speed and Monte Carlo yield analysis (ex11)</span><span class="zh">11.5 引擎提速与 Monte Carlo 良率分析（ex11）</span></h3>
+<p>
+  <span class="en">Profiling showed 78% of simulation time in two <code>scipy.linalg.expm</code> calls per reference cycle (variable pulse widths defeated caching).  A one-time eigendecomposition reduces each cycle to a handful of scalar exponentials — with a Taylor branch for the type-II near-zero eigenvalue whose (e<sup>wt</sup>−1)/w cancels catastrophically — plus an impulse shortcut for locked-state pulses: 11k &rarr; 128k cycles/s (CPPLL).  That speed makes mismatch statistics practical: <code>pllsim.montecarlo</code> runs per-chip draws (CP mismatch, leakage, DTC gain/INL, K<sub>vco</sub>, flicker corner) with the calibration loops live on every chip, multiprocess.  100 fractional-N CPPLL chips &times; 150k cycles complete in 77 s and yield real numbers: jitter &lt; 250 fs on 97% of chips, fractional spur &lt; −60 dBc on 100%, DTC gain calibrated within 1% on 72% — that last figure is exactly the kind of insight Monte Carlo exists to surface (the calibration budget, not the nominal design, sets the yield).</span>
+  <span class="zh">性能剖析显示 78% 的仿真时间耗在每参考周期两次 <code>scipy.linalg.expm</code>（脉宽逐周期变化使缓存失效）。改为一次性特征分解后，每周期只剩几个标量指数——对 type-II 近零特征值的 (e<sup>wt</sup>−1)/w 灾难性抵消采用泰勒分支——再加锁定态脉冲的冲激捷径：11k &rarr; 128k 周期/秒（CPPLL）。这个速度让失配统计变得可行：<code>pllsim.montecarlo</code> 做逐芯片抽样（CP 失配、泄漏、DTC 增益/INL、K<sub>vco</sub>、闪烁拐角），每颗芯片上校准环路真实运行，多进程并行。100 颗小数N CPPLL &times; 15 万周期 77 秒跑完，产出真实良率：97% 芯片 jitter &lt; 250 fs，100% 小数杂散 &lt; −60 dBc，72% 芯片 DTC 增益校准进 1%——最后这个数字正是 Monte Carlo 存在的意义（决定良率的是校准预算，不是标称设计）。</span>
+</p>
+<figure>
+  <img src="img/ex11_mc_histograms.png" alt="Monte Carlo histograms">
+  <figcaption>
+    <span class="en">100-chip distributions: jitter, in-band fractional spur, calibrated DTC gain.</span>
+    <span class="zh">100 颗芯片的分布：jitter、带内小数杂散、校准后 DTC 增益。</span>
+  </figcaption>
+</figure>
+<figure>
+  <img src="img/ex11_mc_sensitivity.png" alt="Monte Carlo sensitivity">
+  <figcaption>
+    <span class="en">Per-chip jitter vs each drawn impairment (calibration active): DTC INL amplitude dominates the tail; gain error is fully absorbed by the LMS.</span>
+    <span class="zh">逐芯片 jitter 对各抽样损伤的散点（校准开启）：DTC INL 幅度主导尾部；增益误差被 LMS 完全吸收。</span>
+  </figcaption>
+</figure>
+
+<h3><span class="en">11.6 Multiplying DLL (ex12)</span><span class="zh">11.6 倍频 DLL（ex12）</span></h3>
+<p>
+  <span class="en">The ILCM's &beta;&rarr;1 limit: once per T<sub>ref</sub> the oscillator edge is <em>replaced</em> by the clean reference edge, so accumulated jitter resets and the oscillator noise sees NTF = 1&minus;ZOH (|NTF| &asymp; &pi;f/f<sub>ref</sub> at low offset).  A bang-bang digital tuning loop keeps the ring period aligned; its residual drift is the f<sub>ref</sub> spur, same sawtooth analytic as the ILCM.  The honest three-way result on the same &minus;95 dBc/Hz ring: MDLL 281 fs &asymp; strong-injection ILCM (&beta;=0.6, 290 fs), but weak injection collapses (&beta;=0.2: 891 fs) — edge replacement is insurance against injection strength, not magic; and its reference/mux noise runs flat to Nyquist, which costs when the ring is quiet.</span>
+  <span class="zh">ILCM 的 &beta;&rarr;1 极限：每个 T<sub>ref</sub> 振荡器沿被参考沿<em>替换</em>，累积抖动清零，振荡器噪声的 NTF = 1&minus;ZOH（低频 |NTF| &asymp; &pi;f/f<sub>ref</sub>）。bang-bang 数字调谐环维持环振周期；其残余漂移即 f<sub>ref</sub> 杂散，与 ILCM 同一锯齿解析式。同一 &minus;95 dBc/Hz 环振上的诚实三方结果：MDLL 281 fs &asymp; 强注入 ILCM（&beta;=0.6，290 fs），弱注入则崩溃（&beta;=0.2：891 fs）——沿替换是对注入强度的保险而非魔法；且其参考/mux 噪声平坦传递到 Nyquist，环振安静时反成代价。</span>
+</p>
+<figure>
+  <img src="img/ex12_mdll_vs_ilcm.png" alt="MDLL vs ILCM">
+  <figcaption>
+    <span class="en">MDLL vs ILCM (&beta; = 0.6 / 0.2) on the same ring; dashed = ring contribution through each architecture.</span>
+    <span class="zh">同一环振下 MDLL 与 ILCM（&beta; = 0.6 / 0.2）对比；虚线为环振噪声经各架构后的贡献。</span>
+  </figcaption>
+</figure>
+
 </div>
 <script>
 function setLang(l) {

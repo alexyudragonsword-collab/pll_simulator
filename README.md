@@ -14,13 +14,16 @@ examples with plots, cross-domain result comparisons and lessons learned.
 | Sampling PLL (reference-sampling) | s-domain | ref-edge event-driven | ex04 | ~200 fs |
 | ADPLL (counter+TDC / DTC+BBPD) | exact z-domain | ref-edge event-driven | ex05 | ~110 fs |
 | Injection-locked clock multiplier (+ FTL, timing cal) | z-domain realignment model | per-cycle recursion (+intra-period spur sampling) | ex06, ex08 | ~115 fs |
+| Multiplying DLL (edge replacement + digital tuning) | 1−ZOH oscillator NTF | per-cycle recursion (+intra-period sampling) | ex12 | ring-limited |
 
 Beyond the architectures: **loop synthesis** (`pllsim.synth` — filter/DLF
 component values from UGB/PM targets, jitter-vs-bandwidth optimization, ex07),
 **second-order impairments** (Kvco nonlinearity, supply pushing, reference-
-doubler duty error, coarse band selection — ex09), and a **literature
-benchmark** reproducing Gao et al.'s JSSC'09/'10 sub-sampling PLL published
-measurements (ex10, in-band −126 dBc/Hz / 0.15 ps class).
+doubler duty error, coarse band selection — ex09), a **literature benchmark**
+reproducing Gao et al.'s JSSC'09/'10 sub-sampling PLL published measurements
+(ex10, in-band −126 dBc/Hz / 0.15 ps class), and **Monte Carlo yield
+analysis** (`pllsim.montecarlo` — multiprocess mismatch/corner sweeps with
+calibration running per chip, ex11: 100 chips in ~77 s).
 
 Coverage targets: fref = 19.2–250 MHz, fout up to 12 GHz, integrated jitter
 50–200 fs (1 kHz–100 MHz band, configurable).
