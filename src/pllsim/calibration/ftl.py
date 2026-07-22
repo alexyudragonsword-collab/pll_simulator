@@ -102,15 +102,24 @@ class FTL:
 
 
 class InjTimingCal:
-    """Sign-sign LMS on the injection timing offset."""
+    """Injection/FTL path offset calibration.
+
+    A detector offset in the FTL path makes the FTL settle with a residual
+    frequency drift (the FTL nulls its *measured* drift, not the true one),
+    which turns directly into the fref injection spur.  A second observation
+    — the phase jump the injection itself causes, e_post - e_pre, measurable
+    by sampling the replica PD on both sides of the injection instant — sees
+    the TRUE drift and drives a bang-bang correction of the offset.
+    """
 
     def __init__(self, t_step: float, mu: float = 1.0):
-        self.t_step = t_step
+        self.t_step = t_step      # correction LSB [s]
         self.mu = mu
-        self.value = 0.0          # timing correction [s]
+        self.value = 0.0          # timing/offset correction [s]
         self.trace: list[float] = []
 
-    def step(self, resid_sign: float, dither_sign: float) -> float:
-        self.value -= self.mu * self.t_step * np.sign(resid_sign) * np.sign(dither_sign)
+    def step(self, true_drift_rad: float) -> float:
+        """Feed the pre-injection minus post-injection phase (= true drift)."""
+        self.value += self.mu * self.t_step * np.sign(true_drift_rad)
         self.trace.append(self.value)
         return self.value

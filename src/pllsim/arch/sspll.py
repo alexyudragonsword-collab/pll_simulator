@@ -35,7 +35,7 @@ TWOPI = 2.0 * np.pi
 @dataclass
 class SSPLLConfig:
     fref: float
-    fout: float                     # integer multiple of fref
+    fout: float                     # N*fref, or (N+frac)*fref with frac config
     osc: OscConfig
     sampler: SamplerConfig
     filt: FilterDesign
@@ -45,14 +45,32 @@ class SSPLLConfig:
     fll_window: int = 64
     fll_engage: float = 3e6
     fll_release: float = 500e3
+    frac: "object | None" = None    # FracConfig (DTC-assisted fractional-N)
     int_band: tuple[float, float] = (1e3, 100e6)
 
     @property
-    def n_mult(self) -> int:
+    def n_mult(self) -> float:
         n = self.fout / self.fref
-        if abs(n - round(n)) > 1e-9:
-            raise ValueError("SSPLL requires integer fout/fref")
-        return int(round(n))
+        if self.frac is None:
+            if abs(n - round(n)) > 1e-9:
+                raise ValueError("integer-N SSPLL requires integer fout/fref; "
+                                 "provide FracConfig for fractional operation")
+            return int(round(n))
+        return n
+
+    def __post_init__(self):
+        if self.frac is not None:
+            if abs((self.fout / self.fref) % 1.0 - self.frac.frac) > 1e-6:
+                raise ValueError("fout/fref fractional part does not match "
+                                 "FracConfig.frac")
+            if self.frac.dtc is None:
+                raise ValueError("fractional SSPLL requires a DTC in FracConfig "
+                                 "(the sampler needs edge alignment)")
+            if self.frac.mash_order != 1:
+                raise ValueError(
+                    "fractional SSPLL uses a 1st-order EFM: its residue spans "
+                    "exactly 1 UI, matching a practical DTC range (MASH-2/3 "
+                    "spans 4-8 UI and saturates the DTC)")
 
 
 class SSPLL(PLLBase):
@@ -101,6 +119,22 @@ class SSPLL(PLLBase):
                       FreqResponse(f, self._r2_tf(f)) * vco_int * err_vco),
             NoisePath(c.osc.leeson("vco"), err_vco),
         ]
+        if c.frac is not None:
+            from ..core.noise import NoiseSource, ShapedQuantization
+            d = c.frac.dtc
+            paths.append(NoisePath(
+                ShapedQuantization(name="dtc_quant", unit="rad^2/Hz",
+                                   q=TWOPI * d.t_res * c.fout, fs=c.fref,
+                                   order=0), h_loop))
+            if d.jitter_rms_s > 0:
+                paths.append(NoisePath(
+                    NoiseSource(name="dtc_jitter", unit="rad^2/Hz",
+                                level=2.0 * (TWOPI * c.fout * d.jitter_rms_s) ** 2
+                                / c.fref), h_loop))
+            eps = getattr(d, "gain_error_residual", 0.01)
+            paths.append(NoisePath(
+                ShapedQuantization(name="dsm_residual", unit="rad^2/Hz",
+                                   q=TWOPI * eps, fs=c.fref, order=0), h_loop))
         m = loop_metrics(gol)
         bd = output_psd(paths, f)
         jit = rms_jitter_fs(f, bd["total"], c.fout, *c.int_band)
@@ -127,7 +161,8 @@ class SSPLL(PLLBase):
     # ------------------------------------------------------------ simulate
     def simulate(self, n_cycles: int, *, noise: bool = True, calibration: bool = True,
                  seed: int = 0, f_start_offset: float = 0.0,
-                 fll_enable: bool = True) -> SimResult:
+                 fll_enable: bool = True,
+                 dtc_gain_init_error: float = 0.0) -> SimResult:
         c = self.cfg
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
@@ -141,6 +176,19 @@ class SSPLL(PLLBase):
         fll = FLLStateMachine(n, c.fref, window=c.fll_window,
                               f_engage=c.fll_engage, f_release=c.fll_release,
                               i_fll=c.fll_i) if fll_enable else None
+
+        # fractional-N: EFM residue -> DTC shifts the sampling instant so the
+        # reference edge always lands on a VCO zero crossing
+        mash = dtc = dtc_cal = None
+        frac_word = 0
+        if c.frac is not None:
+            from ..blocks.dtc import DTC
+            mash = c.frac.make_mash()
+            frac_word = c.frac.frac_word
+            dtc = DTC(c.frac.dtc, rng, noise=noise,
+                      gain_error=dtc_gain_init_error)
+            if calibration:
+                dtc_cal = c.frac.dtc_cal
 
         jit_ref = (synth_from_psd(
             FlickerFloorPhase.from_spot("ref", c.ref_pn_dbchz, c.ref_pn_fc).psd,
@@ -156,12 +204,24 @@ class SSPLL(PLLBase):
         freq_out = np.empty(n_cycles)
         vctrl_rec = np.empty(n_cycles)
         fll_state = np.empty(n_cycles)
+        cal_trace = np.empty(n_cycles) if dtc_cal is not None else None
+        prev_extra = 0.0
 
         for nn in range(n_cycles):
             d_osc = osc_noise[nn] - prev_on
             prev_on = osc_noise[nn]
-            # VCO cycles elapsed in this (jittered) ref period
-            dt_period = tref + (jit_ref[nn] - jit_ref[nn - 1] if nn else jit_ref[0])
+            # sampling-instant shift this cycle: ref jitter + DTC alignment
+            extra = jit_ref[nn]
+            residual_ui = 0.0
+            if mash is not None:
+                residual_ui = mash.residual_ui()
+                # EFM1 residue is one-sided in (-1, 0]: aim for a delay of
+                # (1+residual)*Tvco in (0, Tvco], cancelling the DTC's internal
+                # bipolar mid-range offset so no codes clip at zero
+                t_target = (1.0 + residual_ui) / c.fout - c.frac.dtc.range_s / 2.0
+                extra += dtc.delay(t_target)
+            dt_period = tref + extra - prev_extra
+            prev_extra = extra
             cycles = fv * dt_period + d_osc / TWOPI
             phi_frac = (phi_frac + TWOPI * cycles) % TWOPI
 
@@ -176,6 +236,15 @@ class SSPLL(PLLBase):
                 vs = pd.sample(perr)
                 # inverting gm: VCO phase ahead (perr>0) must pull vctrl down
                 dq -= pd.charge(vs)
+                if dtc_cal is not None:
+                    # under-delayed DTC samples early -> vs anti-correlates
+                    # with the residue; positive update needs err = -vs
+                    dtc_cal.step(-vs, residual_ui)
+                    dtc.gain_corr = dtc_cal.value
+            if cal_trace is not None:
+                cal_trace[nn] = dtc_cal.value if dtc_cal is not None else 1.0
+            if mash is not None:
+                mash.step(frac_word)
             lf.update_pulse(dq / max(c.sampler.pulse_width, 1e-12),
                             c.sampler.pulse_width)
             fv = max(osc.freq(lf.vctrl), 0.05 * c.osc.f0)
@@ -191,4 +260,11 @@ class SSPLL(PLLBase):
         sim = SimResult(fs=c.fref, f0=c.fout, t=t, phase_err_out=phase_err,
                         freq_out=freq_out, ctrl=vctrl_rec, lock_time_s=lock)
         sim.cal_traces["fll_engaged"] = fll_state
-        return postprocess(sim, int_band=c.int_band)
+        if cal_trace is not None:
+            sim.cal_traces["dtc_gain"] = cal_trace
+        spur_offsets = None
+        if c.frac is not None:
+            from .cppll import frac_spur_offsets
+            spur_offsets = frac_spur_offsets(c.frac.frac, c.fref,
+                                             fmin=8.0 * c.fref / n_cycles)
+        return postprocess(sim, int_band=c.int_band, spur_offsets=spur_offsets)

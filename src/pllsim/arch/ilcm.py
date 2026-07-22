@@ -59,6 +59,11 @@ class ILCMConfig:
     ftl: bool = True
     ftl_f_lsb: float = 50e3         # frequency DAC LSB
     ftl_mu: float = 1.0
+    ftl_det_offset_s: float = 0.0   # FTL detector input-referred offset: the
+                                    # FTL then parks with a residual drift,
+                                    # which IS the injection spur (ex06)
+    timing_cal: bool = False        # InjTimingCal corrects that offset
+    timing_cal_step_s: float = 50e-15
     int_band: tuple[float, float] = (1e3, 100e6)
 
     @property
@@ -161,6 +166,9 @@ class ILCM(PLLBase):
 
         osc = Oscillator(c.osc, c.fref, rng, noise=noise)
         ftl = FTL(f_lsb=c.ftl_f_lsb, mu=c.ftl_mu) if (c.ftl and calibration) else None
+        from ..calibration.ftl import InjTimingCal
+        tcal = InjTimingCal(t_step=c.timing_cal_step_s) \
+            if (c.timing_cal and calibration) else None
 
         jit_ref = (synth_from_psd(
             FlickerFloorPhase.from_spot("ref", c.ref_pn_dbchz, c.ref_pn_fc).psd,
@@ -199,8 +207,15 @@ class ILCM(PLLBase):
             e = (1.0 - b) * e_wrap + b * phi_inj    # realignment
 
             if ftl is not None:
-                # FD observes the pre-injection drift direction (replica/gated PD)
-                f_corr = ftl.step(np.sign(e_pre - e))
+                # FD observes the pre-injection drift (replica/gated PD) plus
+                # its input-referred offset; the FTL nulls the MEASURED drift
+                t_off = c.ftl_det_offset_s + (tcal.value if tcal else 0.0)
+                drift_obs = (e_pre - e) / b + TWOPI * c.fout * t_off
+                f_corr = ftl.step(np.sign(drift_obs))
+                if tcal is not None:
+                    # second detector: the injection's own phase jump sees the
+                    # TRUE drift and bang-bang corrects the offset
+                    tcal.step(e_pre - e)
             phase_err[nn] = e
             freq_out[nn] = f_free
             ctrl[nn] = f_corr
@@ -211,6 +226,8 @@ class ILCM(PLLBase):
         sim.extra["slips"] = n_slips
         if ftl is not None:
             sim.cal_traces["ftl_fcorr"] = np.asarray(ftl.trace)
+        if tcal is not None:
+            sim.cal_traces["inj_timing"] = np.asarray(tcal.trace)
         sim = postprocess(sim, int_band=c.int_band)
         if fine is not None:
             from ..core.spectrum import find_spurs, periodogram_psd
