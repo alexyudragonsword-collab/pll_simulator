@@ -198,7 +198,8 @@ class CPPLL(PLLBase):
                  seed: int = 0, f_start_offset: float = 0.0,
                  dtc_gain_init_error: float = 0.0,
                  supply_ripple: tuple[float, float] | None = None,
-                 band_select: bool = True) -> SimResult:
+                 band_select: bool = True,
+                 dtc_gain_drift: np.ndarray | None = None) -> SimResult:
         """supply_ripple: (amplitude_v, freq_hz) sine on the VCO supply,
         converted to frequency via osc.pushing_hz_v.
         band_select: run the coarse binary band search before closing the
@@ -280,6 +281,8 @@ class CPPLL(PLLBase):
             if mash is not None:
                 residual_ui = mash.residual_ui()
             if dtc is not None:
+                if dtc_gain_drift is not None:
+                    dtc.gain_error = dtc_gain_drift[n]
                 # positive residual = divider has counted extra cycles = its edge
                 # is late by residual*Tvco; delay the reference edge to match
                 # (DTC adds a static mid-range offset, absorbed as phase offset)

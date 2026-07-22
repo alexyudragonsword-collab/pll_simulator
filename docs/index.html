@@ -645,6 +645,32 @@ plot_pn_breakdown(ar, sim, save="pn.png")</code></pre>
   <span class="zh"><code>pllsim.selector</code> 把项目开局的白板时间自动化：按目标频率计划从工艺档模板实例化全部七种架构、逐一综合环路、按线性模型 jitter 排序、硬不可行项带原因排除（小数通道上的注入锁定；超出锁定范围的 N；4 GHz 以上的环振档）。对 Wu'19 式计划（52 MHz &rarr; 6.253 GHz 小数，10 kHz–10 MHz &lt;200 fs），它推荐采样 PLL——正是那篇论文实际选择的架构。每一行都是活实例：<code>rep.best.pll.simulate(...)</code> 直接续流程。</span>
 </p>
 
+<h3><span class="en">11.12 Channel-hop settling and the FLL hand-off bound (ex19)</span><span class="zh">11.12 跳频建立时间与 FLL 交接边界（ex19）</span></h3>
+<p>
+  <span class="en"><code>pllsim.settling</code> measures a retune as acquisition from the previous channel's operating point and extracts frequency pull-in (counter-style detector, tolerance floored at the loop's own settled wander) and phase settling (last excursion beyond 50 mrad), plus the FLL segment.  The ADPLL retunes in ~9 &micro;s — no FLL slew segment; sampling loops are FLL-dominated at hundreds of &micro;s, linear in hop size (a charge budget: &Delta;V = hop/K<sub>vco</sub> on C1 at i<sub>fll</sub>).  The analysis surfaced a design rule now enforced as <code>fll_stability()</code>: the bang-bang FLL decides once per measurement window, so beyond i<sub>fll,max</sub> = f<sub>release</sub>&middot;f<sub>ref</sub>&middot;C1/(2&middot;K<sub>vco</sub>&middot;W) its limit-cycle amplitude exceeds the release band and it oscillates around zero <em>forever</em> without handing off — more current is NOT faster.  Three presets sat on the bound and now carry 1.4–1.9&times; margin.  A 20-seed population shows settling is a yield quantity: spec the p95, not the mean.</span>
+  <span class="zh"><code>pllsim.settling</code> 把重调谐当作"从上一通道工作点起捕获"来测量：频率牵引（计数器式检测，容差以环路自身稳态频率抖动为底）与相位建立（最后一次超出 50 mrad），并给出 FLL 段时长。ADPLL 约 9 &micro;s 完成重调——没有 FLL 段；采样类环路被 FLL 段主导在数百 &micro;s，且与跳频量线性（电荷预算：C1 上 &Delta;V = hop/K<sub>vco</sub>，电流 i<sub>fll</sub>）。分析暴露出一条设计规则并固化为 <code>fll_stability()</code>：bang-bang FLL 每测量窗口只判决一次，超过 i<sub>fll,max</sub> = f<sub>release</sub>&middot;f<sub>ref</sub>&middot;C1/(2&middot;K<sub>vco</sub>&middot;W) 后极限环幅度超出释放带，围绕零点<em>永远</em>振荡、永不交接给鉴相器——电流更大不等于更快。三个 preset 原本压在边界上，现已留 1.4–1.9&times; 裕量。20 种子分布说明建立时间是良率量：按 p95 而不是均值定指标。</span>
+</p>
+<figure>
+  <img src="img/ex19_hop_settling.png" alt="hop settling">
+  <figcaption>
+    <span class="en">Left: −100 MHz hop anatomy (FLL segment shaded, phase-settled marker). Right: 20-seed settling distribution.</span>
+    <span class="zh">左：−100 MHz 跳频解剖（FLL 段着色、相位建立标记）。右：20 种子建立时间分布。</span>
+  </figcaption>
+</figure>
+
+<h3><span class="en">11.13 Background calibration under drift (ex20)</span><span class="zh">11.13 漂移下的后台校准（ex20）</span></h3>
+<p>
+  <span class="en">The fractional engines accept a per-cycle true-gain trajectory (<code>dtc_gain_drift</code>) — an accelerated temperature ramp.  Two stacked mechanisms set the tracking lag: the EMA error-centering (mandatory for static offsets) blinds the correlator during ramps (~1% lag even well below the slew wall), and the sign-sign slew limit (max mu per cycle) adds beyond rate ~ mu.  Every % of lag is a live in-band fractional spur at 20log10(lag).  The mu window has two walls — worst drift rate below, gradient-noise wander above (measured: 0.005% &rarr; 0.087% rms gain wander from mu 5e-7 &rarr; 5e-5).  Scaled back to silicon, a 600 ppm/&deg;C DTC on a 10 &deg;C/s transient drifts 5 orders below the wall: temperature is not the threat — step events (band switch, power bursts) are, and those are ex19's settling problem.</span>
+  <span class="zh">小数引擎接受逐周期真实增益轨迹（<code>dtc_gain_drift</code>）——加速温度斜坡。跟踪滞后由两个机制叠加决定：EMA 误差去直流（静态失调所必需）在斜坡期间使相关器部分失明（即使远低于转换率墙也有 ~1% 滞后），符号-符号转换率极限（每周期最多 mu）在 rate ~ mu 以上叠加。每 1% 滞后都是实打实的带内小数杂散（20log10(lag)）。mu 窗口有两面墙——下限是最坏漂移速率，上限是梯度噪声游走（实测：mu 从 5e-7 到 5e-5，增益游走 0.005% &rarr; 0.087% rms）。换算回硅片：600 ppm/&deg;C 的 DTC 在 10 &deg;C/s 热瞬变下漂移速率比墙低 5 个数量级——温度不是威胁，阶跃事件（换频段、突发功率）才是，而那是 ex19 建立时间分析的领域。</span>
+</p>
+<figure>
+  <img src="img/ex20_drift_tracking.png" alt="drift tracking">
+  <figcaption>
+    <span class="en">Left: tracking lag through gain ramps at four rates. Right: peak lag vs rate/mu — the tracking wall.</span>
+    <span class="zh">左：四种速率增益斜坡下的跟踪滞后。右：峰值滞后 vs rate/mu——跟踪墙。</span>
+  </figcaption>
+</figure>
+
 </div>
 <script>
 function setLang(l) {

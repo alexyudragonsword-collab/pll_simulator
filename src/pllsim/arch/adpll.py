@@ -193,8 +193,8 @@ class ADPLL(PLLBase):
     def simulate(self, n_cycles: int, *, noise: bool = True, calibration: bool = True,
                  seed: int = 0, f_start_offset: float = 0.0,
                  kdco_cal=None, tdc_cal=None, dtc_gain_init_error: float = 0.0,
-                 mod_freq: np.ndarray | None = None, mod_dp_gain: float = 1.0
-                 ) -> SimResult:
+                 mod_freq: np.ndarray | None = None, mod_dp_gain: float = 1.0,
+                 dtc_gain_drift: np.ndarray | None = None) -> SimResult:
         """mod_freq: two-point modulation frequency trajectory [Hz] on the
         fref grid (see pllsim.modulation); injected at the FCW (lowpass)
         and DCO (highpass) points.  mod_dp_gain scales the direct point:
@@ -204,7 +204,8 @@ class ADPLL(PLLBase):
                                  f_start_offset, kdco_cal, tdc_cal,
                                  mod_freq, mod_dp_gain)
         return self._sim_bbpd(n_cycles, noise, calibration, seed,
-                              f_start_offset, dtc_gain_init_error)
+                              f_start_offset, dtc_gain_init_error,
+                              dtc_gain_drift)
 
     def _ref_jitter(self, n_cycles, rng, noise):
         c = self.cfg
@@ -306,7 +307,7 @@ class ADPLL(PLLBase):
         return postprocess(sim, int_band=c.int_band)
 
     def _sim_bbpd(self, n_cycles, noise, calibration, seed, f_start_offset,
-                  dtc_gain_init_error):
+                  dtc_gain_init_error, dtc_gain_drift=None):
         c = self.cfg
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
@@ -344,6 +345,8 @@ class ADPLL(PLLBase):
             t_ref = n * tref + jit_ref[n]
             residual_ui = mash.residual_ui()
             if dtc is not None:
+                if dtc_gain_drift is not None:
+                    dtc.gain_error = dtc_gain_drift[n]
                 t_ref += dtc.delay(residual_ui / c.fout)
             e = bb.sample(t_div - t_ref)
 

@@ -33,7 +33,11 @@ NNLS budget attribution with identifiability groups — ex16), **two-point
 GMSK modulation + EVM** (`pllsim.modulation`, ADPLL and SSPLL injection —
 ex17), an **architecture selector** (`pllsim.selector` ranks all seven
 architectures against a requirement with synthesized loops — ex18),
-**Monte Carlo yield analysis**
+**channel-hop settling analysis** (`pllsim.settling`: pull-in/phase
+settling instants, seed-population statistics and the FLL hand-off
+stability bound — ex19), **drift-tracking validation** (per-cycle DTC
+gain trajectories through the background LMS: tracking walls, spur
+penalty, mu selection rule — ex20), **Monte Carlo yield analysis**
 (`pllsim.montecarlo` — multiprocess mismatch/corner sweeps with calibration
 running per chip, ex11: 100 chips in ~77 s), and a **Verilog-AMS export
 bridge** (`pllsim.export`, ex13 — per config: bit-true synthesizable RTL for
