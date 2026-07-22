@@ -607,6 +607,44 @@ plot_pn_breakdown(ar, sim, save="pn.png")</code></pre>
   <span class="zh"><b>为什么是 Verilog-AMS（而非 Verilog-A）以及 wreal 层：</b>VA 纯模拟——进 digital-top 回归会拖入模拟内核，且无法表达 PLL 的数字半边。VAMS 单模块混合双域，其 wreal/RNM 写法完全跑在数字事件内核（快 100&ndash;1000&times;）——即 digital-top 验证的标准 UVM-MS 方法学。ex13 导出全部 9 种配置；每个生成的 RTL 测试台就地位真通过。</span>
 </div>
 
+<h3><span class="en">11.8 Deterministic fractional-spur prediction (ex15)</span><span class="zh">11.8 确定性小数杂散预测（ex15）</span></h3>
+<p>
+  <span class="en">Fractional spurs are deterministic, not statistical: the MASH residual is periodic in the accumulator, so DTC code quantization, INL and residual gain error become coherent tones at fold(k&middot;frac)&middot;f<sub>ref</sub>.  <code>core.dtcspurs</code> replays the bit-true code sequence through the DTC transfer, projects it onto the exact tone frequencies (Hann-windowed DTFT — no bin leakage) and refers each tone through the loop's DTC noise transfer; all four fractional analyze() paths publish the table in <code>spurs_analytic</code>.  Validation: 500 fs sine INL on the Wu'19-class SPLL — prediction vs noise-free time domain agrees within 0.2 dB at all four tones.  The worst-channel law falls out: near-integer channels beat inside the loop BW where |NTF| ~ 1, and Wu's &lt;−64 dBc class corresponds to 30–50 fs of post-linearization INL — the real spec hidden behind "a highly linear DTC".  Also documented: measured-spur readings are floor-limited once tones sink below the local noise, and the live gain LMS drags in-band INL tones down a few dB by tracking the beat.</span>
+  <span class="zh">小数杂散是确定性的而非统计的：MASH 残差在累加器意义下周期，DTC 码量化、INL 与残余增益误差都变成 fold(k&middot;frac)&middot;f<sub>ref</sub> 处的相干音。<code>core.dtcspurs</code> 把位真码序列重放过 DTC 传递，在精确音频点上投影（Hann 加窗 DTFT——无栅栏泄漏），再经环路 DTC 噪声传递折算到输出；四条小数 analyze() 路径都在 <code>spurs_analytic</code> 里发布该表。验证：Wu'19 级 SPLL 加 500 fs 正弦 INL——预测与无噪声时域四个音全部吻合在 0.2 dB 内。最差通道规律自然浮现：近整数通道的差拍落在环路带宽内（|NTF| ~ 1），Wu 的 &lt;−64 dBc 档对应 30–50 fs 的线性化后 INL——"高线性 DTC"背后的真实指标。同时如实记录：音强低于本底后实测读数受噪底限制，且在线增益 LMS 会跟踪带内差拍、把 INL 音再压低几 dB。</span>
+</p>
+<figure>
+  <img src="img/ex15_dtc_inl_spurs.png" alt="DTC INL spur prediction">
+  <figcaption>
+    <span class="en">Left: predicted vs simulated tones (500 fs INL). Right: worst spur vs channel offset — worst near the integer boundary.</span>
+    <span class="zh">左：预测与仿真音对比（500 fs INL）。右：最差杂散 vs 通道差拍——整数边界附近最差。</span>
+  </figcaption>
+</figure>
+
+<h3><span class="en">11.9 Bench-data import and budget attribution (ex16)</span><span class="zh">11.9 实测数据导入与预算归因（ex16）</span></h3>
+<p>
+  <span class="en"><code>pllsim.fit</code> reverses the flow: E5052-style CSV in, model parameters out.  <code>fit_leeson</code> recovers the OscConfig triple to 0.2 dB / 4% corner from 0.5 dB-noisy data; <code>fit_closed_loop</code> uses direct (non-iterative) estimators for the plateau, corner and peaking; <code>attribute_budget</code> NNLS-rescales the analyze() breakdown to explain a measured curve — after first clustering shape-collinear sources into identifiable groups, because a single PN curve cannot separate reference from divider from kT/C (all flat-through-H).  A chip with the VCO 4 dB hot reads +3.4 dB on the vco group at 0.4 dB rms residual.  Two honest limits are demonstrated, not hidden: no readable PM from a total-noise plot (sources fill the |H| peak), and a skirt that only upper-bounds the VCO in a balanced design.</span>
+  <span class="zh"><code>pllsim.fit</code> 反转流程：E5052 风格 CSV 进，模型参数出。<code>fit_leeson</code> 从 0.5 dB 噪声数据恢复 OscConfig 三元组（0.2 dB / 拐角 4%）；<code>fit_closed_loop</code> 用直接（非迭代）估计器取平台、拐点与峰化；<code>attribute_budget</code> 用 NNLS 缩放 analyze() 分解去解释实测曲线——先把形状共线的源聚成可辨识组，因为单条相噪曲线分不开参考/分频器/kT/C（都是"平坦过 H"）。VCO 热 4 dB 的芯片在 vco 组上读出 +3.4 dB，残差 0.4 dB rms。两个诚实极限如实展示：总噪声图上读不出 PM（各源填平了 |H| 峰），平衡设计的裙边只能给 VCO 上界。</span>
+</p>
+
+<h3><span class="en">11.10 Two-point modulation and EVM (ex17)</span><span class="zh">11.10 两点调制与 EVM（ex17）</span></h3>
+<p>
+  <span class="en"><code>pllsim.modulation</code> + injection wiring in the ADPLL (FCW + DCO) and SSPLL (DTC sampling-instant + VCO push) make the library a transmitter model: 10 Mb/s GMSK through a 1 MHz loop at matched two-point gains costs nothing (EVM 0.67%, −43.5 dB, noise-limited), and the EVM-vs-mismatch curve is the direct-path gain spec — 1% error already triples the EVM.  The fractional SSPLL at 2.5 Mb/s lands at −39.5 dB, the Markuli&cacute;'16 −40.5 dB class.  Engine limit stated honestly: one step per reference cycle puts a 1/sps discretization floor on the comparison (−33.5 dB at 4 samples/symbol) — quote matched EVM at ≥8 samples/symbol.</span>
+  <span class="zh"><code>pllsim.modulation</code> 加上 ADPLL（FCW + DCO）与 SSPLL（DTC 采样时刻 + VCO 直推）的注入接线，让库成为发射机模型：两点增益匹配时 10 Mb/s GMSK 穿过 1 MHz 环路毫无代价（EVM 0.67%，−43.5 dB，噪声限制），EVM-失配曲线就是直通路增益指标——1% 误差已使 EVM 三倍。小数N SSPLL 在 2.5 Mb/s 落在 −39.5 dB，即 Markuli&cacute;'16 的 −40.5 dB 档。引擎极限如实声明：每参考周期一步给对照连续理想的比较带来 1/sps 离散化底（4 采样/符号时 −33.5 dB）——匹配 EVM 请在 ≥8 采样/符号下引用。</span>
+</p>
+<figure>
+  <img src="img/ex17_two_point_mod.png" alt="two-point modulation EVM">
+  <figcaption>
+    <span class="en">EVM vs direct-path gain error for both engines; right: the GMSK BT=0.5 trajectory.</span>
+    <span class="zh">两引擎的 EVM 对直通路增益误差曲线；右：GMSK BT=0.5 轨迹。</span>
+  </figcaption>
+</figure>
+
+<h3><span class="en">11.11 Architecture selector (ex18)</span><span class="zh">11.11 架构自动选型（ex18）</span></h3>
+<p>
+  <span class="en"><code>pllsim.selector</code> automates the first whiteboard hour: instantiate all seven architectures from technology-class templates at the requested frequency plan, synthesize each loop, rank by linear-model jitter, exclude hard infeasibilities with the reason recorded (injection locking on a fractional channel; N beyond the lock range; ring class above 4 GHz).  For the Wu'19-like plan (52 MHz &rarr; 6.253 GHz fractional, &lt;200 fs over 10 kHz–10 MHz) it recommends the sampling PLL — the architecture the actual paper chose.  Every ranked row carries a live instance: <code>rep.best.pll.simulate(...)</code> continues the flow.</span>
+  <span class="zh"><code>pllsim.selector</code> 把项目开局的白板时间自动化：按目标频率计划从工艺档模板实例化全部七种架构、逐一综合环路、按线性模型 jitter 排序、硬不可行项带原因排除（小数通道上的注入锁定；超出锁定范围的 N；4 GHz 以上的环振档）。对 Wu'19 式计划（52 MHz &rarr; 6.253 GHz 小数，10 kHz–10 MHz &lt;200 fs），它推荐采样 PLL——正是那篇论文实际选择的架构。每一行都是活实例：<code>rep.best.pll.simulate(...)</code> 直接续流程。</span>
+</p>
+
 </div>
 <script>
 function setLang(l) {

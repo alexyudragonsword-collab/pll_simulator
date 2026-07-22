@@ -25,7 +25,15 @@ against four JSSC papers** — Gao'09/'10 integer-N SSPLL (ex10, in-band
 9.25 GHz), Markulić'16 fractional DTC-SSPLL (176/198 fs @ 10.24 GHz) and
 Wu'19 fractional sampling PLL (75 fs @ 6.25 GHz, 10 kHz–10 MHz band) — all
 landing on the published jitter with labelled technology-plausible
-assumptions (ex14), **Monte Carlo yield analysis**
+assumptions (ex14), **deterministic fractional-spur prediction** (bit-true
+MASH-through-DTC tones referred through the loop NTF, 0.2 dB against the
+time domain; worst-channel law and INL spec extraction — ex15),
+**bench-data import** (`pllsim.fit`: Leeson fit, closed-loop estimators,
+NNLS budget attribution with identifiability groups — ex16), **two-point
+GMSK modulation + EVM** (`pllsim.modulation`, ADPLL and SSPLL injection —
+ex17), an **architecture selector** (`pllsim.selector` ranks all seven
+architectures against a requirement with synthesized loops — ex18),
+**Monte Carlo yield analysis**
 (`pllsim.montecarlo` — multiprocess mismatch/corner sweeps with calibration
 running per chip, ex11: 100 chips in ~77 s), and a **Verilog-AMS export
 bridge** (`pllsim.export`, ex13 — per config: bit-true synthesizable RTL for
@@ -40,7 +48,7 @@ Coverage targets: fref = 19.2–250 MHz, fout up to 12 GHz, integrated jitter
 
 ```bash
 pip install -e .          # numpy, scipy, matplotlib
-pytest tests/             # 43 tests: closed-form math + architecture behavior
+pytest tests/             # 124 tests: closed-form math + architecture behavior
 python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 ```
 
