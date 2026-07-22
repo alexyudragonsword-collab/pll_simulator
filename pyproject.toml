@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pllsim"
-version = "0.5.0"
+version = "0.5.1"
 description = "System-level / behavioral simulation models for PLLs: CPPLL, SSPLL, SPLL, ADPLL, ILCM with noise, spur and calibration analysis"
 readme = "README.md"
 requires-python = ">=3.10"
