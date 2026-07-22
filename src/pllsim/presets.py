@@ -61,7 +61,7 @@ def sspll_19p2m_4p8g() -> SSPLL:
                               pulse_width=150e-12, pedestal_v=1e-3),
         filt=FilterDesign(c1=680e-12, r2=20e3, c2=2.2e-12, r3=2e3, c3=1e-12),
         ref_pn_dbchz=-162.0,
-        fll_i=1e-6, fll_engage=2e6, fll_release=400e3))
+        fll_i=0.5e-6, fll_engage=2e6, fll_release=400e3))
 
 
 def spll_100m_8g() -> SPLL:
@@ -74,7 +74,7 @@ def spll_100m_8g() -> SPLL:
                               pulse_width=800e-12, pedestal_v=1e-3),
         filt=FilterDesign(c1=330e-12, r2=12e3, c2=2.2e-12, r3=1.5e3, c3=1e-12),
         ref_pn_dbchz=-160.0,
-        fll_i=2e-6, fll_engage=3e6, fll_release=600e3))
+        fll_i=1e-6, fll_engage=3e6, fll_release=600e3))
 
 
 def adpll_100m_10g() -> ADPLL:
@@ -128,7 +128,7 @@ def sspll_frac_19p2m_4p806g() -> SSPLL:
                               pulse_width=150e-12, pedestal_v=1e-3),
         filt=FilterDesign(c1=680e-12, r2=20e3, c2=2.2e-12, r3=2e3, c3=1e-12),
         ref_pn_dbchz=-162.0,
-        fll_i=1e-6, fll_engage=2e6, fll_release=400e3,
+        fll_i=0.5e-6, fll_engage=2e6, fll_release=400e3,
         frac=FracConfig(frac=frac, mash_order=1,
                         dtc=DTCConfig(t_res=250e-15, n_bits=10,
                                       jitter_rms_s=30e-15),
@@ -148,7 +148,7 @@ def spll_frac_52m_6p253g() -> SPLL:
                               pulse_width=600e-12, pedestal_v=1e-3),
         filt=FilterDesign(c1=470e-12, r2=12e3, c2=2.2e-12, r3=1.5e3, c3=1e-12),
         ref_pn_dbchz=-160.0,
-        fll_i=2e-6, fll_engage=3e6, fll_release=600e3,
+        fll_i=1e-6, fll_engage=3e6, fll_release=600e3,
         frac=FracConfig(frac=frac, mash_order=1,
                         dtc=DTCConfig(t_res=250e-15, n_bits=10,
                                       jitter_rms_s=30e-15),

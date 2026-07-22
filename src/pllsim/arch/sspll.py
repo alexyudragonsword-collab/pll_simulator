@@ -173,7 +173,8 @@ class SSPLL(PLLBase):
                  fll_enable: bool = True,
                  dtc_gain_init_error: float = 0.0,
                  mod_freq: np.ndarray | None = None,
-                 mod_dp_gain: float = 1.0) -> SimResult:
+                 mod_dp_gain: float = 1.0,
+                 dtc_gain_drift: np.ndarray | None = None) -> SimResult:
         """mod_freq: two-point modulation trajectory [Hz] on the fref grid
         (pllsim.modulation).  Lowpass point: the sampling instant is shifted
         by the accumulated modulation phase (DTC path, Markulic-style);
@@ -241,6 +242,8 @@ class SSPLL(PLLBase):
                 extra -= phi_w / (TWOPI * fv)
             residual_ui = 0.0
             if mash is not None:
+                if dtc_gain_drift is not None:
+                    dtc.gain_error = dtc_gain_drift[nn]
                 residual_ui = mash.residual_ui()
                 # EFM1 residue is one-sided in (-1, 0]: aim for a delay of
                 # (1+residual)*Tvco in (0, Tvco], cancelling the DTC's internal

@@ -159,7 +159,10 @@ class SPLL(PLLBase):
     def simulate(self, n_cycles: int, *, noise: bool = True, calibration: bool = True,
                  seed: int = 0, f_start_offset: float = 0.0,
                  fll_enable: bool = True,
-                 dtc_gain_init_error: float = 0.0) -> SimResult:
+                 dtc_gain_init_error: float = 0.0,
+                 dtc_gain_drift: np.ndarray | None = None) -> SimResult:
+        """dtc_gain_drift: per-cycle TRUE DTC gain-error trajectory (e.g. a
+        temperature ramp); overrides dtc_gain_init_error when given."""
         c = self.cfg
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
@@ -224,6 +227,8 @@ class SPLL(PLLBase):
             residual_ui = 0.0
             d_dtc = 0.0
             if mash is not None:
+                if dtc_gain_drift is not None:
+                    dtc.gain_error = dtc_gain_drift[nn]
                 # EFM1 residue in (-1, 0]: the divided edge is EARLY by
                 # |residual|·Tvco -> delay it by -residual·Tvco in (0, Tvco],
                 # cancelling the DTC's bipolar mid-range offset
