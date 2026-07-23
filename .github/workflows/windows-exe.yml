@@ -83,9 +83,11 @@ jobs:
         env:
           PLLSIM_NO_BROWSER: "1"
         run: |
-          $p = Start-Process dist\pllsim-gui-web.exe -PassThru
+          $p = Start-Process dist\pllsim-gui-web.exe -PassThru `
+            -RedirectStandardOutput exe-out.log -RedirectStandardError exe-err.log
           $ok = $false
           foreach ($i in 1..100) {
+            if ($p.HasExited) { break }
             Start-Sleep -Seconds 3
             try {
               $r = Invoke-WebRequest http://localhost:8501 -UseBasicParsing -TimeoutSec 5
@@ -93,6 +95,8 @@ jobs:
             } catch {}
           }
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Write-Output "== exe stdout =="; Get-Content exe-out.log -ErrorAction SilentlyContinue
+          Write-Output "== exe stderr =="; Get-Content exe-err.log -ErrorAction SilentlyContinue
           if (-not $ok) { Write-Error "web exe never served HTTP 200"; exit 1 }
           Write-Output "web exe served HTTP 200"
       - uses: actions/upload-artifact@v4
