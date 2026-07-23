@@ -74,7 +74,8 @@ jobs:
         with:
           python-version: "3.11"
           cache: pip
-      - uses: actions/cache@v4
+      - uses: actions/cache/restore@v4
+        id: nuitka-cache
         with:
           path: ~\AppData\Local\Nuitka\Nuitka\Cache
           key: nuitka-web-${{ runner.os }}-py311-${{ hashFiles('pyproject.toml') }}
@@ -90,19 +91,37 @@ jobs:
           --include-package=streamlit
           --include-package-data=streamlit
           --include-distribution-metadata=streamlit
+          --include-distribution-metadata=altair
+          --include-distribution-metadata=pyarrow
+          --include-distribution-metadata=pandas
+          --include-distribution-metadata=numpy
+          --include-distribution-metadata=pydeck
+          --include-distribution-metadata=pillow
+          --include-distribution-metadata=click
+          --include-distribution-metadata=tornado
+          --include-distribution-metadata=protobuf
           --include-package=pllsim
           --include-package-data=matplotlib
           --include-data-dir=gui=gui
           --output-dir=build-nuitka
           --output-filename=pllsim-gui-web-nuitka.exe
+      # save the 80-minute compile cache even if the smoke step fails:
+      # debug iterations then rebuild from clcache in minutes, not hours
+      - uses: actions/cache/save@v4
+        if: always()
+        with:
+          path: ~\AppData\Local\Nuitka\Nuitka\Cache
+          key: ${{ steps.nuitka-cache.outputs.cache-primary-key }}-${{ github.run_id }}
       - name: Smoke web exe (must serve HTTP 200)
         shell: pwsh
         env:
           PLLSIM_NO_BROWSER: "1"
         run: |
-          $p = Start-Process build-nuitka\pllsim-gui-web-nuitka.exe -PassThru
+          $p = Start-Process build-nuitka\pllsim-gui-web-nuitka.exe -PassThru `
+            -RedirectStandardOutput exe-out.log -RedirectStandardError exe-err.log
           $ok = $false
           foreach ($i in 1..100) {
+            if ($p.HasExited) { break }
             Start-Sleep -Seconds 3
             try {
               $r = Invoke-WebRequest http://localhost:8501 -UseBasicParsing -TimeoutSec 5
@@ -110,6 +129,8 @@ jobs:
             } catch {}
           }
           Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Write-Output "== exe stdout =="; Get-Content exe-out.log -ErrorAction SilentlyContinue
+          Write-Output "== exe stderr =="; Get-Content exe-err.log -ErrorAction SilentlyContinue
           if (-not $ok) { Write-Error "web exe never served HTTP 200"; exit 1 }
           Write-Output "web exe served HTTP 200"
       - uses: actions/upload-artifact@v4
