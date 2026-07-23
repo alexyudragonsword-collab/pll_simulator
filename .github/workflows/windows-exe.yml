@@ -39,6 +39,8 @@ jobs:
         run: >
           pyinstaller --noconfirm --clean --onefile --windowed
           --name pllsim-gui-qt
+          --icon packaging/pllsim.ico
+          --collect-data pllsim
           packaging/launch_qt.py
       - name: Smoke desktop exe (opens, renders, exits clean)
         env:
@@ -74,6 +76,7 @@ jobs:
         run: >
           pyinstaller --noconfirm --clean --onefile
           --name pllsim-gui-web
+          --icon packaging/pllsim.ico
           --add-data "gui;gui"
           --collect-all streamlit
           --copy-metadata streamlit

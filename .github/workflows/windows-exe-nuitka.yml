@@ -43,7 +43,9 @@ jobs:
           --onefile --assume-yes-for-downloads --msvc=latest
           --windows-console-mode=disable
           --enable-plugin=pyside6
+          --windows-icon-from-ico=packaging/pllsim.ico
           --include-package=pllsim
+          --include-package-data=pllsim
           --include-package-data=matplotlib
           --include-module=matplotlib.backends.backend_qtagg
           --output-dir=build-nuitka
@@ -88,6 +90,7 @@ jobs:
         run: >
           python -m nuitka packaging/launch_web.py
           --onefile --assume-yes-for-downloads --msvc=latest
+          --windows-icon-from-ico=packaging/pllsim.ico
           --include-package=streamlit
           --include-package-data=streamlit
           --include-distribution-metadata=streamlit
