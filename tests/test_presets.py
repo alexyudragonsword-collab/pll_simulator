@@ -18,6 +18,12 @@ BOUNDS = {
     "adpll_bb_100m_10g": (60, 260),
     "ilcm_250m_12g": (60, 200),
     "mdll_150m_2p4g": (150, 600),
+    # JSSC benchmark presets: linear-model jitter vs published class
+    "bench_gao09_sspll_55p25m_2p21g": (90, 180),         # published 150
+    "bench_dartizio23_adpllbb_500m_9p2515g": (40, 100),  # 77 (time domain)
+    "bench_markulic16_sspll_40m_10p24g": (120, 230),     # published 176
+    "bench_markulic16_sspll_frac_40m_10p25g": (150, 260),  # published 198
+    "bench_wu19_spll_frac_52m_6p253g": (55, 105),        # published 75
 }
 
 

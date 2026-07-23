@@ -166,6 +166,117 @@ def mdll_150m_2p4g() -> MDLL:
         mux_jitter_rms_s=40e-15, ref_pn_dbchz=-160.0))
 
 
+# --------------------------------------------------------------------------
+# JSSC literature-benchmark presets (ex10 / ex14).  Published measurements
+# are the targets; circuit values not disclosed in the papers are labelled
+# technology-plausible assumptions — see the examples for the methodology.
+# --------------------------------------------------------------------------
+
+def bench_gao09_sspll_55p25m_2p21g() -> SSPLL:
+    """Gao et al., JSSC Dec 2009 (0.18um int-N SSPLL, ex10).
+
+    Published: in-band ~-126 dBc/Hz, 0.15 ps rms (10k-100M), BW=fref/20.
+    Model lands at -126.8 dBc/Hz / 0.122-0.139 ps."""
+    from .synth import design_sspll_filter
+    samp = SamplerConfig(amp_v=0.8, c_samp=800e-15, gm=2e-3,
+                         pulse_width=200e-12, pedestal_v=0.5e-3)
+    osc = OscConfig(f0=2.19e9, gain=30e6, pn_dbchz=-121.0, pn_foffset=1e6,
+                    pn_f1f3=2e5, pn_floor_dbchz=-150.0)
+    filt = design_sspll_filter(samp.amp_v * samp.gm * samp.pulse_width,
+                               osc.gain, 55.25e6 / 20, 60.0, 55.25e6)
+    return SSPLL(SSPLLConfig(
+        fref=55.25e6, fout=2.21e9, osc=osc, sampler=samp, filt=filt,
+        ref_pn_dbchz=-160.0, fll_i=1e-6, fll_engage=1.5e6,
+        fll_release=300e3, int_band=(10e3, 100e6)))
+
+
+def bench_dartizio23_adpllbb_500m_9p2515g() -> ADPLL:
+    """Dartizio et al., JSSC Dec 2023 (28nm inverse-constant-slope DTC
+    BBPD digital PLL, ex14 part 1).
+
+    Published: <77 fs rms, in-band frac spur <-70 dBc near 9.25 GHz.
+    Linear model 57 fs; TIME DOMAIN is the reference for BB loops: 77 fs."""
+    return ADPLL(ADPLLConfig(
+        fref=500e6, fout=(18 + 0.503) * 500e6,
+        osc=OscConfig(f0=9.25e9, gain=100e3, pn_dbchz=-112.0, pn_foffset=1e6,
+                      pn_f1f3=1e6, pn_floor_dbchz=-147.0),
+        dlf=DLFConfig(alpha=0.5, rho=0.5 * 2**-8),
+        mode="dtc_bbpd",
+        frac=FracConfig(frac=0.503, mash_order=2,
+                        dtc=DTCConfig(t_res=250e-15, n_bits=12,
+                                      jitter_rms_s=60e-15),
+                        dtc_cal=SignSignLMS(init=1.0, mu=1e-5,
+                                            gear_shift_n=100_000,
+                                            mu_final=1e-6)),
+        bb_jitter_rms_s=150e-15, ref_pn_dbchz=-158.0,
+        int_band=(10e3, 100e6)))
+
+
+def _bench_markulic16(frac: float | None) -> SSPLL:
+    from .synth import design_sspll_filter
+    samp = SamplerConfig(amp_v=0.6, c_samp=100e-15, gm=2e-3,
+                         pulse_width=200e-12, pedestal_v=1e-3)
+    osc = OscConfig(f0=10.20e9, gain=60e6, pn_dbchz=-109.5, pn_foffset=1e6,
+                    pn_f1f3=4e5, pn_floor_dbchz=-145.0)
+    filt = design_sspll_filter(samp.amp_v * samp.gm * samp.pulse_width,
+                               osc.gain, 1.4e6, 60.0, 40e6)
+    fr, fout = None, 10.24e9
+    if frac is not None:
+        fout = (256 + frac) * 40e6
+        fr = FracConfig(frac=frac, mash_order=1,
+                        dtc=DTCConfig(t_res=150e-15, n_bits=10,
+                                      jitter_rms_s=30e-15),
+                        dtc_cal=SignSignLMS(init=1.0, mu=5e-6,
+                                            gear_shift_n=60_000,
+                                            mu_final=5e-7))
+    return SSPLL(SSPLLConfig(
+        fref=40e6, fout=fout, osc=osc, sampler=samp, filt=filt,
+        ref_pn_dbchz=-158.0, fll_i=1e-6, fll_engage=2e6, fll_release=400e3,
+        frac=fr, int_band=(10e3, 40e6)))
+
+
+def bench_markulic16_sspll_40m_10p24g() -> SSPLL:
+    """Markulic et al., JSSC Dec 2016 (65nm imec DTC-SSPLL, ex14 part 2),
+    integer-N channel.  Published: 176 fs rms; model 165/154 fs."""
+    return _bench_markulic16(None)
+
+
+def bench_markulic16_sspll_frac_40m_10p25g() -> SSPLL:
+    """Markulic et al., JSSC Dec 2016, fractional channel.
+
+    Published: 198 fs worst fractional; the linear model with its
+    conservative 1% post-cal residual reads 199 fs, the calibrated time
+    domain 155 fs (fractionalization nearly free - the paper's claim)."""
+    return _bench_markulic16(0.2503)
+
+
+def bench_wu19_spll_frac_52m_6p253g() -> SPLL:
+    """Wu et al., JSSC May 2019 (Samsung 28nm fractional sampling PLL,
+    ex14 part 3).
+
+    Published: 75 fs rms over the paper's 10 kHz-10 MHz band, frac spur
+    <-64 dBc.  Model: 77/78 fs.  Differs from spll_frac_52m_6p253g (the
+    generic mid-class preset): stronger sampling front-end, quieter VCO,
+    0.2% post-background-cal DTC gain residual."""
+    return SPLL(SPLLConfig(
+        fref=52e6, fout=(120 + 0.2503) * 52e6,
+        osc=OscConfig(f0=6.2e9, gain=60e6, pn_dbchz=-124.0, pn_foffset=1e6,
+                      pn_f1f3=2e5, pn_floor_dbchz=-154.0),
+        sampler=SamplerConfig(amp_v=0.8, c_samp=3e-12, gm=10e-3,
+                              pulse_width=1e-9, pedestal_v=1e-3),
+        filt=FilterDesign(c1=1e-9, r2=3e3, c2=4.7e-12, r3=1e3, c3=2.2e-12),
+        ref_pn_dbchz=-165.0, div_pn_dbchz=-165.0,
+        fll_i=2e-6, fll_engage=3e6, fll_release=600e3,
+        frac=FracConfig(frac=0.2503, mash_order=1,
+                        dtc=DTCConfig(t_res=160e-15, n_bits=10,
+                                      jitter_rms_s=20e-15,
+                                      gain_error_residual=0.002),
+                        dtc_cal=SignSignLMS(init=1.0, mu=5e-6,
+                                            gear_shift_n=60_000,
+                                            mu_final=5e-7)),
+        int_band=(10e3, 10e6)))
+
+
 ALL_PRESETS = {
     "cppll_19p2m_4p8g": cppll_19p2m_4p8g,
     "cppll_frac_38p4m_6g": cppll_frac_38p4m_6g,
@@ -177,4 +288,11 @@ ALL_PRESETS = {
     "adpll_bb_100m_10g": adpll_bb_100m_10g,
     "ilcm_250m_12g": ilcm_250m_12g,
     "mdll_150m_2p4g": mdll_150m_2p4g,
+    "bench_gao09_sspll_55p25m_2p21g": bench_gao09_sspll_55p25m_2p21g,
+    "bench_dartizio23_adpllbb_500m_9p2515g":
+        bench_dartizio23_adpllbb_500m_9p2515g,
+    "bench_markulic16_sspll_40m_10p24g": bench_markulic16_sspll_40m_10p24g,
+    "bench_markulic16_sspll_frac_40m_10p25g":
+        bench_markulic16_sspll_frac_40m_10p25g,
+    "bench_wu19_spll_frac_52m_6p253g": bench_wu19_spll_frac_52m_6p253g,
 }

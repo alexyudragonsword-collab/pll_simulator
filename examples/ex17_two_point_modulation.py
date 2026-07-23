@@ -31,34 +31,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from pllsim import presets
-from pllsim.arch.cppll import FracConfig
-from pllsim.arch.sspll import SSPLL, SSPLLConfig
-from pllsim.blocks.dtc import DTCConfig
-from pllsim.blocks.oscillator import OscConfig
-from pllsim.blocks.sampler import SamplerConfig
-from pllsim.calibration.lms import SignSignLMS
 from pllsim.modulation import evm, gmsk_trajectory, prbs
-from pllsim.synth import design_sspll_filter
 
 
 def _markulic(frac):
-    """Markulic'16-class fractional SSPLL (same config as ex14 Part 2)."""
-    samp = SamplerConfig(amp_v=0.6, c_samp=100e-15, gm=2e-3,
-                         pulse_width=200e-12, pedestal_v=1e-3)
-    osc = OscConfig(f0=10.20e9, gain=60e6, pn_dbchz=-109.5, pn_foffset=1e6,
-                    pn_f1f3=4e5, pn_floor_dbchz=-145.0)
-    filt = design_sspll_filter(samp.amp_v * samp.gm * samp.pulse_width,
-                               osc.gain, 1.4e6, 60.0, 40e6)
-    fout = (256 + frac) * 40e6
-    fr = FracConfig(frac=frac, mash_order=1,
-                    dtc=DTCConfig(t_res=150e-15, n_bits=10,
-                                  jitter_rms_s=30e-15),
-                    dtc_cal=SignSignLMS(init=1.0, mu=5e-6,
-                                        gear_shift_n=60_000, mu_final=5e-7))
-    return SSPLL(SSPLLConfig(
-        fref=40e6, fout=fout, osc=osc, sampler=samp, filt=filt,
-        ref_pn_dbchz=-158.0, fll_i=1e-6, fll_engage=2e6, fll_release=400e3,
-        frac=fr, int_band=(10e3, 40e6)))
+    """Markulic'16-class fractional SSPLL (the ex14 benchmark preset)."""
+    return presets.bench_markulic16_sspll_frac_40m_10p25g()
 
 OUT = os.path.join(os.path.dirname(__file__), "out")
 os.makedirs(OUT, exist_ok=True)

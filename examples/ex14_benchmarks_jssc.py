@@ -41,18 +41,9 @@ import os
 
 import numpy as np
 
-from pllsim.arch.adpll import ADPLL, ADPLLConfig, DLFConfig
-from pllsim.arch.cppll import FracConfig
-from pllsim.arch.spll import SPLL, SPLLConfig
-from pllsim.arch.sspll import SSPLL, SSPLLConfig
-from pllsim.blocks.dtc import DTCConfig
-from pllsim.blocks.loopfilter import FilterDesign
-from pllsim.blocks.oscillator import OscConfig
-from pllsim.blocks.sampler import SamplerConfig
-from pllsim.calibration.lms import SignSignLMS
+from pllsim import presets
 from pllsim.core.jitter import ldbc_from_sphi
 from pllsim.plotting import plot_pn_breakdown
-from pllsim.synth import design_sspll_filter
 
 OUT = os.path.join(os.path.dirname(__file__), "out")
 os.makedirs(OUT, exist_ok=True)
@@ -71,19 +62,7 @@ print("=" * 74)
 #   DCO  -112 dBc/Hz @ 1 MHz, 1/f^3 corner 1 MHz — 9.25 GHz 28-nm LC class
 #   BBPD input jitter 150 fs, DTC 250 fs LSB / 60 fs rms — post-linearization
 #   integration band 10 kHz - 100 MHz
-dartizio = ADPLL(ADPLLConfig(
-    fref=500e6, fout=(18 + 0.503) * 500e6,          # 9.2515 GHz channel
-    osc=OscConfig(f0=9.25e9, gain=100e3, pn_dbchz=-112.0, pn_foffset=1e6,
-                  pn_f1f3=1e6, pn_floor_dbchz=-147.0),
-    dlf=DLFConfig(alpha=0.5, rho=0.5 * 2**-8),
-    mode="dtc_bbpd",
-    frac=FracConfig(frac=0.503, mash_order=2,
-                    dtc=DTCConfig(t_res=250e-15, n_bits=12,
-                                  jitter_rms_s=60e-15),
-                    dtc_cal=SignSignLMS(init=1.0, mu=1e-5,
-                                        gear_shift_n=100_000, mu_final=1e-6)),
-    bb_jitter_rms_s=150e-15, ref_pn_dbchz=-158.0,
-    int_band=(10e3, 100e6)))
+dartizio = presets.bench_dartizio23_adpllbb_500m_9p2515g()
 
 ar1 = dartizio.analyze()
 sim1 = dartizio.simulate(250_000, seed=3)
@@ -115,28 +94,10 @@ print("=" * 74)
 # dBc/Hz @ 1 MHz (10 GHz 65-nm LC class); UGB ~ 1.4 MHz, PM 60 deg
 # (filter synthesized on the exact discrete loop); DTC 150 fs LSB / 30 fs
 # rms; integration band 10 kHz - 40 MHz.
-SAMP2 = SamplerConfig(amp_v=0.6, c_samp=100e-15, gm=2e-3,
-                      pulse_width=200e-12, pedestal_v=1e-3)
-OSC2 = OscConfig(f0=10.20e9, gain=60e6, pn_dbchz=-109.5, pn_foffset=1e6,
-                 pn_f1f3=4e5, pn_floor_dbchz=-145.0)
-FILT2 = design_sspll_filter(SAMP2.amp_v * SAMP2.gm * SAMP2.pulse_width,
-                            OSC2.gain, 1.4e6, 60.0, 40e6)
-
-
-def markulic(frac: float | None) -> SSPLL:
-    fr, fout = None, 10.24e9                        # N = 256 integer channel
-    if frac is not None:
-        fout = (256 + frac) * 40e6
-        fr = FracConfig(frac=frac, mash_order=1,
-                        dtc=DTCConfig(t_res=150e-15, n_bits=10,
-                                      jitter_rms_s=30e-15),
-                        dtc_cal=SignSignLMS(init=1.0, mu=5e-6,
-                                            gear_shift_n=60_000,
-                                            mu_final=5e-7))
-    return SSPLL(SSPLLConfig(
-        fref=40e6, fout=fout, osc=OSC2, sampler=SAMP2, filt=FILT2,
-        ref_pn_dbchz=-158.0, fll_i=1e-6, fll_engage=2e6, fll_release=400e3,
-        frac=fr, int_band=(10e3, 40e6)))
+def markulic(frac):
+    if frac is None:
+        return presets.bench_markulic16_sspll_40m_10p24g()
+    return presets.bench_markulic16_sspll_frac_40m_10p25g()
 
 
 mk_int, mk_frac = markulic(None), markulic(0.2503)
@@ -176,22 +137,7 @@ print("=" * 74)
 # @ 1 MHz (high-Q 6.2 GHz LC); DTC 160 fs LSB / 20 fs rms with 0.2%
 # post-background-cal gain residual (the paper's headline calibration);
 # UGB ~ 620 kHz.  Integration band 10 kHz - 10 MHz — the paper's band.
-wu = SPLL(SPLLConfig(
-    fref=52e6, fout=(120 + 0.2503) * 52e6,          # 6.2530 GHz channel
-    osc=OscConfig(f0=6.2e9, gain=60e6, pn_dbchz=-124.0, pn_foffset=1e6,
-                  pn_f1f3=2e5, pn_floor_dbchz=-154.0),
-    sampler=SamplerConfig(amp_v=0.8, c_samp=3e-12, gm=10e-3,
-                          pulse_width=1e-9, pedestal_v=1e-3),
-    filt=FilterDesign(c1=1e-9, r2=3e3, c2=4.7e-12, r3=1e3, c3=2.2e-12),
-    ref_pn_dbchz=-165.0, div_pn_dbchz=-165.0,
-    fll_i=2e-6, fll_engage=3e6, fll_release=600e3,
-    frac=FracConfig(frac=0.2503, mash_order=1,
-                    dtc=DTCConfig(t_res=160e-15, n_bits=10,
-                                  jitter_rms_s=20e-15,
-                                  gain_error_residual=0.002),
-                    dtc_cal=SignSignLMS(init=1.0, mu=5e-6,
-                                        gear_shift_n=60_000, mu_final=5e-7)),
-    int_band=(10e3, 10e6)))
+wu = presets.bench_wu19_spll_frac_52m_6p253g()
 
 ar3 = wu.analyze()
 sim3 = wu.simulate(300_000, seed=4, dtc_gain_init_error=0.05)
