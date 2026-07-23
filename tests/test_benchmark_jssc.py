@@ -8,17 +8,9 @@ import numpy as np
 import pytest
 
 from pllsim import presets
-from pllsim.arch.adpll import ADPLL, ADPLLConfig, DLFConfig
 from pllsim.arch.cppll import FracConfig
 from pllsim.arch.spll import SPLL, SPLLConfig
-from pllsim.arch.sspll import SSPLL, SSPLLConfig
-from pllsim.blocks.dtc import DTCConfig
-from pllsim.blocks.loopfilter import FilterDesign
-from pllsim.blocks.oscillator import OscConfig
-from pllsim.blocks.sampler import SamplerConfig
-from pllsim.calibration.lms import SignSignLMS
 from pllsim.core.jitter import ldbc_from_sphi
-from pllsim.synth import design_sspll_filter
 
 
 # ------------------------------------------------------- SPLL fractional mode
@@ -70,20 +62,7 @@ def test_spll_frac_lms_converges_to_inverse_gain_error():
 
 # ------------------------------------------------- Part 1: Dartizio JSSC 2023
 def _dartizio():
-    return ADPLL(ADPLLConfig(
-        fref=500e6, fout=(18 + 0.503) * 500e6,
-        osc=OscConfig(f0=9.25e9, gain=100e3, pn_dbchz=-112.0, pn_foffset=1e6,
-                      pn_f1f3=1e6, pn_floor_dbchz=-147.0),
-        dlf=DLFConfig(alpha=0.5, rho=0.5 * 2**-8),
-        mode="dtc_bbpd",
-        frac=FracConfig(frac=0.503, mash_order=2,
-                        dtc=DTCConfig(t_res=250e-15, n_bits=12,
-                                      jitter_rms_s=60e-15),
-                        dtc_cal=SignSignLMS(init=1.0, mu=1e-5,
-                                            gear_shift_n=100_000,
-                                            mu_final=1e-6)),
-        bb_jitter_rms_s=150e-15, ref_pn_dbchz=-158.0,
-        int_band=(10e3, 100e6)))
+    return presets.bench_dartizio23_adpllbb_500m_9p2515g()
 
 
 def test_dartizio23_consistency():
@@ -97,25 +76,10 @@ def test_dartizio23_consistency():
 
 # ------------------------------------------------ Part 2: Markulic JSSC 2016
 def _markulic(frac):
-    samp = SamplerConfig(amp_v=0.6, c_samp=100e-15, gm=2e-3,
-                         pulse_width=200e-12, pedestal_v=1e-3)
-    osc = OscConfig(f0=10.20e9, gain=60e6, pn_dbchz=-109.5, pn_foffset=1e6,
-                    pn_f1f3=4e5, pn_floor_dbchz=-145.0)
-    filt = design_sspll_filter(samp.amp_v * samp.gm * samp.pulse_width,
-                               osc.gain, 1.4e6, 60.0, 40e6)
-    fr, fout = None, 10.24e9
-    if frac is not None:
-        fout = (256 + frac) * 40e6
-        fr = FracConfig(frac=frac, mash_order=1,
-                        dtc=DTCConfig(t_res=150e-15, n_bits=10,
-                                      jitter_rms_s=30e-15),
-                        dtc_cal=SignSignLMS(init=1.0, mu=5e-6,
-                                            gear_shift_n=60_000,
-                                            mu_final=5e-7))
-    return SSPLL(SSPLLConfig(
-        fref=40e6, fout=fout, osc=osc, sampler=samp, filt=filt,
-        ref_pn_dbchz=-158.0, fll_i=1e-6, fll_engage=2e6, fll_release=400e3,
-        frac=fr, int_band=(10e3, 40e6)))
+    if frac is None:
+        return presets.bench_markulic16_sspll_40m_10p24g()
+    assert frac == 0.2503
+    return presets.bench_markulic16_sspll_frac_40m_10p25g()
 
 
 def test_markulic16_consistency():
@@ -130,23 +94,7 @@ def test_markulic16_consistency():
 
 # ------------------------------------------------------ Part 3: Wu JSSC 2019
 def _wu():
-    return SPLL(SPLLConfig(
-        fref=52e6, fout=(120 + 0.2503) * 52e6,
-        osc=OscConfig(f0=6.2e9, gain=60e6, pn_dbchz=-124.0, pn_foffset=1e6,
-                      pn_f1f3=2e5, pn_floor_dbchz=-154.0),
-        sampler=SamplerConfig(amp_v=0.8, c_samp=3e-12, gm=10e-3,
-                              pulse_width=1e-9, pedestal_v=1e-3),
-        filt=FilterDesign(c1=1e-9, r2=3e3, c2=4.7e-12, r3=1e3, c3=2.2e-12),
-        ref_pn_dbchz=-165.0, div_pn_dbchz=-165.0,
-        fll_i=2e-6, fll_engage=3e6, fll_release=600e3,
-        frac=FracConfig(frac=0.2503, mash_order=1,
-                        dtc=DTCConfig(t_res=160e-15, n_bits=10,
-                                      jitter_rms_s=20e-15,
-                                      gain_error_residual=0.002),
-                        dtc_cal=SignSignLMS(init=1.0, mu=5e-6,
-                                            gear_shift_n=60_000,
-                                            mu_final=5e-7)),
-        int_band=(10e3, 10e6)))
+    return presets.bench_wu19_spll_frac_52m_6p253g()
 
 
 def test_wu19_consistency():
