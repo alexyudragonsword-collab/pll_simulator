@@ -71,15 +71,17 @@ field -> analyze/simulate with plots), loop synthesis, architecture
 selector, spur prediction, measured-PN fitting, two-point modulation, hop
 settling, drift tracking, Monte Carlo, VAMS export, benchmarks.
 
-**Windows executables** (no Python needed): the `windows-exe` GitHub
-Actions workflow builds ONEFILE exes for both GUIs with PyInstaller and
-smoke-tests them on the runner.  Trigger it from Actions -> windows-exe ->
-Run workflow; download `pllsim-gui-qt.exe` (desktop, windowed) and
-`pllsim-gui-web.exe` (starts the local server and opens your browser;
-its console window is the server log) from the run's artifacts, or pass
-an existing release tag to attach them as release assets.  Expect large
-files (PyInstaller bundles Python + numpy/scipy/matplotlib; the web exe
-also carries streamlit).
+**Windows executables** (no Python needed): two GitHub Actions workflows
+build ONEFILE exes for both GUIs and smoke-test them on the runner before
+upload — `windows-exe` (PyInstaller: fast build, self-extracting) and
+`windows-exe-nuitka` (Nuitka: real C compilation via MSVC — much slower
+build, faster startup; qt and web build as independent jobs).  Trigger
+either from Actions -> Run workflow; download `pllsim-gui-qt[-nuitka].exe`
+(desktop, windowed) and `pllsim-gui-web[-nuitka].exe` (starts the local
+server and opens your browser; its console window is the server log) from
+the run's artifacts, or pass an existing release tag to attach them as
+release assets.  Expect large files (Python + numpy/scipy/matplotlib
+bundled; the web exes also carry streamlit).
 
 Quick start:
 
