@@ -2,10 +2,14 @@
 from __future__ import annotations
 
 import sys
+from pathlib import Path
 
 from PySide6.QtCore import Qt
+from PySide6.QtGui import QIcon
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QListWidget,
                                QMainWindow, QStackedWidget, QWidget)
+
+ICON_PATH = Path(__file__).parent / "pllsim_icon.png"
 
 from .page_analysis import BenchmarksPage, FitPage, SpursPage
 from .page_design import SelectorPage, SynthesisPage
@@ -22,6 +26,8 @@ class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("pllsim — system-level PLL workbench")
+        if ICON_PATH.exists():
+            self.setWindowIcon(QIcon(str(ICON_PATH)))
         self.resize(1280, 840)
         central = QWidget()
         lay = QHBoxLayout(central)

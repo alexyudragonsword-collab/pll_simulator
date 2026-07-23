@@ -8,8 +8,9 @@ import streamlit as st
 
 from _common import L, sidebar_lang_toggle
 
-st.set_page_config(page_title="pllsim", page_icon=":satellite:",
-                   layout="wide")
+_icon = str(Path(__file__).resolve().parent / "pllsim_icon.png")
+st.set_page_config(page_title="pllsim", page_icon=_icon, layout="wide")
+st.logo(_icon) if hasattr(st, "logo") else None
 sidebar_lang_toggle()
 
 st.title("pllsim — " + L("PLL 系统级仿真工作台", "system-level PLL workbench"))
