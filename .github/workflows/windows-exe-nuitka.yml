@@ -98,11 +98,10 @@ jobs:
           --include-distribution-metadata=pydeck
           --include-distribution-metadata=pillow
           --include-distribution-metadata=click
-          --include-distribution-metadata=tornado
           --include-distribution-metadata=protobuf
           --include-package=pllsim
           --include-package-data=matplotlib
-          --include-data-dir=gui=gui
+          --include-raw-dir=gui=gui
           --output-dir=build-nuitka
           --output-filename=pllsim-gui-web-nuitka.exe
       # save the 80-minute compile cache even if the smoke step fails:
