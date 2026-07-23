@@ -34,8 +34,11 @@ import pllsim.synth  # noqa: F401
 
 
 def _base() -> str:
-    if hasattr(sys, "_MEIPASS"):                 # frozen: extracted bundle
+    if hasattr(sys, "_MEIPASS"):                 # PyInstaller: extracted dir
         return sys._MEIPASS
+    if "__compiled__" in globals():              # Nuitka: data sits next to
+        return os.path.dirname(os.path.abspath(__file__))   # this module
+    # running from source: packaging/launch_web.py -> repo root
     return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 
