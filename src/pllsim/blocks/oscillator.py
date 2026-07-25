@@ -28,16 +28,92 @@ class OscConfig:
     pushing_hz_v: float = 0.0     # supply pushing [Hz per volt of supply ripple]
     band_step_hz: float = 0.0     # coarse-tuning band pitch (0 = single band)
     n_bands: int = 1              # number of coarse bands, centered on f0
+    # ---- control-voltage range ----
+    # None = unlimited, which is what every existing configuration gets and what
+    # the loop assumed implicitly.  An unlimited varactor is why a coarse band
+    # bank could be configured and still have nothing to do: one band reached any
+    # frequency, so a band search always succeeded on the band it started in.
+    # A real varactor is limited by the supply, and that limit is the whole reason
+    # the capacitor bank exists.
+    v_min: float | None = None
+    v_max: float | None = None
 
     def leeson(self, name: str = "vco") -> LeesonOscillator:
         return LeesonOscillator.from_spot(name, self.pn_dbchz, self.pn_foffset,
                                           f_1f3=self.pn_f1f3,
                                           floor_dbchz=self.pn_floor_dbchz)
 
+    def clamp_v(self, v: float) -> float:
+        """Control voltage as the varactor actually sees it."""
+        if self.v_min is not None:
+            v = max(v, self.v_min)
+        if self.v_max is not None:
+            v = min(v, self.v_max)
+        return v
+
+    @property
+    def v_limited(self) -> bool:
+        return self.v_min is not None or self.v_max is not None
+
+    def band_center_hz(self, band: int) -> float:
+        """Free-running frequency of a coarse band."""
+        if self.n_bands <= 1:
+            return self.f0
+        return self.f0 + (band - (self.n_bands - 1) / 2.0) * self.band_step_hz
+
+    def band_range_hz(self, band: int) -> tuple[float, float]:
+        """Frequencies a band can reach, given the control-voltage range.
+
+        Unbounded when no range is set, which is the honest answer: with an
+        unlimited varactor every band reaches every frequency.
+        """
+        if not self.v_limited:
+            return (-np.inf, np.inf)
+        lo = self.freq_law(self.v_min, band)
+        hi = self.freq_law(self.v_max, band)
+        return (min(lo, hi), max(lo, hi))
+
+    def band_covers(self, f_target: float, band: int) -> bool:
+        """Whether a band can be tuned to a frequency without railing."""
+        lo, hi = self.band_range_hz(band)
+        return bool(lo <= f_target <= hi)
+
+    def band_overlap_hz(self) -> float:
+        """How far adjacent bands overlap [Hz].  Negative means a **gap**.
+
+        The sizing rule for a coarse bank, and it is easy to get wrong in a way
+        that shows up only as a frequency the loop cannot reach: a band spans
+        roughly ``2 * gain * v_max`` and the bank steps by ``band_step_hz``, so
+        the bank is only continuous when the span exceeds the step.  A bank with
+        150 MHz of pitch and 60 MHz of span leaves 90 MHz holes, and a target in
+        one of them rails whichever band the search picks -- which reads as a
+        broken loop rather than as a mis-sized oscillator.
+        """
+        if self.n_bands <= 1 or not self.v_limited:
+            return float("inf")
+        lo, hi = self.band_range_hz(0)
+        return float((hi - lo) - self.band_step_hz)
+
+    def band_bank_is_continuous(self) -> bool:
+        """Whether every frequency in the bank's range is reachable."""
+        return self.band_overlap_hz() > 0.0
+
+    def bank_range_hz(self) -> tuple[float, float]:
+        """Frequencies the whole bank can reach, lowest band to highest."""
+        if self.n_bands <= 1:
+            return self.band_range_hz(0)
+        lo = self.band_range_hz(0)[0]
+        hi = self.band_range_hz(self.n_bands - 1)[1]
+        return (lo, hi)
+
     def freq_law(self, v: float, band: int = 0) -> float:
-        """f(v, band) including Kvco nonlinearity and coarse band offset."""
-        f_band = self.f0 + (band - (self.n_bands - 1) / 2.0) * self.band_step_hz \
-            if self.n_bands > 1 else self.f0
+        """f(v, band) including Kvco nonlinearity and coarse band offset.
+
+        The control voltage is clamped to ``[v_min, v_max]`` when a range is set,
+        so a band that cannot reach the target rails instead of pretending to.
+        """
+        v = self.clamp_v(v)
+        f_band = self.band_center_hz(band)
         return f_band + self.gain * v * (1.0 + self.nl1 * v + self.nl2 * v * v)
 
     def kvco_at(self, v: float) -> float:
@@ -46,11 +122,14 @@ class OscConfig:
 
     def v_for(self, f_target: float, band: int | None = None) -> float:
         """Control voltage solving freq_law(v, band) = f_target (real root
-        nearest the linear estimate)."""
+        nearest the linear estimate).
+
+        Not clamped: this is the voltage the target *would* need, so a caller can
+        see that it is out of range rather than being handed a railed one.
+        """
         if band is None:
             band = (self.n_bands - 1) // 2 if self.n_bands > 1 else 0
-        f_band = self.f0 + (band - (self.n_bands - 1) / 2.0) * self.band_step_hz \
-            if self.n_bands > 1 else self.f0
+        f_band = self.band_center_hz(band)
         target = (f_target - f_band) / self.gain
         if self.nl1 == 0.0 and self.nl2 == 0.0:
             return target
