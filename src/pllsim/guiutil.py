@@ -36,6 +36,12 @@ FIELD_INFO = {
     "nl2": ("1/V^2", "Kvco 二阶非线性", "Kvco 2nd-order nonlinearity"),
     "n_bands": ("", "粗调频段数", "coarse bands"),
     "band_step_hz": ("Hz", "频段间距", "band step"),
+    "v_min": ("V", "控制电压下限（空=不限）", "control-voltage min (blank = none)"),
+    "v_max": ("V", "控制电压上限（空=不限）", "control-voltage max (blank = none)"),
+    "noise_a2hz": ("A^2/Hz", "CP 电流噪声（空=默认）",
+                   "CP current noise (blank = default)"),
+    "gm_noise_a2hz": ("A^2/Hz", "gm 电流噪声（空=默认）",
+                      "gm current noise (blank = default)"),
     "pushing_hz_v": ("Hz/V", "电源推频", "supply pushing"),
     "icp": ("A", "CP 电流", "charge-pump current"),
     "mismatch_pct": ("%", "上下电流失配", "up/down mismatch"),
@@ -89,10 +95,35 @@ class FieldSpec:
     unit: str = ""
     label_zh: str = ""
     label_en: str = ""
+    optional: bool = False   # None is a legal value (form shows it blank)
 
 
 def _is_calibrator(obj) -> bool:
     return hasattr(obj, "step") and hasattr(obj, "mu")
+
+
+_SCALAR_KINDS = {"float": "float", "int": "int", "str": "str",
+                 "tuple": "tuple"}
+
+
+def _kind_from_annotation(ann) -> str | None:
+    """Kind of an ``X | None`` field that currently holds None.
+
+    A None value carries no type, so optional scalars (OscConfig.v_min/v_max,
+    the noise overrides) would otherwise be invisible to the forms — which is
+    exactly the class of knob a GUI user most needs to be able to set.  Only
+    plain scalar unions are accepted; ``FracConfig | None`` and friends stay
+    out, since a form cannot build a sub-config from a text box.
+    """
+    ann = ann if isinstance(ann, str) else getattr(ann, "__name__", str(ann))
+    parts = [p.strip().strip("'\"") for p in ann.split("|")]
+    if "None" not in parts:
+        return None
+    kinds = {_SCALAR_KINDS[p] for p in parts
+             if p in _SCALAR_KINDS} | {_SCALAR_KINDS["tuple"]
+                                       for p in parts
+                                       if p.startswith("tuple[")}
+    return kinds.pop() if len(kinds) == 1 else None
 
 
 def enumerate_fields(cfg, prefix: str = "") -> list[FieldSpec]:
@@ -104,6 +135,12 @@ def enumerate_fields(cfg, prefix: str = "") -> list[FieldSpec]:
         v = getattr(cfg, f.name)
         path = f"{prefix}{f.name}"
         if v is None:
+            kind = _kind_from_annotation(f.type)
+            if kind is None:
+                continue
+            info = FIELD_INFO.get(f.name, ("", f.name, f.name))
+            out.append(FieldSpec(path, None, kind, info[0], info[1], info[2],
+                                 optional=True))
             continue
         if dataclasses.is_dataclass(v):
             out += enumerate_fields(v, prefix=f"{path}.")
@@ -130,13 +167,19 @@ def enumerate_fields(cfg, prefix: str = "") -> list[FieldSpec]:
         else:
             continue
         info = FIELD_INFO.get(f.name, ("", f.name, f.name))
-        out.append(FieldSpec(path, v, kind, info[0], info[1], info[2]))
+        out.append(FieldSpec(path, v, kind, info[0], info[1], info[2],
+                             optional=_kind_from_annotation(f.type) is not None))
     return out
 
 
 def parse_value(text: str, kind: str):
-    """Parse a form string back to the field's type ('1e-12', '(1e3,4e7)')."""
+    """Parse a form string back to the field's type ('1e-12', '(1e3,4e7)').
+
+    A blank box means None — how an optional field is cleared from a form.
+    """
     text = str(text).strip()
+    if not text:
+        return None
     if kind == "float":
         return float(text)
     if kind == "int":
@@ -155,6 +198,8 @@ def apply_overrides(cfg, overrides: dict[str, str]):
         if path not in specs:
             raise KeyError(f"unknown field {path}")
         val = parse_value(text, specs[path].kind)
+        if val is None and not specs[path].optional:
+            raise ValueError(f"{path} cannot be blank")
         obj = cfg
         parts = path.split(".")
         for p in parts[:-1]:
@@ -186,12 +231,43 @@ def make_pll(preset_name: str, overrides: dict[str, str] | None = None):
     return pll
 
 
+def osc_bank_report(cfg) -> list[tuple[str, str, str]]:
+    """Coarse-band-bank sizing rows: (metric, zh note, value) for the forms.
+
+    Empty when the oscillator has no control-voltage range, because without one
+    every band reaches every frequency and there is nothing to report.  With a
+    range the two questions worth answering before a run are whether the bank
+    covers the target at all and whether adjacent bands join up — a gap reads
+    as a loop that will not lock rather than as a mis-sized oscillator.
+    """
+    osc = getattr(cfg, "osc", None)
+    if osc is None or not getattr(osc, "v_limited", False):
+        return []
+    lo, hi = osc.bank_range_hz()
+    rows = [("bank range", "频段总覆盖",
+             f"{lo / 1e9:.3f}-{hi / 1e9:.3f} GHz")]
+    b_lo, b_hi = osc.band_range_hz(0)
+    rows.append(("band span", "单频段跨度",
+                 f"{(b_hi - b_lo) / 1e6:.1f} MHz"))
+    if osc.n_bands > 1:
+        ov = osc.band_overlap_hz()
+        rows.append(("band overlap", "相邻频段重叠",
+                     f"{ov / 1e6:+.1f} MHz"
+                     + ("" if ov > 0 else "  (GAP — bank not continuous)")))
+    covers = lo <= cfg.fout <= hi
+    rows.append(("fout reachable", "目标频率可达",
+                 "yes" if covers else "NO — target outside the bank"))
+    return rows
+
+
 def arch_kind(pll) -> str:
     return type(pll).__name__
 
 
 def fmt_value(v) -> str:
     """Format a field value for a text input (keeps scientific notation)."""
+    if v is None:
+        return ""
     if isinstance(v, float):
         return f"{v:.6g}"
     if isinstance(v, tuple):

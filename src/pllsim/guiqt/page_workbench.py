@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QHBoxLayout, QLabel,
                                QVBoxLayout, QWidget)
 
 from .. import presets
-from ..guiutil import make_pll
+from ..guiutil import make_pll, osc_bank_report
 from ..plotting import plot_pn_breakdown
 from .widgets import (ConfigForm, FigList, MetricRow, Page, float_edit,
                       in_scroll, table_from_rows)
@@ -137,6 +137,16 @@ class WorkbenchPage(Page):
              if np.isfinite(ar.loop.pm_deg) else "-"),
         ])
         self._clear(self._a_lay)
+        # coarse-band sizing: only meaningful once the varactor has a range
+        try:
+            bank = osc_bank_report(self._pll().cfg)
+        except Exception:
+            bank = []
+        if bank:
+            self._a_lay.addWidget(QLabel("Coarse band bank "
+                                         "(osc.v_min / v_max):"))
+            self._a_lay.addWidget(table_from_rows(
+                [{"check": en, "value": val} for en, _zh, val in bank]))
         figs = FigList()
         figs.set_figs([plot_pn_breakdown(ar, None)])
         self._a_lay.addWidget(figs)

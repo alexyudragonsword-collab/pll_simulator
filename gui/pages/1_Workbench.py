@@ -15,7 +15,7 @@ sidebar_lang_toggle()
 
 from pllsim import presets
 from pllsim.core.jitter import ldbc_from_sphi
-from pllsim.guiutil import make_pll
+from pllsim.guiutil import make_pll, osc_bank_report
 from pllsim.plotting import plot_pn_breakdown
 
 st.title(L("架构工作台", "Architecture workbench"))
@@ -32,10 +32,26 @@ st.caption(f"{type(base).__name__}: "
            f"fref = {base.cfg.fref / 1e6:g} MHz -> "
            f"fout = {base.cfg.fout / 1e9:.6g} GHz")
 
+# filled in after the form runs, but rendered here — a bank that cannot reach
+# the target is the first thing to know, not a footnote under 30 text boxes
+bank_slot = st.container()
+
 overrides_all = config_form(base.cfg, key_prefix=preset)
 overrides = changed_only(presets.ALL_PRESETS[preset]().cfg, overrides_all)
 if overrides:
     st.info(L("已修改: ", "edited: ") + ", ".join(overrides))
+
+# coarse-band sizing, shown only once the varactor has a range: with an
+# unlimited control voltage one band reaches everything and the bank is inert
+try:
+    bank = osc_bank_report(make_pll(preset, overrides).cfg)
+except Exception:                      # a half-typed override; the run reports it
+    bank = []
+if bank:
+    with bank_slot:
+        st.markdown("**" + L("粗调频段组 (osc.v_min / v_max)",
+                             "Coarse band bank (osc.v_min / v_max)") + "**")
+        metric_row([(L(zh, en), val) for en, zh, val in bank])
 
 col_a, col_s = st.columns(2)
 
