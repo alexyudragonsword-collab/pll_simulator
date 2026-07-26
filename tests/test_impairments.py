@@ -57,3 +57,81 @@ def test_band_select_finds_band_and_locks():
     assert sim.extra["band"] in (16, 17, 18)
     assert len(sim.cal_traces["band_select"]) <= 6   # ~log2(32) trials
     assert abs(np.mean(sim.freq_out[-5000:]) - 4.8e9) < 5e4
+
+
+# --- control-voltage range ------------------------------------------------
+
+def test_an_unlimited_varactor_makes_the_band_bank_inert():
+    """The reason the range had to exist, stated as a measurement.
+
+    Without a control-voltage range one band reaches any frequency, so a coarse
+    band bank changes nothing: configuring 33 bands leaves the analysis
+    bit-identical and a band search always succeeds on whatever band it starts
+    in.  A downstream model that configured bands and expected coarse tuning to
+    matter would have been modelling it in appearance only.
+    """
+    flat = OscConfig(f0=4.6e9, gain=30e6, **PN)
+    banded = OscConfig(f0=4.6e9, gain=30e6, **PN, band_step_hz=150e6, n_bands=33)
+    assert not flat.v_limited and not banded.v_limited
+    assert flat.band_range_hz(0) == (-np.inf, np.inf)
+    # every band reaches the target, which is what makes the search vacuous
+    assert all(banded.band_covers(4.8e9, b) for b in range(banded.n_bands))
+
+
+def test_a_limited_varactor_gives_each_band_a_finite_reach():
+    osc = OscConfig(f0=4.6e9, gain=30e6, **PN, band_step_hz=40e6, n_bands=33,
+                    v_min=-1.0, v_max=1.0)
+    assert osc.v_limited
+    lo, hi = osc.band_range_hz(16)                 # the centre band
+    assert lo == pytest.approx(4.6e9 - 30e6)
+    assert hi == pytest.approx(4.6e9 + 30e6)
+    assert osc.band_covers(4.61e9, 16)
+    assert not osc.band_covers(4.8e9, 16)
+    # some band reaches it, because the bank is sized so they overlap
+    assert any(osc.band_covers(4.8e9, b) for b in range(osc.n_bands))
+
+
+def test_a_bank_whose_bands_do_not_overlap_is_detectable():
+    """The sizing mistake this found, made visible instead of unlockable.
+
+    A band spans 2*gain*v_max and the bank steps by band_step_hz; with 60 MHz of
+    span and 150 MHz of pitch there are 90 MHz holes between bands.  A target in
+    a hole rails whichever band the search picks, which looks like a broken loop.
+    The first version of the test above used exactly those numbers and failed for
+    that reason, so the check is now a method rather than a comment.
+    """
+    holed = OscConfig(f0=4.6e9, gain=30e6, **PN, band_step_hz=150e6, n_bands=33,
+                      v_min=-1.0, v_max=1.0)
+    assert not holed.band_bank_is_continuous()
+    assert holed.band_overlap_hz() == pytest.approx(-90e6)
+    assert not any(holed.band_covers(4.8e9, b) for b in range(holed.n_bands))
+
+    good = OscConfig(f0=4.6e9, gain=30e6, **PN, band_step_hz=40e6, n_bands=33,
+                     v_min=-1.0, v_max=1.0)
+    assert good.band_bank_is_continuous()
+    assert good.band_overlap_hz() == pytest.approx(20e6)
+    lo, hi = good.bank_range_hz()
+    assert lo < 4.8e9 < hi
+
+    # an unbounded varactor has no sizing constraint at all, and says so
+    assert OscConfig(f0=4.6e9, gain=30e6, **PN, band_step_hz=150e6,
+                     n_bands=33).band_overlap_hz() == float("inf")
+
+
+def test_the_control_voltage_is_clamped_rather_than_extrapolated():
+    """A varactor past its rail stops tuning; it does not keep going."""
+    osc = OscConfig(f0=4.6e9, gain=30e6, **PN, v_min=-1.0, v_max=1.0)
+    assert osc.freq_law(5.0) == pytest.approx(osc.freq_law(1.0))
+    assert osc.freq_law(-5.0) == pytest.approx(osc.freq_law(-1.0))
+    # v_for is deliberately NOT clamped: a caller has to be able to see that the
+    # target needs a voltage the varactor does not have
+    assert osc.v_for(4.7e9) > 1.0
+
+
+def test_the_range_leaves_an_unbanded_loop_alone():
+    """Every existing configuration has no range, so nothing moves."""
+    osc = OscConfig(f0=4.75e9, gain=60e6, **PN)
+    sim = CPPLL(CPPLLConfig(**BASE, osc=osc)).simulate(20_000, seed=1)
+    limited = OscConfig(f0=4.75e9, gain=60e6, **PN, v_min=-5.0, v_max=5.0)
+    same = CPPLL(CPPLLConfig(**BASE, osc=limited)).simulate(20_000, seed=1)
+    np.testing.assert_allclose(sim.freq_out, same.freq_out)
