@@ -1,9 +1,12 @@
 """GUI-support logic: field enumeration, overrides, calibrator rebuild."""
+import inspect
+
 import pytest
 
 from pllsim import presets
 from pllsim.guiutil import (apply_overrides, enumerate_fields, fmt_value,
-                            make_pll, osc_bank_report, parse_value)
+                            make_pll, osc_bank_report, parse_value,
+                            simulate_kwargs)
 
 
 def test_every_preset_enumerates():
@@ -80,6 +83,27 @@ def test_band_bank_gap_is_reported():
     assert not pll.cfg.osc.band_bank_is_continuous()
     rows = dict((name, val) for name, _zh, val in osc_bank_report(pll.cfg))
     assert "GAP" in rows["band overlap"]
+
+
+def test_simulate_kwargs_bind_to_every_engine():
+    """The GUI's Run simulate must not hand an engine a keyword it lacks."""
+    for nm in presets.ALL_PRESETS:
+        pll = presets.ALL_PRESETS[nm]()
+        kw = simulate_kwargs(pll, seed=1, f_start_offset=1e6,
+                             dtc_gain_init_error=0.02)
+        # raises TypeError on any stray keyword, without running the sim
+        inspect.signature(type(pll).simulate).bind(pll, 1000, **kw)
+
+
+def test_free_running_archs_get_their_own_start_offset_name():
+    """ILCM/MDLL name it f_free_error -- the FTL corrects a free-run error."""
+    for nm in ("ilcm_250m_12g", "mdll_150m_2p4g"):
+        pll = presets.ALL_PRESETS[nm]()
+        kw = simulate_kwargs(pll, seed=1, f_start_offset=2e6)
+        assert kw["f_free_error"] == 2e6 and "f_start_offset" not in kw
+        assert "dtc_gain_init_error" not in kw       # no DTC on these engines
+        sim = pll.simulate(4_000, **kw)              # and it actually runs
+        assert sim.freq_out[-1] > 0
 
 
 def test_unknown_field_rejected():

@@ -22,6 +22,8 @@ from dataclasses import dataclass, field
 
 import numpy as np
 
+from .arch.base import start_offset_kwarg
+
 
 @dataclass
 class HopResult:
@@ -51,8 +53,12 @@ def hop_settling(pll, f_from: float, *, n_cycles: int = 200_000,
     c = pll.cfg
     if f_tol is None:
         f_tol = 1e-6 * c.fout                 # 1 ppm
+    start = start_offset_kwarg(pll)
+    if start is None:
+        raise TypeError(f"{type(pll).__name__}.simulate() cannot start off "
+                        "channel, so there is no hop to settle")
     sim = pll.simulate(n_cycles, seed=seed,
-                       f_start_offset=f_from - c.fout, **sim_kwargs)
+                       **{start: f_from - c.fout}, **sim_kwargs)
     t = sim.t
     # frequency judged like a counter would: moving average over w cycles
     # (instantaneous per-cycle frequency carries noise above ppm tols)
