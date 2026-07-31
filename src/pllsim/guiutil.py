@@ -10,9 +10,11 @@ state, so they are rebuilt from their numeric parameters on every apply.
 from __future__ import annotations
 
 import dataclasses
+import inspect
 from dataclasses import dataclass
 
 from . import presets
+from .arch.base import start_offset_kwarg
 
 # fields never shown in forms (derived/rebuilt/complex)
 _SKIP = {"trace", "lut", "counts"}
@@ -229,6 +231,30 @@ def make_pll(preset_name: str, overrides: dict[str, str] | None = None):
     if overrides:
         apply_overrides(pll.cfg, overrides)
     return pll
+
+
+def simulate_kwargs(pll, *, noise: bool = True, calibration: bool = True,
+                    seed: int = 0, f_start_offset: float = 0.0,
+                    dtc_gain_init_error: float = 0.0) -> dict:
+    """The simulate() kwargs this architecture actually accepts.
+
+    The engines do not share one signature, and a GUI that assumes they do
+    fails at the call: ILCM and MDLL name the starting frequency error
+    ``f_free_error``, because their oscillator runs free and the FTL corrects
+    it — there is no loop to start off-target — while the other five call the
+    same quantity ``f_start_offset``.  Filtering against the real signature
+    also keeps a DTC-only knob away from an architecture that has no DTC.
+    """
+    params = inspect.signature(type(pll).simulate).parameters
+    kw = dict(noise=noise, calibration=calibration, seed=seed)
+    start = start_offset_kwarg(pll)
+    if start is not None:
+        kw[start] = f_start_offset
+    if "dtc_gain_init_error" in params and (
+            getattr(pll.cfg, "frac", None) is not None
+            or getattr(pll.cfg, "mode", "") == "dtc_bbpd"):
+        kw["dtc_gain_init_error"] = dtc_gain_init_error
+    return kw
 
 
 def osc_bank_report(cfg) -> list[tuple[str, str, str]]:

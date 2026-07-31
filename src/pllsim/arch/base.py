@@ -1,6 +1,7 @@
 """Common architecture contract."""
 from __future__ import annotations
 
+import inspect
 from abc import ABC, abstractmethod
 
 import numpy as np
@@ -40,3 +41,20 @@ class PLLBase(ABC):
         for note in ar.notes:
             lines.append(f"note: {note}")
         return "\n".join(lines)
+
+
+def start_offset_kwarg(pll) -> str | None:
+    """The simulate() keyword that starts this architecture's oscillator off-target.
+
+    ILCM and MDLL call it ``f_free_error``: their oscillator runs free and the
+    FTL corrects it, so nothing "starts" off-target the way a locked loop does.
+    The other architectures call the same quantity ``f_start_offset``.  Anything
+    that hops a channel or sweeps a starting error has to ask, rather than
+    assume one name and fail at the call.  None means the engine has no such
+    knob at all.
+    """
+    params = inspect.signature(type(pll).simulate).parameters
+    for name in ("f_start_offset", "f_free_error"):
+        if name in params:
+            return name
+    return None

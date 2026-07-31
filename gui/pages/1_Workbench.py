@@ -15,7 +15,7 @@ sidebar_lang_toggle()
 
 from pllsim import presets
 from pllsim.core.jitter import ldbc_from_sphi
-from pllsim.guiutil import make_pll, osc_bank_report
+from pllsim.guiutil import make_pll, osc_bank_report, simulate_kwargs
 from pllsim.plotting import plot_pn_breakdown
 
 st.title(L("架构工作台", "Architecture workbench"))
@@ -97,11 +97,9 @@ with col_s:
     if st.button("Run simulate", type="primary"):
         with st.spinner(L("时域仿真中…", "simulating...")):
             pll = make_pll(preset, overrides)
-            kw = dict(noise=noise, calibration=cal, seed=seed,
-                      f_start_offset=f_off)
-            if getattr(pll.cfg, "frac", None) is not None or \
-                    getattr(pll.cfg, "mode", "") == "dtc_bbpd":
-                kw["dtc_gain_init_error"] = dtc_err
+            kw = simulate_kwargs(pll, noise=noise, calibration=cal, seed=seed,
+                                 f_start_offset=f_off,
+                                 dtc_gain_init_error=dtc_err)
             st.session_state["wb_sim"] = pll.simulate(n_cycles, **kw)
             st.session_state["wb_ar_overlay"] = make_pll(
                 preset, overrides).analyze()

@@ -8,7 +8,7 @@ from PySide6.QtWidgets import (QCheckBox, QComboBox, QHBoxLayout, QLabel,
                                QVBoxLayout, QWidget)
 
 from .. import presets
-from ..guiutil import make_pll, osc_bank_report
+from ..guiutil import make_pll, osc_bank_report, simulate_kwargs
 from ..plotting import plot_pn_breakdown
 from .widgets import (ConfigForm, FigList, MetricRow, Page, float_edit,
                       in_scroll, table_from_rows)
@@ -165,13 +165,11 @@ class WorkbenchPage(Page):
     # ------------------------------------------------------------ simulate
     def compute_sim(self):
         pll = self._pll()
-        kw = dict(noise=self.cb_noise.isChecked(),
-                  calibration=self.cb_cal.isChecked(),
-                  seed=int(self.seed.value()),
-                  f_start_offset=float(self.f_off.text()))
-        if getattr(pll.cfg, "frac", None) is not None or \
-                getattr(pll.cfg, "mode", "") == "dtc_bbpd":
-            kw["dtc_gain_init_error"] = float(self.dtc_err.text())
+        kw = simulate_kwargs(pll, noise=self.cb_noise.isChecked(),
+                             calibration=self.cb_cal.isChecked(),
+                             seed=int(self.seed.value()),
+                             f_start_offset=float(self.f_off.text()),
+                             dtc_gain_init_error=float(self.dtc_err.text()))
         sim = pll.simulate(int(self.n_cycles.value()), **kw)
         ar = self._pll().analyze()
         return ar, sim

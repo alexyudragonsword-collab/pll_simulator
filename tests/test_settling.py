@@ -40,3 +40,12 @@ def test_fll_stability_bound():
     pll = presets.spll_frac_52m_6p253g()
     pll.cfg.fll_i *= 4.0
     assert fll_stability(pll)["margin"] < 1.0
+
+
+def test_hop_works_on_free_running_architectures():
+    """ILCM/MDLL take the start error as f_free_error, not f_start_offset."""
+    for nm in ("ilcm_250m_12g", "mdll_150m_2p4g"):
+        pll = presets.ALL_PRESETS[nm]()
+        r = hop_settling(pll, pll.cfg.fout + 10e6, n_cycles=30_000, seed=1)
+        assert r.f_from == pll.cfg.fout + 10e6
+        assert 0.0 < r.t_freq_s < 1e-3          # the FTL pulls it in
