@@ -76,7 +76,9 @@ build ONEFILE exes for both GUIs and smoke-test them on the runner before
 upload — `windows-exe` (PyInstaller: fast build, self-extracting) and
 `windows-exe-nuitka` (Nuitka: real C compilation via MSVC — much slower
 build, faster startup; qt and web build as independent jobs).  Trigger
-either from Actions -> Run workflow; download `pllsim-gui-qt[-nuitka].exe`
+either from Actions -> Run workflow and pick `target` = `qt`, `web` or
+`both` — these are Windows runners and the web compile is the long one,
+so both is opt-in.  Download `pllsim-gui-qt[-nuitka].exe`
 (desktop, windowed) and `pllsim-gui-web[-nuitka].exe` (starts the local
 server and opens your browser; its console window is the server log) from
 the run's artifacts, or pass an existing release tag to attach them as

@@ -7,11 +7,21 @@ name: windows-exe-nuitka
 #
 # Trigger from the GitHub UI: Actions -> windows-exe-nuitka -> Run
 # workflow.  The two GUIs build as independent jobs so a Streamlit
-# freezing issue never blocks the desktop exe (and vice versa).
+# freezing issue never blocks the desktop exe (and vice versa), and
+# `target` picks which of them to spend runner minutes on -- these are
+# windows-latest jobs (2x minute multiplier on a private repo) and the
+# web compile is the long one, so building both is a deliberate choice
+# rather than the default.
 
 on:
   workflow_dispatch:
     inputs:
+      target:
+        description: "Which GUI to build"
+        type: choice
+        required: true
+        default: qt
+        options: [qt, web, both]
       release_tag:
         description: "Existing release tag to attach the exes to (optional)"
         required: false
@@ -19,6 +29,7 @@ on:
 
 jobs:
   qt:
+    if: inputs.target == 'qt' || inputs.target == 'both'
     runs-on: windows-latest
     permissions:
       contents: write
@@ -67,6 +78,7 @@ jobs:
           build-nuitka/pllsim-gui-qt-nuitka.exe --clobber
 
   web:
+    if: inputs.target == 'web' || inputs.target == 'both'
     runs-on: windows-latest
     permissions:
       contents: write
