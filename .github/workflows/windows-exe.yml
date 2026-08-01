@@ -9,12 +9,21 @@ name: windows-exe
 # blocks the desktop exe (and vice versa).
 #
 # Trigger from the GitHub UI: Actions -> windows-exe -> Run workflow.
-# Optionally give an existing release tag (e.g. v0.5.2) to attach the
-# exes to that release as downloadable assets.
+# `target` picks which GUI to build -- these are windows-latest jobs
+# (2x minute multiplier on a private repo), so building both is a
+# deliberate choice rather than the default.  Optionally give an
+# existing release tag (e.g. v0.5.3) to attach the exes to that release
+# as downloadable assets.
 
 on:
   workflow_dispatch:
     inputs:
+      target:
+        description: "Which GUI to build"
+        type: choice
+        required: true
+        default: qt
+        options: [qt, web, both]
       release_tag:
         description: "Existing release tag to attach the exes to (optional)"
         required: false
@@ -22,6 +31,7 @@ on:
 
 jobs:
   qt:
+    if: inputs.target == 'qt' || inputs.target == 'both'
     runs-on: windows-latest
     permissions:
       contents: write        # needed only for the optional release upload
@@ -59,6 +69,7 @@ jobs:
           dist/pllsim-gui-qt.exe --clobber
 
   web:
+    if: inputs.target == 'web' || inputs.target == 'both'
     runs-on: windows-latest
     permissions:
       contents: write
