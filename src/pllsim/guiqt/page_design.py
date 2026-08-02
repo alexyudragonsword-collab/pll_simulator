@@ -9,7 +9,7 @@ from PySide6.QtWidgets import (QCheckBox, QFormLayout, QHBoxLayout, QLabel,
 from .. import presets
 from ..selector import Requirement, select
 from ..synth import (cppll_kdet, design_adpll_dlf, design_cp_filter,
-                     design_sspll_filter, sweep_bandwidth)
+                     design_spll_filter, design_sspll_filter, sweep_bandwidth)
 from .widgets import (FigList, Page, float_edit, in_scroll, table_from_rows)
 
 
@@ -24,6 +24,12 @@ class SynthesisPage(Page):
     def __init__(self):
         super().__init__()
         lay = QVBoxLayout(self)
+        note = QLabel("ILCM / MDLL are absent by design: they have no loop "
+                      "filter — bandwidth comes from per-cycle edge "
+                      "realignment, and the only tunable loop is the "
+                      "frequency-tracking gain.")
+        note.setWordWrap(True)
+        lay.addWidget(note)
         tabs = QTabWidget()
         lay.addWidget(tabs)
 
@@ -68,6 +74,31 @@ class SynthesisPage(Page):
         f2.addRow(self.ss_out)
         self.ss_btn.clicked.connect(self._go_ss)
         tabs.addTab(ss, "SSPLL filter")
+
+        # ---- SPLL filter: the SSPLL loop with the detector gain referred
+        # through the divider, so N is an input rather than folded into k_q
+        sp = QWidget()
+        f2b = QFormLayout(sp)
+        self.sp_amp = float_edit("0.8")
+        self.sp_gm = float_edit("10e-3")
+        self.sp_pw = float_edit("1e-9")
+        self.sp_n = float_edit("80")
+        self.sp_kvco = float_edit("60e6")
+        self.sp_ugb = float_edit("3e5")
+        self.sp_pm = float_edit("60")
+        self.sp_fref = float_edit("100e6")
+        for lab, w in [("amp [V]", self.sp_amp), ("gm [S]", self.sp_gm),
+                       ("pulse [s]", self.sp_pw), ("N (fout/fref)", self.sp_n),
+                       ("Kvco [Hz/V]", self.sp_kvco),
+                       ("UGB [Hz]", self.sp_ugb), ("PM [deg]", self.sp_pm),
+                       ("fref [Hz]", self.sp_fref)]:
+            f2b.addRow(lab, w)
+        self.sp_btn = QPushButton("Synthesize (exact discrete loop)")
+        f2b.addRow(self.sp_btn)
+        self.sp_out = QVBoxLayout()
+        f2b.addRow(self.sp_out)
+        self.sp_btn.clicked.connect(self._go_sp)
+        tabs.addTab(sp, "SPLL filter")
 
         # ---- ADPLL DLF
         dl = QWidget()
@@ -128,6 +159,16 @@ class SynthesisPage(Page):
                 float(self.ss_pm.text()), float(self.ss_fref.text()))
         self.run_async(fn, lambda filt: self._set(
             self.ss_out, table_from_rows(_filt_rows(filt))), self.ss_btn)
+
+    def _go_sp(self):
+        def fn():
+            return design_spll_filter(
+                float(self.sp_amp.text()), float(self.sp_gm.text()),
+                float(self.sp_pw.text()), float(self.sp_n.text()),
+                float(self.sp_kvco.text()), float(self.sp_ugb.text()),
+                float(self.sp_pm.text()), float(self.sp_fref.text()))
+        self.run_async(fn, lambda filt: self._set(
+            self.sp_out, table_from_rows(_filt_rows(filt))), self.sp_btn)
 
     def _go_dl(self):
         def fn():

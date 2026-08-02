@@ -9,9 +9,10 @@ from pllsim.blocks.chargepump import CPConfig
 from pllsim.blocks.oscillator import OscConfig
 from pllsim.blocks.sampler import SamplerConfig
 from pllsim.blocks.tdc import TDCConfig
+from pllsim.arch.spll import SPLL, SPLLConfig
 from pllsim.synth import (cppll_kdet, design_adpll_dlf, design_cp_filter,
-                          design_sspll_filter, spll_kdet, sspll_kdet,
-                          sweep_bandwidth)
+                          design_spll_filter, design_sspll_filter, spll_kdet,
+                          sspll_kdet, sweep_bandwidth)
 
 OSC = OscConfig(f0=4.75e9, gain=60e6, pn_dbchz=-122.0, pn_foffset=1e6,
                 pn_f1f3=3e5, pn_floor_dbchz=-155.0)
@@ -63,3 +64,29 @@ def test_bandwidth_sweep_u_shape():
     i = int(np.argmin(j))
     assert 0 < i < len(j) - 1                 # interior optimum (U-shape)
     assert j[0] > j[i] and j[-1] > j[i]
+
+
+def test_spll_filter_hits_targets():
+    """The synthesized filter must land on (UGB, PM) in a real SPLL."""
+    from pllsim import presets
+    c = presets.spll_100m_8g().cfg
+    s = c.sampler
+    for ugb, pm in ((300e3, 60.0), (600e3, 55.0)):
+        filt = design_spll_filter(s.amp_v, s.gm, s.pulse_width, c.n_div,
+                                  c.osc.gain, ugb, pm, c.fref)
+        ar = SPLL(SPLLConfig(fref=c.fref, fout=c.fout, osc=c.osc, sampler=s,
+                             filt=filt, ref_pn_dbchz=c.ref_pn_dbchz,
+                             int_band=c.int_band)).analyze()
+        assert abs(ar.loop.f_ugb / ugb - 1) < 0.05
+        assert abs(ar.loop.pm_deg - pm) < 3.0
+
+
+def test_spll_filter_carries_the_divider_referral():
+    """Forgetting the 1/N referral is a factor-N loop-gain error."""
+    kw = dict(kvco_hz_v=60e6, f_ugb=3e5, pm_deg=60.0, fref=100e6)
+    a = design_spll_filter(0.8, 10e-3, 1e-9, 80.0, **kw)
+    b = design_spll_filter(0.8, 10e-3, 1e-9, 160.0, **kw)
+    # twice the division ratio halves the detector gain, so the synthesizer
+    # must halve the capacitance to hold the same UGB
+    assert abs(a.c1 / b.c1 - 2.0) < 0.05
+    assert abs(b.r2 / a.r2 - 2.0) < 0.05        # ... and double R2 for the zero
