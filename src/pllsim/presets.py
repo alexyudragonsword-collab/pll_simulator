@@ -296,3 +296,39 @@ ALL_PRESETS = {
         bench_markulic16_sspll_frac_40m_10p25g,
     "bench_wu19_spll_frac_52m_6p253g": bench_wu19_spll_frac_52m_6p253g,
 }
+
+
+# Published measurements and the time-domain numbers ex10/ex14 produce.  The
+# LINEAR column is deliberately absent: it is computed from the preset on
+# demand (benchmark_table) so it cannot go stale the way two hand-maintained
+# copies of this table did -- both still carried the pre-v0.6.0 numbers after
+# the gm-noise and DTC-jitter corrections moved them.
+BENCHMARKS = [
+    {"paper": "Gao'09 SSPLL 2.21G int-N (10k-100M)",
+     "preset": "bench_gao09_sspll_55p25m_2p21g",
+     "published [fs]": "150", "time-domain [fs]": "139"},
+    {"paper": "Dartizio'23 DTC-BB digital PLL 9.25G frac-N",
+     "preset": "bench_dartizio23_adpllbb_500m_9p2515g",
+     "published [fs]": "77", "time-domain [fs]": "77"},
+    {"paper": "Markulic'16 SSPLL 10.24G int-N",
+     "preset": "bench_markulic16_sspll_40m_10p24g",
+     "published [fs]": "176", "time-domain [fs]": "154"},
+    {"paper": "Markulic'16 SSPLL 10.24G frac-N",
+     "preset": "bench_markulic16_sspll_frac_40m_10p25g",
+     "published [fs]": "198 (worst)", "time-domain [fs]": "155"},
+    {"paper": "Wu'19 sampling PLL 6.25G frac-N (10k-10M)",
+     "preset": "bench_wu19_spll_frac_52m_6p253g",
+     "published [fs]": "75", "time-domain [fs]": "78"},
+]
+
+
+def benchmark_table() -> list[dict]:
+    """The literature anchor with the linear-model column computed live."""
+    rows = []
+    for b in BENCHMARKS:
+        ar = ALL_PRESETS[b["preset"]]().analyze()
+        rows.append({"paper": b["paper"],
+                     "published [fs]": b["published [fs]"],
+                     "linear [fs]": round(float(ar.jitter_fs), 1),
+                     "time-domain [fs]": b["time-domain [fs]"]})
+    return rows

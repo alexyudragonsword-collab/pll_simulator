@@ -18,6 +18,7 @@ from .. import presets
 from ..core.jitter import ldbc_from_sphi
 from ..fit import attribute_budget, fit_closed_loop, fit_leeson, load_pn_csv
 from ..guiutil import frac_presets, make_pll
+from ..plotting import plot_spur_spectrum
 from .widgets import FigList, Page, float_edit, table_from_rows
 
 FRAC_PRESETS = frac_presets()
@@ -44,8 +45,10 @@ class SpursPage(Page):
             row.addWidget(w)
         self.btn = QPushButton("Predict")
         self.btn_sweep = QPushButton("Worst-channel sweep")
+        self.btn_meas = QPushButton("Simulate + plot spectrum")
         row.addWidget(self.btn)
         row.addWidget(self.btn_sweep)
+        row.addWidget(self.btn_meas)
         row.addStretch(1)
         lay.addLayout(row)
         self._body = QVBoxLayout()
@@ -54,6 +57,19 @@ class SpursPage(Page):
         lay.addWidget(self.figs, 1)
         self.btn.clicked.connect(self._go)
         self.btn_sweep.clicked.connect(self._go_sweep)
+        self.btn_meas.clicked.connect(self._go_measure)
+
+    def _go_measure(self):
+        """The table is the prediction; this is the measured periodogram of
+        the same config, which is the comparison ex15 is built on."""
+        def fn():
+            pll = self._cfg_pll()
+            return pll.simulate(150_000, seed=2), self._cfg_pll().analyze()
+
+        def done(res):
+            sim, ar = res
+            self.figs.set_figs([plot_spur_spectrum(sim, ar=ar)])
+        self.run_async(fn, done, self.btn_meas)
 
     def _cfg_pll(self, frac=None):
         pll = make_pll(self.preset.currentText())
@@ -231,23 +247,6 @@ class FitPage(Page):
 class BenchmarksPage(Page):
     title = "Benchmarks"
 
-    ROWS = [
-        {"paper": "Gao'09 SSPLL 2.21G int-N (10k-100M)",
-         "published [fs]": "150", "linear [fs]": "122",
-         "time-domain [fs]": "139"},
-        {"paper": "Dartizio'23 DTC-BB digital PLL 9.25G frac-N",
-         "published [fs]": "77", "linear [fs]": "57",
-         "time-domain [fs]": "77"},
-        {"paper": "Markulic'16 SSPLL 10.24G int-N",
-         "published [fs]": "176", "linear [fs]": "165",
-         "time-domain [fs]": "154"},
-        {"paper": "Markulic'16 SSPLL 10.24G frac-N",
-         "published [fs]": "198 (worst)", "linear [fs]": "199",
-         "time-domain [fs]": "155"},
-        {"paper": "Wu'19 sampling PLL 6.25G frac-N (10k-10M)",
-         "published [fs]": "75", "linear [fs]": "77",
-         "time-domain [fs]": "78"},
-    ]
 
     def __init__(self):
         super().__init__()
@@ -256,5 +255,5 @@ class BenchmarksPage(Page):
             "Four-paper JSSC anchor — all undisclosed parameters are "
             "labelled technology-plausible assumptions; the check is "
             "architectural consistency (examples/ex10, ex14, docs 11.4)."))
-        lay.addWidget(table_from_rows(self.ROWS))
+        lay.addWidget(table_from_rows(presets.benchmark_table()))
         lay.addStretch(1)

@@ -291,3 +291,17 @@ def test_lut_cal_is_refused_where_it_is_not_wired(preset):
     cfg.frac.dtc_lut_cal = LUTCal(k=8, lo=-1.0, hi=0.0, mu=1e-15)
     with pytest.raises(ValueError, match="dtc_lut_cal"):
         type(cfg)(**cfg.__dict__)
+
+
+def test_spur_spectrum_plot_is_reachable():
+    """plot_spur_spectrum had no caller anywhere -- not an example, not a GUI,
+    not a test -- so nothing would have noticed it breaking."""
+    import matplotlib
+    matplotlib.use("Agg")
+    from pllsim.plotting import plot_spur_spectrum
+    pll = presets.cppll_frac_38p4m_6g()
+    sim = pll.simulate(40_000, seed=2)
+    fig = plot_spur_spectrum(sim, ar=presets.cppll_frac_38p4m_6g().analyze())
+    assert fig is not None
+    import matplotlib.pyplot as plt
+    plt.close(fig)
