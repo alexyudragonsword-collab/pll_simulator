@@ -33,7 +33,16 @@ from ..core.noise import (
     output_psd,
 )
 from ..core.results import AnalysisResult, SimResult
-from .base import PLLBase, attach_fine, run_band_select, supply_ripple_v
+from .base import (
+    PLLBase,
+    add_pull_offset,
+    attach_fine,
+    pull_hz,
+    pull_notes,
+    pull_spur,
+    run_band_select,
+    supply_ripple_v,
+)
 
 TWOPI = 2.0 * np.pi
 
@@ -165,6 +174,7 @@ class SSPLL(PLLBase):
         spurs = {}
         if i1 > 0:
             spurs["ref_spur"] = float(20 * np.log10(beta / 2))
+        spurs.update(pull_spur(c.osc, err_vco))
         if c.frac is not None:
             from ..core.dtcspurs import dtc_spur_table
             d = c.frac.dtc
@@ -175,7 +185,7 @@ class SSPLL(PLLBase):
                     c.fref, c.fout, ntf=h, gain_eps=eps).items():
                 spurs[f"frac_spur@{off:.0f}Hz"] = dbc
         notes = [f"PD gain referred to output phase: CP/LF noise not multiplied "
-                 f"by N={n} (the SSPLL advantage)"]
+                 f"by N={n} (the SSPLL advantage)"] + pull_notes(c.osc)
         if i1 == 0.0:
             notes.append(
                 "no reference spur reported: the sampling pedestal produces a "
@@ -255,6 +265,7 @@ class SSPLL(PLLBase):
         phi_frac = 0.0          # VCO phase modulo 2pi at the sampling instant
         phi_out = 0.0
         v_sup = supply_ripple_v(supply_ripple, n_cycles, tref)
+        f_pull = pull_hz(c.osc, n_cycles, tref)
         fv = osc.freq(lf.vctrl, v_sup[0])
 
         phase_err = np.empty(n_cycles)
@@ -320,7 +331,8 @@ class SSPLL(PLLBase):
             if fine is None:
                 lf.update_pulse(dq / max(c.sampler.pulse_width, 1e-12),
                                 c.sampler.pulse_width)
-                fv = max(osc.freq(lf.vctrl, v_sup[nn]), 0.05 * c.osc.f0)
+                fv = max(osc.freq(lf.vctrl, v_sup[nn], f_pull[nn]),
+                         0.05 * c.osc.f0)
                 if mod_freq is not None:    # highpass point: direct VCO push
                     fv += mod_freq[nn] * mod_dp_gain
             else:
@@ -328,7 +340,7 @@ class SSPLL(PLLBase):
                 # that separation is the whole reference-spur mechanism here
                 vs = lf.drive_fine(pd.segments(dq), m_os)
                 f_sub = np.maximum(
-                    np.array([osc.freq(v, v_sup[nn]) for v in vs]),
+                    np.array([osc.freq(v, v_sup[nn], f_pull[nn]) for v in vs]),
                     0.05 * c.osc.f0)
                 if mod_freq is not None:
                     f_sub = f_sub + mod_freq[nn] * mod_dp_gain
@@ -361,6 +373,7 @@ class SSPLL(PLLBase):
             sim.cal_traces["band_select"] = band_trace
         if supply_ripple is not None and supply_ripple[1] < 0.45 * c.fref:
             spur_offsets = (spur_offsets or []) + [supply_ripple[1]]
+        spur_offsets = add_pull_offset(spur_offsets, c.osc, c.fref)
         sim = postprocess(sim, int_band=c.int_band, spur_offsets=spur_offsets)
         if fine is not None:
             return attach_fine(sim, fine, m_os, c.fref, c.int_band, spur_offsets)

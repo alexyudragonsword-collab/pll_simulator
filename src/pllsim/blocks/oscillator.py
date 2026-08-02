@@ -37,6 +37,47 @@ class OscConfig:
     # the capacitor bank exists.
     v_min: float | None = None
     v_max: float | None = None
+    # ---- injection pulling (Adler) ----
+    # An aggressor at f0 +/- pull_offset_hz drags the tank.  Outside the lock
+    # range Adler's equation dphi/dt = dw - wL sin(phi) leaves, for weak
+    # pulling, a residual FM of peak deviation pull_lock_range_hz at the beat
+    # frequency -- so the sideband is f_L/(2*df), before the loop gets to
+    # suppress whatever falls inside its bandwidth.  This is the coupling that
+    # puts a PA harmonic or a neighbouring synthesizer into the spectrum
+    # without touching the loop at all, which is why chasing it in the loop
+    # filter never works.
+    pull_lock_range_hz: float = 0.0   # f_L = f0*(Iinj/Iosc)/(2Q)
+    pull_offset_hz: float = 0.0       # |f0 - f_aggressor|
+
+    @staticmethod
+    def lock_range_from_tank(f0: float, i_ratio: float, q_tank: float) -> float:
+        """Adler lock range f0*(Iinj/Iosc)/(2Q), the usual way to get f_L."""
+        return f0 * i_ratio / (2.0 * q_tank)
+
+    @property
+    def pulled(self) -> bool:
+        return self.pull_lock_range_hz > 0.0 and self.pull_offset_hz > 0.0
+
+    def pull_spur_dbc(self, err_at_offset: float = 1.0) -> float:
+        """Pulling sideband [dBc], optionally after the loop's rejection.
+
+        beta = f_L/df is the FM index of the residual modulation, and the
+        narrowband sideband is beta/2.  Pass |err(df)| to include the loop's
+        suppression of what lands in band.
+        """
+        if not self.pulled:
+            return float("-inf")
+        beta = (self.pull_lock_range_hz / self.pull_offset_hz) * err_at_offset
+        return float(20.0 * np.log10(beta / 2.0))
+
+    def within_lock_range(self) -> bool:
+        """True when the aggressor would capture the oscillator outright.
+
+        Inside the lock range there is no spur to report: the oscillator stops
+        being the loop's and follows the aggressor, and the weak-pulling
+        expression above does not apply at all.
+        """
+        return self.pulled and self.pull_offset_hz <= self.pull_lock_range_hz
 
     def leeson(self, name: str = "vco") -> LeesonOscillator:
         return LeesonOscillator.from_spot(name, self.pn_dbchz, self.pn_foffset,
@@ -149,11 +190,26 @@ class Oscillator:
         self.phi_acc_noise = 0.0     # accumulated (random-walk) phase noise [rad]
         self.band = (cfg.n_bands - 1) // 2 if cfg.n_bands > 1 else 0
 
-    def freq(self, ctrl: float, v_supply: float = 0.0) -> float:
+    def freq(self, ctrl: float, v_supply: float = 0.0,
+             f_pull: float = 0.0) -> float:
         f = self.cfg.freq_law(ctrl, self.band)
         if self.cfg.pushing_hz_v != 0.0:
             f += self.cfg.pushing_hz_v * v_supply
-        return f
+        return f + f_pull
+
+    def pull_hz(self, n_cycles: int, tref: float) -> np.ndarray:
+        """Per-cycle frequency perturbation from an aggressor [Hz].
+
+        Weak-pulling limit of Adler's equation: the phase error rides a
+        residual modulation at the beat rate whose peak frequency deviation is
+        the lock range.  Returned as a sequence so an engine can add it to the
+        oscillator alongside supply pushing.
+        """
+        c = self.cfg
+        if not c.pulled:
+            return np.zeros(n_cycles)
+        t = np.arange(n_cycles) * tref
+        return c.pull_lock_range_hz * np.sin(2.0 * np.pi * c.pull_offset_hz * t)
 
     def noise_step(self) -> float:
         """Total oscillator phase-noise sample for this step [rad]."""
