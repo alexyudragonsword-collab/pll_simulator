@@ -6,7 +6,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np
 import streamlit as st
-
 from _common import L, sidebar_lang_toggle
 
 st.set_page_config(page_title="Selector", layout="wide")

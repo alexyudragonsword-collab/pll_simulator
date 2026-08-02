@@ -6,7 +6,6 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import streamlit as st
-
 from _common import L, metric_row, show_fig, sidebar_lang_toggle
 
 st.set_page_config(page_title="Monte Carlo", layout="wide")

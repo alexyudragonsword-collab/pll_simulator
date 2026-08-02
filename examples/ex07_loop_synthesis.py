@@ -21,8 +21,7 @@ import numpy as np
 from pllsim.arch.cppll import CPPLL, CPPLLConfig
 from pllsim.blocks.chargepump import CPConfig
 from pllsim.blocks.oscillator import OscConfig
-from pllsim.synth import (cppll_kdet, design_adpll_dlf, design_cp_filter,
-                          sweep_bandwidth)
+from pllsim.synth import cppll_kdet, design_adpll_dlf, design_cp_filter, sweep_bandwidth
 
 OUT = os.path.join(os.path.dirname(__file__), "out")
 os.makedirs(OUT, exist_ok=True)

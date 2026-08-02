@@ -7,28 +7,27 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
-
 from _common import L, metric_row, show_fig, sidebar_lang_toggle
 
 st.set_page_config(page_title="Modulation", layout="wide")
 sidebar_lang_toggle()
 
 from pllsim import presets
-from pllsim.modulation import evm, gmsk_trajectory, prbs
+from pllsim.modulation import evm, gmsk_trajectory, prbs, two_point_presets
 
-ARCHS = {"adpll_100m_10g (TDC)": ("adpll_100m_10g", 100e6),
-         "sspll_frac_19p2m_4p806g": ("sspll_frac_19p2m_4p806g", 19.2e6)}
+ARCHS = two_point_presets()
 
 st.title(L("两点 GMSK 调制与 EVM", "Two-point GMSK modulation and EVM"))
 c = st.columns(4)
 arch = c[0].selectbox(L("架构（引擎已接注入点）",
-                        "architecture (injection wired)"), list(ARCHS))
+                        "architecture (injection wired)"), ARCHS)
 rb = float(c[1].text_input("bit rate [b/s]", "2.5e6"))
 dp_err = float(c[2].number_input(L("直通路增益误差", "direct-path error"),
                                  -0.2, 0.2, 0.0, 0.01))
 n_cyc = int(c[3].number_input(L("周期数", "cycles"), 60_000, 400_000,
                               140_000, 20_000))
-nm, fref = ARCHS[arch]
+nm = arch
+fref = presets.ALL_PRESETS[nm]().cfg.fref   # not a hardcoded copy
 sps = fref / rb
 if sps < 8:
     st.warning(L(f"{sps:.1f} 采样/符号 < 8：对照连续理想的离散化底会抬高读数"

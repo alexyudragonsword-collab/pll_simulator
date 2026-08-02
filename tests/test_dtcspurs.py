@@ -1,6 +1,5 @@
 """dtcspurs: deterministic fractional-spur prediction (INL/quant/gain)."""
 import numpy as np
-import pytest
 
 from pllsim import presets
 from pllsim.arch.cppll import frac_spur_offsets
@@ -40,11 +39,7 @@ def test_spur_offsets_match_folding():
 def test_gain_residual_scales_20db_per_decade():
     pll = _wu()
     c = pll.cfg
-    main = min(c.frac.frac, 1 - c.frac.frac) * c.fref  # k=1 beat (folded)
-    off = round(min(main, c.fref - main), 3)
     # k=1 tone folds to 13.0156 MHz for frac=0.2503
-    key = round((c.frac.frac % 1.0) * c.fref
-                if c.frac.frac < 0.5 else (1 - c.frac.frac) * c.fref, 3)
     t1 = dtc_spur_table(c.frac, _target_of(c), c.fref, c.fout, gain_eps=0.01)
     t2 = dtc_spur_table(c.frac, _target_of(c), c.fref, c.fout, gain_eps=0.1)
     k = round(0.2503 * 52e6, 3)

@@ -1,6 +1,5 @@
 """Golden RNM engines agree with the full simulate() in the locked state."""
 import numpy as np
-import pytest
 
 from pllsim import presets
 from pllsim.export import rnm_golden as rg

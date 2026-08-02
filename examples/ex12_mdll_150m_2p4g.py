@@ -25,7 +25,6 @@ import matplotlib
 
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
-import numpy as np
 
 from pllsim.arch.ilcm import ILCM, ILCMConfig
 from pllsim.arch.mdll import MDLL, MDLLConfig

@@ -5,19 +5,22 @@ from pathlib import Path
 
 import matplotlib.pyplot as plt
 import numpy as np
-from PySide6.QtWidgets import (QComboBox, QFileDialog, QHBoxLayout, QLabel,
-                               QPushButton, QVBoxLayout)
+from PySide6.QtWidgets import (
+    QComboBox,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QVBoxLayout,
+)
 
 from .. import presets
-from ..core.dtcspurs import dtc_spur_table
 from ..core.jitter import ldbc_from_sphi
-from ..fit import (attribute_budget, fit_closed_loop, fit_leeson,
-                   load_pn_csv)
-from ..guiutil import make_pll
+from ..fit import attribute_budget, fit_closed_loop, fit_leeson, load_pn_csv
+from ..guiutil import frac_presets, make_pll
 from .widgets import FigList, Page, float_edit, table_from_rows
 
-FRAC_PRESETS = ["spll_frac_52m_6p253g", "sspll_frac_19p2m_4p806g",
-                "cppll_frac_38p4m_6g", "adpll_bb_100m_10g"]
+FRAC_PRESETS = frac_presets()
 
 
 class SpursPage(Page):

@@ -116,7 +116,7 @@ jobs:
           --include-distribution-metadata=protobuf
           --include-package=pllsim
           --include-package-data=matplotlib
-          --include-raw-dir=gui=gui
+          --include-raw-dir=src/pllsim/webgui=pllsim/webgui
           --output-dir=build-nuitka
           --output-filename=pllsim-gui-web-nuitka.exe
       # save the 80-minute compile cache even if the smoke step fails:

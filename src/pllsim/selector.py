@@ -28,7 +28,6 @@ from .arch.ilcm import ILCM, ILCMConfig
 from .arch.mdll import MDLL, MDLLConfig
 from .arch.spll import SPLL, SPLLConfig
 from .arch.sspll import SSPLL, SSPLLConfig
-from .modulation import supports_two_point
 from .blocks.chargepump import CPConfig
 from .blocks.dtc import DTCConfig
 from .blocks.loopfilter import FilterDesign
@@ -36,8 +35,8 @@ from .blocks.oscillator import OscConfig
 from .blocks.sampler import SamplerConfig
 from .blocks.tdc import TDCConfig
 from .calibration.lms import SignSignLMS
-from .synth import (cppll_kdet, design_adpll_dlf, design_cp_filter,
-                    design_sspll_filter)
+from .modulation import supports_two_point
+from .synth import cppll_kdet, design_adpll_dlf, design_cp_filter, design_sspll_filter
 
 
 @dataclass

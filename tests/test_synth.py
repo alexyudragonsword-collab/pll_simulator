@@ -4,15 +4,20 @@ import pytest
 
 from pllsim.arch.adpll import ADPLL, ADPLLConfig, DLFConfig
 from pllsim.arch.cppll import CPPLL, CPPLLConfig
+from pllsim.arch.spll import SPLL, SPLLConfig
 from pllsim.arch.sspll import SSPLL, SSPLLConfig
 from pllsim.blocks.chargepump import CPConfig
 from pllsim.blocks.oscillator import OscConfig
 from pllsim.blocks.sampler import SamplerConfig
 from pllsim.blocks.tdc import TDCConfig
-from pllsim.arch.spll import SPLL, SPLLConfig
-from pllsim.synth import (cppll_kdet, design_adpll_dlf, design_cp_filter,
-                          design_spll_filter, design_sspll_filter, spll_kdet,
-                          sspll_kdet, sweep_bandwidth)
+from pllsim.synth import (
+    cppll_kdet,
+    design_adpll_dlf,
+    design_cp_filter,
+    design_spll_filter,
+    design_sspll_filter,
+    sweep_bandwidth,
+)
 
 OSC = OscConfig(f0=4.75e9, gain=60e6, pn_dbchz=-122.0, pn_foffset=1e6,
                 pn_f1f3=3e5, pn_floor_dbchz=-155.0)
@@ -118,6 +123,7 @@ def test_retune_loop_refuses_the_filterless_architectures():
 def test_bang_bang_retune_beats_the_normalized_coefficients():
     """A BB loop needs the Kbb-dependent gain, not the TDC coefficients."""
     from dataclasses import replace
+
     from pllsim import presets
     from pllsim.synth import design_adpll_dlf, retune_loop
     naive = presets.ALL_PRESETS["adpll_bb_100m_10g"]()

@@ -36,7 +36,7 @@ from ..blocks.oscillator import OscConfig, Oscillator
 from ..calibration.ftl import FTL
 from ..core.colored import synth_from_psd
 from ..core.engine import postprocess
-from ..core.freqresp import FreqResponse, default_grid, LoopMetrics
+from ..core.freqresp import FreqResponse, LoopMetrics, default_grid
 from ..core.jitter import ipn_dbc, rms_jitter_fs
 from ..core.noise import FlickerFloorPhase, NoisePath, output_psd
 from ..core.results import AnalysisResult, SimResult
@@ -179,7 +179,7 @@ class ILCM(PLLBase):
         c = self.cfg
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
-        n = c.n_mult
+        c.n_mult          # validates the integer multiple; raises if not
         b = c.beta
 
         osc = Oscillator(c.osc, c.fref, rng, noise=noise)

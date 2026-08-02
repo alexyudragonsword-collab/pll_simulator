@@ -1,6 +1,5 @@
 """Fractional-N + DTC calibration behavior."""
 import numpy as np
-import pytest
 
 from pllsim.arch.cppll import CPPLL, CPPLLConfig, FracConfig, frac_spur_offsets
 from pllsim.blocks.chargepump import CPConfig

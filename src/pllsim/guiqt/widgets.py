@@ -2,14 +2,26 @@
 from __future__ import annotations
 
 import matplotlib
+
 matplotlib.use("Agg")            # pyplot figures are re-parented onto Qt
 import matplotlib.pyplot as plt  # noqa: E402
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
 from PySide6.QtCore import QThread, Signal
-from PySide6.QtWidgets import (QFormLayout, QGroupBox, QHBoxLayout, QLabel,
-                               QLineEdit, QMessageBox, QPushButton,
-                               QScrollArea, QSizePolicy, QTableWidget,
-                               QTableWidgetItem, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (
+    QFormLayout,
+    QGroupBox,
+    QHBoxLayout,
+    QLabel,
+    QLineEdit,
+    QMessageBox,
+    QPushButton,
+    QScrollArea,
+    QSizePolicy,
+    QTableWidget,
+    QTableWidgetItem,
+    QVBoxLayout,
+    QWidget,
+)
 
 from ..guiutil import enumerate_fields, fmt_value
 

@@ -3,15 +3,31 @@ from __future__ import annotations
 
 import matplotlib.pyplot as plt
 import numpy as np
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QHBoxLayout, QLabel,
-                               QPushButton, QSpinBox, QSplitter, QTabWidget,
-                               QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QSpinBox,
+    QSplitter,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from .. import presets
 from ..guiutil import make_pll, osc_bank_report, simulate_kwargs
 from ..plotting import plot_pn_breakdown
-from .widgets import (ConfigForm, FigList, MetricRow, Page, float_edit,
-                      in_scroll, table_from_rows)
+from .widgets import (
+    ConfigForm,
+    FigList,
+    MetricRow,
+    Page,
+    float_edit,
+    in_scroll,
+    table_from_rows,
+)
 
 
 class WorkbenchPage(Page):

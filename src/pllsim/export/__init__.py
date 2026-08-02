@@ -14,8 +14,6 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from pathlib import Path
 
-import numpy as np
-
 from ..arch.adpll import ADPLL
 from ..arch.cppll import CPPLL
 from ..arch.ilcm import ILCM
@@ -29,8 +27,16 @@ from .fixedpoint import FixedCoeff
 from .formatting import write_file
 from .manifest import emit_readme, flicker_delta_fs
 from .rnm import emit_rnm_library, emit_rnm_tb, emit_rnm_top
-from .rtl import (emit_bandselect, emit_dlf, emit_efm1, emit_fll, emit_ftl,
-                  emit_mash11, emit_mash111, emit_sslms)
+from .rtl import (
+    emit_bandselect,
+    emit_dlf,
+    emit_efm1,
+    emit_fll,
+    emit_ftl,
+    emit_mash11,
+    emit_mash111,
+    emit_sslms,
+)
 from .rtl import tb as rtl_tb
 
 

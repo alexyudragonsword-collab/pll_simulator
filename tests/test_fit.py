@@ -6,8 +6,7 @@ import numpy as np
 from pllsim import presets
 from pllsim.blocks.oscillator import OscConfig
 from pllsim.core.jitter import ldbc_from_sphi
-from pllsim.fit import (attribute_budget, fit_closed_loop, fit_leeson,
-                        load_pn_csv)
+from pllsim.fit import attribute_budget, fit_closed_loop, fit_leeson, load_pn_csv
 
 
 def test_load_pn_csv_formats():

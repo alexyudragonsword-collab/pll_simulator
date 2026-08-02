@@ -6,16 +6,22 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import matplotlib.pyplot as plt
 import streamlit as st
-
 from _common import L, show_fig, sidebar_lang_toggle
 
 st.set_page_config(page_title="Synthesis", layout="wide")
 sidebar_lang_toggle()
 
 from pllsim import presets
-from pllsim.synth import (cppll_kdet, design_adpll_dlf, design_cp_filter,
-                          design_spll_filter, design_sspll_filter, retune_loop,
-                          sweep_bandwidth, sweepable_presets)
+from pllsim.synth import (
+    cppll_kdet,
+    design_adpll_dlf,
+    design_cp_filter,
+    design_spll_filter,
+    design_sspll_filter,
+    retune_loop,
+    sweep_bandwidth,
+    sweepable_presets,
+)
 
 st.title(L("环路综合", "Loop synthesis"))
 tab_cp, tab_ss, tab_sp, tab_dlf, tab_sweep = st.tabs(

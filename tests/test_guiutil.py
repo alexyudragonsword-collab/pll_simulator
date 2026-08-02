@@ -4,9 +4,15 @@ import inspect
 import pytest
 
 from pllsim import presets
-from pllsim.guiutil import (apply_overrides, enumerate_fields, fmt_value,
-                            make_pll, osc_bank_report, parse_value,
-                            simulate_kwargs)
+from pllsim.guiutil import (
+    apply_overrides,
+    enumerate_fields,
+    fmt_value,
+    make_pll,
+    osc_bank_report,
+    parse_value,
+    simulate_kwargs,
+)
 
 
 def test_every_preset_enumerates():

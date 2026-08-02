@@ -6,15 +6,19 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import numpy as np
 import streamlit as st
-
-from _common import (L, changed_only, config_form, metric_row, show_fig,
-                     sidebar_lang_toggle)
+from _common import (
+    L,
+    changed_only,
+    config_form,
+    metric_row,
+    show_fig,
+    sidebar_lang_toggle,
+)
 
 st.set_page_config(page_title="Workbench", layout="wide")
 sidebar_lang_toggle()
 
 from pllsim import presets
-from pllsim.core.jitter import ldbc_from_sphi
 from pllsim.guiutil import make_pll, osc_bank_report, simulate_kwargs
 from pllsim.plotting import plot_pn_breakdown
 

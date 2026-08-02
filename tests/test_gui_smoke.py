@@ -11,7 +11,9 @@ import pytest
 st = pytest.importorskip("streamlit")
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
-GUI = Path(__file__).resolve().parents[1] / "gui"
+from pllsim.webgui import package_dir  # noqa: E402
+
+GUI = package_dir()
 PAGES = sorted(p.name for p in (GUI / "pages").glob("*.py"))
 
 

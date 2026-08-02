@@ -228,8 +228,8 @@ def test_adpll_tdc_tabulates_its_fractional_spur():
 
 
 def test_selector_will_not_recommend_an_engine_that_cannot_modulate():
-    from pllsim.selector import Requirement, select
     from pllsim.modulation import supports_two_point, two_point_presets
+    from pllsim.selector import Requirement, select
     rep = select(Requirement(fref=40e6, fout=5.0125e9, jitter_fs_max=2000,
                              modulation=True))
     for c in rep.candidates:

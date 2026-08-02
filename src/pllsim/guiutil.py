@@ -225,6 +225,18 @@ def _rebuild_calibrators(cfg):
                 mu_final=getattr(v, "mu_final", None)))
 
 
+def frac_presets() -> list[str]:
+    """Preset names with a fractional-N configuration.
+
+    Derived, because four hardcoded copies of this list (two pages in each
+    GUI) all still named the same four presets after v0.5.3 added three more
+    fractional ones — so half the fractional presets were unreachable from
+    the spur and drift pages.
+    """
+    return [n for n, f in presets.ALL_PRESETS.items()
+            if getattr(f().cfg, "frac", None) is not None]
+
+
 def make_pll(preset_name: str, overrides: dict[str, str] | None = None):
     """Fresh preset instance with optional field overrides applied."""
     pll = presets.ALL_PRESETS[preset_name]()
@@ -306,13 +318,14 @@ def mc_build_frac_cppll(rng, s_mismatch: float = 1.5, s_leak: float = 2e-9,
                         s_kvco: float = 3e6, n_cycles: int = 150_000):
     """Module-level MC build (picklable for ProcessPoolExecutor) — the ex11
     fractional-N CPPLL with per-chip draws; sigmas adjustable from the GUI."""
+    import numpy as np
+
     from .arch.cppll import CPPLL, CPPLLConfig, FracConfig
     from .blocks.chargepump import CPConfig
     from .blocks.dtc import DTCConfig
     from .blocks.loopfilter import FilterDesign
     from .blocks.oscillator import OscConfig
     from .calibration.lms import SignSignLMS
-    import numpy as np
 
     mismatch = rng.normal(0.0, s_mismatch)
     leakage = abs(rng.normal(0.0, s_leak))
