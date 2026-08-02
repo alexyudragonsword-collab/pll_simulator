@@ -90,3 +90,40 @@ def test_spll_filter_carries_the_divider_referral():
     # must halve the capacitance to hold the same UGB
     assert abs(a.c1 / b.c1 - 2.0) < 0.05
     assert abs(b.r2 / a.r2 - 2.0) < 0.05        # ... and double R2 for the zero
+
+
+@pytest.mark.parametrize("name", ["cppll_19p2m_4p8g", "sspll_19p2m_4p8g",
+                                  "spll_100m_8g", "adpll_100m_10g",
+                                  "adpll_bb_100m_10g"])
+def test_retune_loop_hits_the_target_on_every_architecture(name):
+    from pllsim import presets
+    from pllsim.synth import retune_loop
+    pll = presets.ALL_PRESETS[name]()
+    target = min(1e6, pll.cfg.fref / 20)
+    m = retune_loop(pll, target).analyze().loop
+    assert abs(np.log(m.f_ugb / target)) < 0.05
+
+
+def test_retune_loop_refuses_the_filterless_architectures():
+    """ILCM/MDLL bandwidth is edge realignment, not a filter — say so."""
+    from pllsim import presets
+    from pllsim.synth import retune_loop, sweepable_presets
+    for name in ("ilcm_250m_12g", "mdll_150m_2p4g"):
+        with pytest.raises(TypeError, match="no loop filter"):
+            retune_loop(presets.ALL_PRESETS[name](), 1e6)
+        assert name not in sweepable_presets()
+    assert len(sweepable_presets()) == len(presets.ALL_PRESETS) - 2
+
+
+def test_bang_bang_retune_beats_the_normalized_coefficients():
+    """A BB loop needs the Kbb-dependent gain, not the TDC coefficients."""
+    from dataclasses import replace
+    from pllsim import presets
+    from pllsim.synth import design_adpll_dlf, retune_loop
+    naive = presets.ALL_PRESETS["adpll_bb_100m_10g"]()
+    a, r = design_adpll_dlf(naive.cfg.fref, 1e6, 55.0,
+                            iir_lambdas=naive.cfg.dlf.iir_lambdas)
+    naive.cfg.dlf = replace(naive.cfg.dlf, alpha=a, rho=r)
+    assert naive.analyze().loop.f_ugb < 0.3e6        # ~75 kHz, not 1 MHz
+    tuned = retune_loop(presets.ALL_PRESETS["adpll_bb_100m_10g"](), 1e6)
+    assert abs(tuned.analyze().loop.f_ugb / 1e6 - 1) < 0.05

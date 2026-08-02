@@ -14,8 +14,8 @@ sidebar_lang_toggle()
 
 from pllsim import presets
 from pllsim.synth import (cppll_kdet, design_adpll_dlf, design_cp_filter,
-                          design_spll_filter, design_sspll_filter,
-                          sweep_bandwidth)
+                          design_spll_filter, design_sspll_filter, retune_loop,
+                          sweep_bandwidth, sweepable_presets)
 
 st.title(L("环路综合", "Loop synthesis"))
 tab_cp, tab_ss, tab_sp, tab_dlf, tab_sweep = st.tabs(
@@ -105,33 +105,28 @@ with tab_dlf:
 with tab_sweep:
     st.caption(L("对 preset 扫 UGB，找 jitter 最优带宽（ex07）",
                  "sweep UGB on a preset for the jitter-optimal BW (ex07)"))
-    nm = st.selectbox("preset", ["sspll_19p2m_4p8g", "cppll_19p2m_4p8g",
-                                 "spll_100m_8g"])
-    lo = float(st.text_input("UGB from [Hz]", "2e5"))
-    hi = float(st.text_input("UGB to [Hz]", "3e6"))
-    npts = int(st.number_input("points", 4, 20, 8))
+    names = sweepable_presets()
+    nm = st.selectbox("preset", names,
+                      index=names.index("sspll_19p2m_4p8g")
+                      if "sspll_19p2m_4p8g" in names else 0)
+    st.caption(L(f"{len(names)}/{len(presets.ALL_PRESETS)} 个 preset 可扫："
+                 "ILCM/MDLL 没有可重新综合的环路",
+                 f"{len(names)} of {len(presets.ALL_PRESETS)} presets: "
+                 "ILCM/MDLL have no loop to re-synthesize"))
+    cc = st.columns(4)
+    lo = float(cc[0].text_input("UGB from [Hz]", "2e5"))
+    hi = float(cc[1].text_input("UGB to [Hz]", "3e6"))
+    npts = int(cc[2].number_input("points", 4, 20, 8))
+    pm_txt = cc[3].text_input(L("PM [deg]（留空=架构默认）",
+                                "PM [deg] (blank = arch default)"), "")
+    pm_sw = float(pm_txt) if pm_txt.strip() else None
     if st.button("Sweep", key="sw"):
         import numpy as np
         ugbs = np.geomspace(lo, hi, npts)
 
         def mk(f_ugb, name=nm):
-            pll = presets.ALL_PRESETS[name]()
-            c = pll.cfg
-            if name.startswith("sspll"):
-                s = c.sampler
-                c.filt = design_sspll_filter(
-                    s.amp_v * s.gm * s.pulse_width, c.osc.gain, f_ugb,
-                    60.0, c.fref)
-            elif name.startswith("spll"):
-                s = c.sampler
-                c.filt = design_spll_filter(
-                    s.amp_v, s.gm, s.pulse_width, c.n_div, c.osc.gain,
-                    f_ugb, 60.0, c.fref)
-            else:
-                c.filt = design_cp_filter(
-                    cppll_kdet(c.cp.icp, c.n_div), c.osc.gain, f_ugb,
-                    58.0, c.fref)
-            return pll
+            # every point is a fresh preset retuned to this UGB at constant PM
+            return retune_loop(presets.ALL_PRESETS[name](), f_ugb, pm_sw)
 
         with st.spinner("sweeping..."):
             res = sweep_bandwidth(mk, ugbs)

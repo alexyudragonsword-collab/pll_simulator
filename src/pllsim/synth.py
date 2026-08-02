@@ -217,6 +217,84 @@ def design_adpll_dlf(fref: float, f_ugb: float, pm_deg: float,
 
 
 # ------------------------------------------------------------------ sweeps
+_DEFAULT_PM = {"CPPLL": 58.0, "SSPLL": 60.0, "SPLL": 60.0, "ADPLL": 55.0}
+
+
+def retune_loop(pll, f_ugb: float, pm_deg: float | None = None):
+    """Re-synthesize a PLL's loop for a new (f_ugb, pm_deg), in place.
+
+    The piece a bandwidth sweep needs and every caller otherwise hand-rolls:
+    each architecture keeps its loop in a different object (a passive filter,
+    a PI coefficient pair) and refers its detector gain differently, so
+    "same loop, different bandwidth" is per-architecture work.
+
+    Raises TypeError for ILCM/MDLL, which have no loop to re-synthesize:
+    their bandwidth is set by per-cycle edge realignment, not by a filter.
+    """
+    c = pll.cfg
+    kind = type(pll).__name__
+    pm = _DEFAULT_PM.get(kind, 58.0) if pm_deg is None else pm_deg
+    if kind == "CPPLL":
+        c.filt = design_cp_filter(cppll_kdet(c.cp.icp, c.n_div), c.osc.gain,
+                                  f_ugb, pm, c.fref)
+    elif kind == "SSPLL":
+        s = c.sampler
+        c.filt = design_sspll_filter(s.amp_v * s.gm * s.pulse_width,
+                                     c.osc.gain, f_ugb, pm, c.fref)
+    elif kind == "SPLL":
+        s = c.sampler
+        c.filt = design_spll_filter(s.amp_v, s.gm, s.pulse_width, c.n_div,
+                                    c.osc.gain, f_ugb, pm, c.fref)
+    elif kind == "ADPLL":
+        _retune_adpll(pll, f_ugb, pm)
+    else:
+        raise TypeError(f"{kind} has no loop filter to synthesize: its "
+                        "bandwidth comes from per-cycle edge realignment, "
+                        "and only the frequency-tracking gain is tunable")
+    return pll
+
+
+def _retune_adpll(pll, f_ugb: float, pm_deg: float) -> None:
+    """PI coefficients for a digital loop, bang-bang included.
+
+    design_adpll_dlf() solves the loop with a NORMALIZED detector, which the
+    TDC mode is.  A bang-bang detector is not: its Gaussian-linearized gain
+    Kbb = sqrt(2/pi)/sigma_t is set by the jitter at its input, which the loop
+    itself shapes -- so the coefficients that would give 1 MHz in a TDC loop
+    give 75 kHz in the bang-bang one.  Scaling alpha and rho together moves
+    the crossover while leaving the PI zero where the synthesis put it, so a
+    few gain iterations recover both targets (self-consistent, hence a loop
+    rather than a closed form).
+    """
+    from dataclasses import replace
+    c = pll.cfg
+    alpha, rho = design_adpll_dlf(c.fref, f_ugb, pm_deg,
+                                  iir_lambdas=c.dlf.iir_lambdas)
+    if getattr(c, "mode", "tdc") == "tdc":
+        c.dlf = replace(c.dlf, alpha=alpha, rho=rho)
+        return
+    gain = 1.0
+    for _ in range(15):
+        c.dlf = replace(c.dlf, alpha=alpha * gain, rho=rho * gain)
+        got = pll.analyze().loop.f_ugb
+        if not np.isfinite(got) or got <= 0:
+            raise RuntimeError("bang-bang loop has no crossover at this gain")
+        if abs(np.log(got / f_ugb)) < 0.02:
+            return
+        gain *= f_ugb / got
+    raise RuntimeError(f"bang-bang DLF retune did not converge on {f_ugb:.3g} Hz")
+
+
+def sweepable_presets() -> list[str]:
+    """Preset names whose loop retune_loop() can re-synthesize."""
+    from . import presets as _p
+    out = []
+    for name, factory in _p.ALL_PRESETS.items():
+        if type(factory()).__name__ in _DEFAULT_PM:
+            out.append(name)
+    return out
+
+
 def sweep_bandwidth(make_pll, f_ugb_list, int_band=None):
     """Analyze a pll factory across UGB targets.
 

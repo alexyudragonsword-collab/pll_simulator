@@ -3,13 +3,15 @@ from __future__ import annotations
 
 import matplotlib.pyplot as plt
 import numpy as np
-from PySide6.QtWidgets import (QCheckBox, QFormLayout, QHBoxLayout, QLabel,
-                               QPushButton, QTabWidget, QVBoxLayout, QWidget)
+from PySide6.QtWidgets import (QCheckBox, QComboBox, QFormLayout, QHBoxLayout,
+                               QLabel, QPushButton, QTabWidget, QVBoxLayout,
+                               QWidget)
 
 from .. import presets
 from ..selector import Requirement, select
 from ..synth import (cppll_kdet, design_adpll_dlf, design_cp_filter,
-                     design_spll_filter, design_sspll_filter, sweep_bandwidth)
+                     design_spll_filter, design_sspll_filter, retune_loop,
+                     sweep_bandwidth, sweepable_presets)
 from .widgets import (FigList, Page, float_edit, in_scroll, table_from_rows)
 
 
@@ -119,13 +121,23 @@ class SynthesisPage(Page):
         # ---- bandwidth sweep
         sw = QWidget()
         f4 = QFormLayout(sw)
+        names = sweepable_presets()
+        self.sw_preset = QComboBox()
+        self.sw_preset.addItems(names)
+        if "sspll_19p2m_4p8g" in names:
+            self.sw_preset.setCurrentText("sspll_19p2m_4p8g")
         self.sw_lo = float_edit("2e5")
         self.sw_hi = float_edit("3e6")
         self.sw_n = float_edit("8")
-        for lab, w in [("UGB from [Hz]", self.sw_lo),
-                       ("UGB to [Hz]", self.sw_hi), ("points", self.sw_n)]:
+        self.sw_pm = float_edit("")          # blank = per-architecture default
+        for lab, w in [("preset", self.sw_preset),
+                       ("UGB from [Hz]", self.sw_lo),
+                       ("UGB to [Hz]", self.sw_hi), ("points", self.sw_n),
+                       ("PM [deg] (blank = arch default)", self.sw_pm)]:
             f4.addRow(lab, w)
-        self.sw_btn = QPushButton("Sweep sspll_19p2m_4p8g")
+        f4.addRow(QLabel(f"{len(names)} of {len(presets.ALL_PRESETS)} presets: "
+                         "ILCM/MDLL have no loop to re-synthesize"))
+        self.sw_btn = QPushButton("Sweep")
         f4.addRow(self.sw_btn)
         self.sw_figs = FigList()
         f4.addRow(self.sw_figs)
@@ -184,14 +196,13 @@ class SynthesisPage(Page):
                                 float(self.sw_hi.text()),
                                 int(float(self.sw_n.text())))
 
+            name = self.sw_preset.currentText()
+            pm_txt = self.sw_pm.text().strip()
+            pm = float(pm_txt) if pm_txt else None
+
             def mk(f_ugb):
-                pll = presets.ALL_PRESETS["sspll_19p2m_4p8g"]()
-                c = pll.cfg
-                s = c.sampler
-                c.filt = design_sspll_filter(
-                    s.amp_v * s.gm * s.pulse_width, c.osc.gain, f_ugb,
-                    60.0, c.fref)
-                return pll
+                # each point is a fresh preset retuned to this UGB, same PM
+                return retune_loop(presets.ALL_PRESETS[name](), f_ugb, pm)
             return sweep_bandwidth(mk, ugbs)
 
         def done(res):
