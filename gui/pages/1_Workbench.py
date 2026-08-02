@@ -111,6 +111,8 @@ with col_s:
              if sim.lock_time_s is not None else "-"),
             ("f_end", f"{sim.freq_out[-1] / 1e9:.6f} GHz"),
         ])
+        for note in sim.notes:      # e.g. "still settling" — the jitter above
+            st.warning(note)        # then includes a calibration transient
         show_fig(plot_pn_breakdown(st.session_state["wb_ar_overlay"], sim))
         import matplotlib.pyplot as plt
         fig, (a1, a2) = plt.subplots(2, 1, figsize=(8, 5), sharex=True)
