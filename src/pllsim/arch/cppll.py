@@ -29,7 +29,7 @@ from ..core.noise import (
     output_psd,
 )
 from ..core.results import AnalysisResult, SimResult
-from .base import PLLBase
+from .base import PLLBase, run_band_select, supply_ripple_v
 
 TWOPI = 2.0 * np.pi
 
@@ -226,29 +226,15 @@ class CPPLL(PLLBase):
 
         lf = LoopFilter(c.filt, tref)
         osc = Oscillator(c.osc, c.fref, rng, noise=noise)
-        band_trace = None
-        if c.osc.n_bands > 1 and band_select:
-            from ..calibration.gain_cal import BandSelect
-            bs = BandSelect(c.osc.n_bands, c.fout)
-            while not bs.done:
-                osc.band = bs.band
-                f_meas = osc.freq(0.0)
-                if noise:   # counter accuracy over meas_n reference cycles
-                    f_meas += rng.normal(0.0, c.fref / (bs.meas_n * np.sqrt(12)))
-                bs.observe(f_meas)
-            osc.band = bs.band
-            band_trace = np.asarray(bs.trace, dtype=float)
+        band_trace = run_band_select(osc, c, rng, noise, band_select)
+        if band_trace is not None:
             lf.reset(f_start_offset / c.osc.gain)   # vctrl starts mid-band
         else:
             lf.reset(c.osc.v_for(c.fout) + f_start_offset / c.osc.gain)
         cp = ChargePump(c.cp, tref, rng, noise=noise)
         cp.prime_flicker(n_cycles)      # 1/f charge sequence for this run
 
-        if supply_ripple is not None:
-            amp_sup, f_sup = supply_ripple
-            v_sup = amp_sup * np.sin(TWOPI * f_sup * np.arange(n_cycles) * tref)
-        else:
-            v_sup = np.zeros(n_cycles)
+        v_sup = supply_ripple_v(supply_ripple, n_cycles, tref)
 
         # pre-synthesized reference + divider phase-noise time jitter [s]
         if noise:
