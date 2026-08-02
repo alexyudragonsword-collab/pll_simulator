@@ -21,7 +21,7 @@ from ..core.colored import synth_from_psd
 from ..core.engine import detect_lock, postprocess
 from ..core.freqresp import FreqResponse, default_grid, loop_metrics
 from ..core.jitter import ipn_dbc, rms_jitter_fs
-from ..core.noise import (CurrentNoise, FlickerFloorPhase, NoisePath,
+from ..core.noise import (FlickerFloorPhase, NoisePath, SampledChargeNoise,
                           ResistorNoise, SampledKTC, output_psd)
 from ..core.results import AnalysisResult, SimResult
 from .base import PLLBase
@@ -99,9 +99,11 @@ class SPLL(PLLBase):
             NoisePath(SampledKTC(name="sampler_ktc", unit="V^2/Hz",
                                  c_farad=s.c_samp, fs=c.fref),
                       h * (n / s.amp_v)),
-            NoisePath(CurrentNoise(name="gm", unit="A^2/Hz", i2=s.gm_i2(),
-                                   duty=duty),
-                      h * (n / k_cp)),
+            # one charge packet per reference cycle: sampled, not duty-cycled
+            NoisePath(SampledChargeNoise(name="gm", unit="C^2/Hz",
+                                         i2=s.gm_i2(), tau=s.pulse_width,
+                                         fs=c.fref),
+                      h * (n / (s.amp_v * s.gm * s.pulse_width))),
             NoisePath(ResistorNoise(name="lf_r2", unit="V^2/Hz", r_ohm=c.filt.r2),
                       FreqResponse(f, self._r2_tf(f)) * vco_int * err),
             NoisePath(c.osc.leeson("vco"), err),
@@ -129,7 +131,8 @@ class SPLL(PLLBase):
         bd = output_psd(paths, f)
         dq = abs(s.gm * s.pedestal_v * s.pulse_width)
         zf = np.interp(np.log10(c.fref), np.log10(f), np.abs(z.h))
-        beta = c.osc.gain * 2.0 * dq * c.fref * zf / (2.0 * c.fref)
+        # peak ripple 2*dq*fref*|Z(fref)|; sideband = beta/2, beta = Kvco*V1/fref
+        beta = c.osc.gain * (2.0 * dq * c.fref * zf) / c.fref
         spurs = {"ref_spur": float(20 * np.log10(max(beta / 2, 1e-30)))}
         if c.frac is not None:
             from ..core.dtcspurs import dtc_spur_table

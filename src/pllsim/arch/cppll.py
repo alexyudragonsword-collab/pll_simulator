@@ -21,7 +21,8 @@ from ..core.engine import detect_lock, postprocess
 from ..core.freqresp import FreqResponse, default_grid, loop_metrics
 from ..core.jitter import integrate_pn, ipn_dbc, rms_jitter_fs
 from ..core.noise import (CurrentNoise, FlickerFloorPhase, NoisePath,
-                          ResistorNoise, ShapedQuantization, output_psd)
+                          NoiseSource, ResistorNoise, ShapedQuantization,
+                          output_psd)
 from ..core.results import AnalysisResult, SimResult
 from .base import PLLBase
 
@@ -143,6 +144,14 @@ class CPPLL(PLLBase):
                         ShapedQuantization(name="dtc_quant", unit="rad^2/Hz",
                                            q=TWOPI * q_dtc * c.fout, fs=c.fref, order=0),
                         h_lp))
+                # DTC.delay adds this in the time domain every cycle, so the
+                # budget has to carry it too (sampled -> 2*sigma^2/fref)
+                j_dtc = getattr(c.frac.dtc, "jitter_rms_s", 0.0)
+                if j_dtc > 0:
+                    paths.append(NoisePath(
+                        NoiseSource(name="dtc_jitter", unit="rad^2/Hz",
+                                    level=2.0 * (TWOPI * c.fout * j_dtc) ** 2
+                                    / c.fref), h_lp))
             paths.append(NoisePath(dsm_src, ntf_dsm))
 
         m = loop_metrics(gol)
@@ -189,8 +198,9 @@ class CPPLL(PLLBase):
         dq = abs(c.cp.icp * 0.01 * c.cp.mismatch_pct * c.cp.t_reset) \
             + abs(c.cp.leakage_a / c.fref)
         zf = np.interp(np.log10(c.fref), np.log10(z.f), np.abs(z.h))
-        v1 = 2.0 * dq * c.fref * zf
-        beta = c.osc.gain * v1 / (2.0 * c.fref)   # FM modulation index
+        # dq once per period -> fundamental of PEAK current 2*dq*fref
+        v1 = 2.0 * dq * c.fref * zf               # peak control ripple [V]
+        beta = c.osc.gain * v1 / c.fref           # FM modulation index
         return float(20.0 * np.log10(max(beta / 2.0, 1e-30)))
 
     # ----------------------------------------------------------- simulation
