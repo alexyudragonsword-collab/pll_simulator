@@ -159,6 +159,25 @@ def design_sspll_filter(k_q: float, kvco_hz_v: float, f_ugb: float,
     return filt
 
 
+def design_spll_filter(amp_v: float, gm: float, pulse_width: float,
+                       n_div: float, kvco_hz_v: float, f_ugb: float,
+                       pm_deg: float, fref: float,
+                       third_pole_ratio: float = 8.0) -> FilterDesign:
+    """Passive filter for a reference-sampling PLL hitting (f_ugb, pm_deg).
+
+    Same discrete loop as the sub-sampling case -- charge impulse into the
+    filter, z-accumulator, ZOH -- so it is solved by the same routine.  The
+    one difference is where the phase is measured: a sub-sampling PD sees the
+    output phase directly, while a sampling PLL samples the reference and
+    closes through the divider, which divides the detector gain by N.  Getting
+    that referral wrong is a factor-N error in the loop gain, which is why it
+    is a parameter here rather than something the caller pre-multiplies.
+    """
+    return design_sspll_filter(amp_v * gm * pulse_width / n_div, kvco_hz_v,
+                               f_ugb, pm_deg, fref,
+                               third_pole_ratio=third_pole_ratio)
+
+
 # ------------------------------------------------------------------ ADPLL
 def _adpll_gol(f: np.ndarray, alpha: float, rho: float, fref: float,
                iir_lambdas: tuple) -> FreqResponse:
