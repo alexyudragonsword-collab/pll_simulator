@@ -95,7 +95,10 @@ class MDLL(PLLBase):
         m = LoopMetrics(f_ugb=f_c, pm_deg=float("nan"), gm_db=float("inf"),
                         f_3db=f_c, peaking_db=0.0, n_crossings=1)
         dphi = TWOPI * f_free_error / c.fref
-        spurs = {"ref_spur": injection_spur_dbc(dphi, 1.0)}
+        # nothing to report without a residual frequency error to make a
+        # sawtooth out of; -600 dBc reads as "spurless by design"
+        spurs = ({"ref_spur": injection_spur_dbc(dphi, 1.0)}
+                 if f_free_error else {})
         notes = [f"edge replacement: oscillator noise highpassed with corner "
                  f"~fref/pi = {f_c / 1e6:.1f} MHz (beta=1 limit of the ILCM)"]
         return AnalysisResult(f=f, f0=c.fout, pn_breakdown=bd, loop=m,
@@ -132,7 +135,7 @@ class MDLL(PLLBase):
         for nn in range(n_cycles):
             d_osc = osc_noise[nn] - prev_on
             prev_on = osc_noise[nn]
-            f_free = c.osc.f0 + c.osc.gain * tune_acc + f_free_error
+            f_free = c.osc.freq_law(tune_acc) + f_free_error
             dphi_drift = TWOPI * (f_free - c.fout) * tref
             e_pre = e + dphi_drift + d_osc
             if fine is not None:
@@ -169,4 +172,11 @@ class MDLL(PLLBase):
             sim.jitter_fs = rms_jitter_fs(
                 f_p, s_p, c.fout,
                 max(c.int_band[0], f_p[0]), min(c.int_band[1], 0.45 * m_os * c.fref))
+            sim.notes.append(
+                f"jitter integrated on the {m_os}x oversampled phase "
+                "(includes intra-period accumulation)")
+        else:
+            sim.notes.append("jitter integrated at the reference rate: "
+                             "intra-period accumulation is NOT included — "
+                             "pass fine_oversample>1 to capture it")
         return sim

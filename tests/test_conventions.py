@@ -61,21 +61,20 @@ def test_sampler_gm_noise_agrees_across_domains(preset, source):
     assert 0.85 < ratio < 1.15, f"gm noise off by {20 * np.log10(ratio):.1f} dB"
 
 
-def test_charge_pump_noise_agrees_across_domains():
-    """The reference the sampler path is compared against.
+@pytest.mark.parametrize("fc", [0.0, 100e3, 1e6])
+def test_charge_pump_noise_agrees_across_domains(fc):
+    """The reference the sampler path is compared against — flicker included.
 
-    White term only: `ChargePump.charge` injects a white charge and nothing
-    else, while `noise_source()` also carries a 1/f corner, so a run with the
-    default corner reads ~2 dB low for a reason that has nothing to do with
-    the sampled-injection convention under test here.
+    noise_source() has always carried a 1/f corner into analyze(); the time
+    domain injected white charge only, so a default-corner run read ~2 dB low.
     """
     def make():
         p = presets.cppll_19p2m_4p8g()
-        p.cfg.cp = replace(p.cfg.cp, flicker_corner=0.0)
+        p.cfg.cp = replace(p.cfg.cp, flicker_corner=fc)
         return p
     share, ratio = _dominance_and_ratio(make, "cp", "cp.noise_a2hz", 1e-19)
     assert share > 0.9
-    assert 0.85 < ratio < 1.15
+    assert 0.85 < ratio < 1.15, f"CP off by {20 * np.log10(ratio):.1f} dB"
 
 
 def test_reference_spur_is_the_narrowband_fm_sideband():
@@ -165,3 +164,78 @@ def test_unconverged_calibration_is_flagged_not_silently_reported():
     long = presets.bench_dartizio23_adpllbb_500m_9p2515g().simulate(250_000, seed=1)
     assert long.jitter_fs < 150
     assert not any("still settling" in n for n in long.notes)
+
+
+# ------------------------------------------- knobs that only some engines read
+@pytest.mark.parametrize("preset", ["cppll_19p2m_4p8g", "sspll_19p2m_4p8g",
+                                    "spll_100m_8g", "adpll_100m_10g",
+                                    "mdll_150m_2p4g"])
+def test_tuning_nonlinearity_reaches_every_engine_that_has_a_tuning_law(preset):
+    """nl1/nl2 live on the shared OscConfig, so an engine that computes
+    f0 + gain*ctrl by hand accepts them and ignores them."""
+    # a locked loop lands on fout whatever the tuning law is, so the tell is
+    # the settled CONTROL value: it has to move to compensate the compression
+    p = presets.ALL_PRESETS[preset]()
+    base = p.simulate(20_000, seed=1).ctrl[-2000:].mean()
+    q = presets.ALL_PRESETS[preset]()
+    v = q.cfg.osc.v_for(q.cfg.fout)
+    q.cfg.osc = replace(q.cfg.osc, nl1=-0.2 / max(abs(v), 1e-9))
+    moved = q.simulate(20_000, seed=1).ctrl[-2000:].mean()
+    assert abs(moved - base) > 0.01 * max(abs(base), 1e-9), (
+        f"{preset} ignores Kvco nonlinearity: control settled at {base:.6g} "
+        f"either way")
+
+
+def test_ilcm_rejects_tuning_knobs_it_cannot_honour():
+    """The ILCM's FTL corrects frequency directly in Hz — there is no v->f law
+    for nl1/nl2/v_max to act on, so accepting them would be a silent no-op."""
+    from pllsim.arch.ilcm import ILCMConfig
+    c = presets.ilcm_250m_12g().cfg
+    with pytest.raises(ValueError, match="does not evaluate a tuning law"):
+        ILCMConfig(fref=c.fref, fout=c.fout, osc=replace(c.osc, nl1=-0.05))
+    with pytest.raises(ValueError, match="does not evaluate a tuning law"):
+        ILCMConfig(fref=c.fref, fout=c.fout, osc=replace(c.osc, v_max=1.0))
+
+
+def test_realignment_architectures_report_the_same_jitter_quantity():
+    """ILCM and MDLL both reset accumulated phase once per reference period,
+    so both must integrate the oversampled phase or neither does."""
+    il = presets.ilcm_250m_12g().simulate(40_000, seed=1)
+    md = presets.mdll_150m_2p4g().simulate(40_000, seed=1)
+    for sim in (il, md):
+        assert sim.spurs_fft, "no spur table: fine_oversample disabled"
+        assert any("intra-period" in n for n in sim.notes), sim.notes
+    coarse = presets.ilcm_250m_12g().simulate(40_000, seed=1, fine_oversample=0)
+    assert any("NOT included" in n for n in coarse.notes)
+
+
+def test_no_spur_reported_when_there_is_nothing_to_report():
+    """-600 dBc from log10(1e-30) reads as 'spurless by design'."""
+    for nm in ("ilcm_250m_12g", "mdll_150m_2p4g"):
+        assert presets.ALL_PRESETS[nm]().analyze().spurs_analytic == {}
+    ar = presets.ilcm_250m_12g().analyze(f_free_error=2e6)
+    assert -60 < ar.spurs_analytic["inj_spur_ref_offset"] < 0
+
+
+def test_adpll_tdc_tabulates_its_fractional_spur():
+    """TDC mode takes a fractional FCW natively, so the beat is really there."""
+    p = presets.adpll_100m_10g()
+    assert p.cfg.fcw % 1.0 > 0
+    assert any("fractional FCW" in n for n in p.analyze().notes)
+    spurs = [v for v in p.simulate(200_000, seed=1).spurs_fft.values()
+             if np.isfinite(v)]
+    assert spurs and max(spurs) > -90      # ~-72 dBc at 0.6 MHz
+
+
+def test_selector_will_not_recommend_an_engine_that_cannot_modulate():
+    from pllsim.selector import Requirement, select
+    from pllsim.modulation import supports_two_point, two_point_presets
+    rep = select(Requirement(fref=40e6, fout=5.0125e9, jitter_fs_max=2000,
+                             modulation=True))
+    for c in rep.candidates:
+        if c.feasible:
+            assert supports_two_point(c.pll)
+    assert rep.best is not None and supports_two_point(rep.best.pll)
+    # and the GUIs read the same predicate rather than their own name list
+    assert "adpll_bb_100m_10g" not in two_point_presets()
+    assert "adpll_100m_10g" in two_point_presets()

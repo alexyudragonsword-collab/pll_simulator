@@ -147,6 +147,18 @@ class ADPLL(PLLBase):
         if m.f_ugb > c.fref / 10:
             notes.append("UGB > fref/10: discrete loop peaking significant")
         spurs = {}
+        if c.mode == "tdc" and c.fcw % 1.0 > 1e-9:
+            # no DTC to replay, so there is no deterministic code sequence to
+            # project: the beat is set by TDC nonlinearity, which analyze()
+            # does not model.  simulate() measures it -- say so rather than
+            # publish an empty table that reads as "no spurs".
+            offs = frac_spur_offsets(c.fcw % 1.0, c.fref)
+            where = (f"{min(offs) / 1e6:.3f} MHz and {len(offs) - 1} more"
+                     if offs else "fold(k*frac)*fref")
+            notes.append(
+                f"fractional FCW: beats at {where} are set by TDC "
+                "nonlinearity, which the linear budget does not model — read "
+                "spurs_fft from simulate()")
         if c.mode == "dtc_bbpd" and c.frac.dtc is not None:
             from ..core.dtcspurs import dtc_spur_table
             eps = getattr(c.frac.dtc, "gain_error_residual", 0.01)
@@ -269,7 +281,7 @@ class ADPLL(PLLBase):
         phase_err = np.empty(n_cycles)
         freq_out = np.empty(n_cycles)
         otw_rec = np.empty(n_cycles)
-        fv = c.osc.f0 + c.osc.gain * otw_center
+        fv = c.osc.freq_law(otw_center)
 
         for n in range(n_cycles):
             d_phi_n = (osc_noise[n] - prev_phi_n) / TWOPI     # UI
@@ -319,7 +331,7 @@ class ADPLL(PLLBase):
                 qerr = otw + qerr - otw_q
             else:
                 otw_q = np.round(otw)
-            fv = c.osc.f0 + c.osc.gain * otw_q
+            fv = c.osc.freq_law(otw_q)   # Kdco nonlinearity + OTW range
 
             phase_err[n] = TWOPI * (phi_v - (n + 1) * fcw)
             freq_out[n] = fv
@@ -333,7 +345,12 @@ class ADPLL(PLLBase):
             sim.cal_traces["kdco_hat"] = np.asarray(kdco_cal.trace)
         if tdc_cal is not None:
             sim.cal_traces["tdc_cpp"] = np.asarray(tdc_cal.trace)
-        return postprocess(sim, int_band=c.int_band)
+        # TDC mode takes a fractional FCW natively (no MASH, no DTC), so the
+        # fractional beat lands in the spectrum just as it does everywhere
+        # else -- tabulate it instead of leaving the user to find it by eye
+        frac = c.fcw % 1.0
+        offs = frac_spur_offsets(frac, c.fref) if frac > 1e-9 else None
+        return postprocess(sim, int_band=c.int_band, spur_offsets=offs)
 
     def _sim_bbpd(self, n_cycles, noise, calibration, seed, f_start_offset,
                   dtc_gain_init_error, dtc_gain_drift=None):
@@ -368,7 +385,7 @@ class ADPLL(PLLBase):
         freq_out = np.empty(n_cycles)
         otw_rec = np.empty(n_cycles)
         cal_trace = np.empty(n_cycles) if dtc_cal is not None else None
-        fv = c.osc.f0 + c.osc.gain * otw_center
+        fv = c.osc.freq_law(otw_center)
 
         for n in range(n_cycles):
             t_ref = n * tref + jit_ref[n]
@@ -391,7 +408,7 @@ class ADPLL(PLLBase):
                 qerr = otw + qerr - otw_q
             else:
                 otw_q = np.round(otw)
-            fv = c.osc.f0 + c.osc.gain * otw_q
+            fv = c.osc.freq_law(otw_q)   # Kdco nonlinearity + OTW range
 
             n_next = n_int + mash.step(frac_word)
             d_osc = osc_noise[n] - prev_phi_n

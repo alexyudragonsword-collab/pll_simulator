@@ -237,6 +237,7 @@ class CPPLL(PLLBase):
         else:
             lf.reset(c.osc.v_for(c.fout) + f_start_offset / c.osc.gain)
         cp = ChargePump(c.cp, tref, rng, noise=noise)
+        cp.prime_flicker(n_cycles)      # 1/f charge sequence for this run
 
         if supply_ripple is not None:
             amp_sup, f_sup = supply_ripple

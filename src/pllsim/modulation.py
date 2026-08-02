@@ -101,3 +101,25 @@ def prbs(n: int, seed: int = 1) -> np.ndarray:
         state = ((state << 1) | bit) & 0x7FFF
         out[i] = bit
     return out
+
+
+def supports_two_point(pll) -> bool:
+    """Whether this instance's engine actually injects mod_freq.
+
+    Asked of the object rather than kept as a list of names, because the
+    answer depends on the mode as well as the class: ADPLL takes mod_freq in
+    TDC mode and rejects it in bang-bang mode.  Three places used to hold
+    their own copy of this fact (the selector, and each GUI's modulation
+    page), which is how the selector came to recommend architectures whose
+    engine cannot modulate.
+    """
+    import inspect
+    if "mod_freq" not in inspect.signature(type(pll).simulate).parameters:
+        return False
+    return getattr(pll.cfg, "mode", "tdc") != "dtc_bbpd"
+
+
+def two_point_presets() -> list[str]:
+    """Preset names whose engine can run a two-point modulation."""
+    from . import presets as _p
+    return [n for n, f in _p.ALL_PRESETS.items() if supports_two_point(f())]
