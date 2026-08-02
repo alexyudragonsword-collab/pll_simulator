@@ -670,7 +670,7 @@ def emit_rnm_tb(name: str, cols: list[str], fref: float, n: int,
                 int_cols: tuple[str, ...] = ()) -> str:
     """Golden-CSV self-checking testbench (run on Cadence: xrun -sv ...)."""
     fmt = "%d," + ",".join("%f" for _ in cols)
-    scan_args = ", ".join([f"g_cycle"] + [f"g_{c}" for c in cols])
+    scan_args = ", ".join(["g_cycle"] + [f"g_{c}" for c in cols])
     checks = ""
     for c in cols:
         tol = "1e-12" if c in int_cols else \

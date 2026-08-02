@@ -26,6 +26,7 @@ floor — quote matched-EVM numbers only at >= 8 samples per symbol.
 import os
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np

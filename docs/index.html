@@ -448,7 +448,7 @@
 <!-- ================================================================ -->
 <h2 id="repro"><span class="num">10</span><span class="en">Reproducing everything</span><span class="zh">复现方法</span></h2>
 <pre><code>pip install -e .            # numpy, scipy, matplotlib
-pytest tests/               # 49 tests: closed-form math + architecture regressions
+pytest tests/               # 204 tests: closed-form math + architecture regressions
 python examples/ex01_cppll_intn_19p2m_4p8g.py     # each ex writes plots to examples/out/
 python examples/ex02_cppll_fracn_dtc_38p4m_6g.py
 python examples/ex03_sspll_19p2m_4p8g.py
@@ -456,7 +456,7 @@ python examples/ex04_spll_100m_8g.py
 python examples/ex05_adpll_fracn_100m_10g.py
 python examples/ex06_ilcm_250m_12g.py</code></pre>
 <pre><code>from pllsim import presets
-pll = presets.sspll_19p2m_4p8g()      # or any of the six presets
+pll = presets.sspll_19p2m_4p8g()      # or any of the 15 presets
 ar  = pll.analyze();  print(pll.design_report(ar))
 sim = pll.simulate(300_000, seed=1, f_start_offset=-25e6)
 from pllsim.plotting import plot_pn_breakdown

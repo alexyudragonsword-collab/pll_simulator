@@ -3,19 +3,16 @@ from __future__ import annotations
 
 import matplotlib.pyplot as plt
 import numpy as np
-from PySide6.QtWidgets import (QComboBox, QHBoxLayout, QLabel, QPushButton,
-                               QVBoxLayout)
+from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from .. import presets
 from ..core.dtcspurs import dtc_spur_table
-from ..modulation import evm, gmsk_trajectory, prbs
+from ..guiutil import frac_presets
+from ..modulation import evm, gmsk_trajectory, prbs, two_point_presets
 from ..settling import fll_stability, hop_settling, hop_statistics
-from .widgets import FigList, MetricRow, Page, float_edit, table_from_rows
+from .widgets import FigList, MetricRow, Page, float_edit
 
-MOD_ARCHS = {"adpll_100m_10g (TDC)": ("adpll_100m_10g", 100e6),
-             "sspll_frac_19p2m_4p806g": ("sspll_frac_19p2m_4p806g", 19.2e6)}
-FRAC_PRESETS = ["spll_frac_52m_6p253g", "sspll_frac_19p2m_4p806g",
-                "cppll_frac_38p4m_6g", "adpll_bb_100m_10g"]
+FRAC_PRESETS = frac_presets()
 
 
 class ModulationPage(Page):
@@ -26,7 +23,7 @@ class ModulationPage(Page):
         lay = QVBoxLayout(self)
         row = QHBoxLayout()
         self.arch = QComboBox()
-        self.arch.addItems(list(MOD_ARCHS))
+        self.arch.addItems(two_point_presets())
         self.rb = float_edit("2.5e6")
         self.dp = float_edit("0.0")
         self.n_cyc = float_edit("140000")
@@ -50,7 +47,8 @@ class ModulationPage(Page):
         self.btn.clicked.connect(self._go)
 
     def _go(self):
-        nm, fref = MOD_ARCHS[self.arch.currentText()]
+        nm = self.arch.currentText()
+        fref = presets.ALL_PRESETS[nm]().cfg.fref   # not a copy
         rb = float(self.rb.text())
         dp = float(self.dp.text())
         n_cyc = int(float(self.n_cyc.text()))

@@ -16,8 +16,7 @@ from pathlib import Path
 import numpy as np
 
 from ..core.deltasigma import Efm1, Mash11, Mash111
-from .fixedpoint import (BandSelectFx, DlfFx, FixedCoeff, FllFx, FtlFx,
-                         SignSignLmsFx)
+from .fixedpoint import BandSelectFx, DlfFx, FixedCoeff, FllFx, FtlFx, SignSignLmsFx
 
 
 def to_hex(value: int, width_bits: int) -> str:

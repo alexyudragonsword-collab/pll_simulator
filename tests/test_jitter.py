@@ -1,8 +1,13 @@
 """Jitter integration against closed forms; PSD convention lock-down."""
 import numpy as np
 
-from pllsim.core.jitter import (integrate_pn, ipn_dbc, ldbc_from_sphi,
-                                rms_jitter_fs, sphi_from_ldbc)
+from pllsim.core.jitter import (
+    integrate_pn,
+    ipn_dbc,
+    ldbc_from_sphi,
+    rms_jitter_fs,
+    sphi_from_ldbc,
+)
 
 
 def test_convention_roundtrip():

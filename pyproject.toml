@@ -4,8 +4,8 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pllsim"
-version = "0.5.3"
-description = "System-level / behavioral simulation models for PLLs: CPPLL, SSPLL, SPLL, ADPLL, ILCM with noise, spur and calibration analysis"
+version = "0.6.0"
+description = "System-level / behavioral simulation models for PLLs: CPPLL, SSPLL, SPLL, ADPLL, ILCM, MDLL with noise, spur and calibration analysis"
 readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
@@ -22,13 +22,35 @@ guiqt = ["PySide6>=6.5"]
 
 [project.scripts]
 pllsim-gui = "pllsim.guiqt.app:main"
+pllsim-web = "pllsim.webgui:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]
 
 [tool.setuptools.package-data]
 "pllsim.guiqt" = ["*.png"]
+"pllsim.webgui" = ["*.py", "*.png", "pages/*.py"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.ruff]
+line-length = 88
+extend-exclude = ["examples/out"]
+
+[tool.ruff.lint]
+# E501 off: the physics comments carry derivations that read worse rewrapped
+select = ["E", "F", "W", "I"]
+# E731: the per-architecture t_target_of mappings read better as
+# one-line lambdas next to the call that consumes them
+ignore = ["E501", "E741", "E731"]
+
+[tool.ruff.lint.per-file-ignores]
+# the Streamlit pages must call st.set_page_config() before importing pllsim,
+# so their imports are deliberately not at the top of the file
+"src/pllsim/webgui/**" = ["E402"]
+"packaging/**" = ["E402"]
+"src/pllsim/guiqt/app.py" = ["E402"]
+"examples/**" = ["E402"]
+"src/pllsim/__init__.py" = ["F401"]

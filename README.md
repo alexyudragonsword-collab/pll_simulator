@@ -1,6 +1,6 @@
 # pllsim — System-Level / Behavioral PLL Simulation
 
-Python behavioral models of five PLL architectures with phase-noise budgeting,
+Python behavioral models of six PLL architectures with phase-noise budgeting,
 spurious analysis and built-in calibration algorithms.
 
 **Illustrated design guide** (bilingual EN/中文): open
@@ -52,7 +52,7 @@ Coverage targets: fref = 19.2–250 MHz, fout up to 12 GHz, integrated jitter
 
 ```bash
 pip install -e .          # numpy, scipy, matplotlib
-pytest tests/             # 150 tests: closed-form math + architecture behavior
+pytest tests/             # 204 tests: closed-form math + architecture behavior
 python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 ```
 
@@ -60,7 +60,7 @@ python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 
 ```bash
 pip install -e .[gui]     # browser (streamlit), bilingual zh/EN
-streamlit run gui/Home.py
+pllsim-web
 
 pip install -e .[guiqt]   # native desktop (PySide6), English
 pllsim-gui                # or: python -m pllsim.guiqt
@@ -204,9 +204,13 @@ src/pllsim/
   core/        freqresp, noise, jitter, spectrum, colored, deltasigma, engine, results
   blocks/      loopfilter, oscillator, chargepump, dtc, tdc, sampler, divider
   calibration/ lms, gain_cal, ftl
-  arch/        base, cppll, sspll, spll, adpll, ilcm
+  arch/        base, cppll, sspll, spll, adpll, ilcm, mdll
+  export/      RTL + RNM + electrical-VAMS emitters, golden engine, manifest
+  guiqt/       PySide6 desktop GUI      webgui/  Streamlit web GUI
+  fit.py  modulation.py  montecarlo.py  selector.py  settling.py  synth.py
+  guiutil.py   GUI-support introspection (no GUI dependency)
   plotting.py  presets.py
-examples/      ex01..ex06 (plots into examples/out/)
+examples/      ex01..ex20 (plots into examples/out/)
 tests/         closed-form core math + architecture-level regressions
 ```
 

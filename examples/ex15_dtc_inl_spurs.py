@@ -25,12 +25,12 @@ Three questions answered here (Wu JSSC'19 sampling-PLL config from ex14):
 import os
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 
 from pllsim import presets
-from pllsim.core.dtcspurs import dtc_spur_table
 
 OUT = os.path.join(os.path.dirname(__file__), "out")
 os.makedirs(OUT, exist_ok=True)
@@ -90,7 +90,7 @@ print("published Wu'19 class: worst fractional spur < -64 dBc — reproduced "
 
 # ------------------------------------------------ 3. LUT INL calibration
 print("\n=== 3. LUT INL calibration (CPPLL wiring, ex02 config) ===")
-from pllsim.calibration.lms import LUTCal           # noqa: E402
+from pllsim.calibration.lms import LUTCal  # noqa: E402
 
 INL_BIG = (2e-12, 3.0, 0.7)        # 2 ps pk, 3 cycles — an uncorrected DTC
 cp = presets.cppll_frac_38p4m_6g()

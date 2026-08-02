@@ -7,7 +7,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
-
 from _common import L, metric_row, show_fig, sidebar_lang_toggle
 
 st.set_page_config(page_title="Hop settling", layout="wide")

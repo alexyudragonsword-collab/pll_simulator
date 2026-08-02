@@ -8,7 +8,6 @@ import io
 
 import matplotlib.pyplot as plt
 import streamlit as st
-
 from _common import L, show_fig, sidebar_lang_toggle
 
 st.set_page_config(page_title="Fit", layout="wide")
@@ -18,8 +17,7 @@ import numpy as np
 
 from pllsim import presets
 from pllsim.core.jitter import ldbc_from_sphi
-from pllsim.fit import (attribute_budget, fit_closed_loop, fit_leeson,
-                        load_pn_csv)
+from pllsim.fit import attribute_budget, fit_closed_loop, fit_leeson, load_pn_csv
 
 st.title(L("实测相噪导入与拟合", "Measured phase-noise fitting"))
 up = st.file_uploader(L("上传 (offset_hz, dBc/Hz) CSV（E5052/FSWP 导出均可）",

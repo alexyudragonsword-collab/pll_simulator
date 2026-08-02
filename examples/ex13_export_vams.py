@@ -4,7 +4,6 @@ Generates <repo>/examples/out/export/<preset>/{rtl,rnm,ams}/ + README per
 instance and an INDEX.md summary.  The rtl/ testbenches are additionally
 executed here with iverilog (bit-true, zero tolerance) when available.
 """
-import os
 import shutil
 import subprocess
 from pathlib import Path

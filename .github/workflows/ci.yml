@@ -55,14 +55,18 @@ jobs:
             libegl1 libgl1 libxkbcommon0 libdbus-1-3
           python -m pip install --upgrade pip
           pip install -e .[test,gui,guiqt]
+          pip install ruff pytest-cov
+      - name: Lint
+        run: ruff check src tests examples packaging
       - name: Run tests
         env:
           QT_QPA_PLATFORM: offscreen
-        run: pytest tests/ -v --tb=short
+        run: pytest tests/ -v --tb=short --cov=pllsim --cov-report=term-missing:skip-covered
       - name: Run examples (smoke, reduced plots check)
         if: matrix.python-version == '3.11'
         run: |
-          python examples/ex01_cppll_intn_19p2m_4p8g.py
+          # every example, not two: they are the figures in docs/ and the
+          # only exercise several code paths get
+          for f in examples/ex*.py; do echo "--- $f"; python "$f" >/dev/null; done
           test -f examples/out/ex01_pn_breakdown.png
-          python examples/ex13_export_vams.py
           test -f examples/out/export/INDEX.md

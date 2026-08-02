@@ -6,8 +6,9 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # repo root
 
 import streamlit as st
-
 from _common import L, sidebar_lang_toggle
+
+from pllsim import presets
 
 st.set_page_config(page_title="Benchmarks", layout="wide")
 sidebar_lang_toggle()
@@ -37,16 +38,19 @@ st.caption(L("完整方法学与假设清单见 examples/ex10、ex14 与 docs §
 st.subheader(L("现场重跑（线性模型，数秒）",
                "Re-run live (linear models, seconds)"))
 if st.button("Re-run linear models", type="primary"):
-    import numpy as np
-    from tests.test_benchmark_jssc import _dartizio, _markulic, _wu
+    # built from the bench_* presets, not from tests/: the test suite is not
+    # shipped in the exe, so importing it worked from a checkout and raised
+    # ModuleNotFoundError for anyone running the packaged build
     with st.spinner("running..."):
         rows = []
         for name, pll, pub in [
-                ("Dartizio'23 (linear under-reads BB loops)", _dartizio(),
-                 "77"),
-                ("Markulic'16 int-N", _markulic(None), "176"),
-                ("Markulic'16 frac-N", _markulic(0.2503), "198"),
-                ("Wu'19", _wu(), "75")]:
+                ("Dartizio'23 (linear under-reads BB loops)",
+                 presets.bench_dartizio23_adpllbb_500m_9p2515g(), "77"),
+                ("Markulic'16 int-N",
+                 presets.bench_markulic16_sspll_40m_10p24g(), "176"),
+                ("Markulic'16 frac-N",
+                 presets.bench_markulic16_sspll_frac_40m_10p25g(), "198"),
+                ("Wu'19", presets.bench_wu19_spll_frac_52m_6p253g(), "75")]:
             ar = pll.analyze()
             rows.append({"benchmark": name, "published [fs]": pub,
                          "linear model [fs]": round(float(ar.jitter_fs), 1)})

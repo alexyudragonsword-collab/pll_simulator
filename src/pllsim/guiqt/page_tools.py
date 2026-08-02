@@ -3,10 +3,16 @@ from __future__ import annotations
 
 from functools import partial
 
-import numpy as np
-from PySide6.QtWidgets import (QAbstractItemView, QFileDialog, QHBoxLayout,
-                               QLabel, QListWidget, QPlainTextEdit,
-                               QPushButton, QVBoxLayout)
+from PySide6.QtWidgets import (
+    QAbstractItemView,
+    QFileDialog,
+    QHBoxLayout,
+    QLabel,
+    QListWidget,
+    QPlainTextEdit,
+    QPushButton,
+    QVBoxLayout,
+)
 
 from .. import presets
 from ..guiutil import mc_build_frac_cppll

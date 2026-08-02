@@ -1,11 +1,11 @@
 """PyInstaller entry point for the Streamlit web GUI (onefile exe).
 
 Built by .github/workflows/windows-exe.yml:
-    pyinstaller --onefile --name pllsim-gui-web --add-data "gui;gui"
+    pyinstaller --onefile --name pllsim-gui-web --add-data "src/pllsim/webgui;pllsim/webgui"
                 --collect-all streamlit --copy-metadata streamlit
                 packaging/launch_web.py
 
-The gui/ scripts ride along as DATA files (streamlit executes them from
+The webgui pages ride along as DATA files (streamlit executes them from
 the extracted bundle), so their imports are invisible to PyInstaller's
 static analysis — the explicit pllsim imports below pull the whole
 library into the bundle.  A console window stays open on purpose: it is
@@ -20,6 +20,7 @@ import webbrowser
 
 # static imports so PyInstaller bundles everything the pages use
 import matplotlib  # noqa: F401
+
 import pllsim.core.dtcspurs  # noqa: F401
 import pllsim.export  # noqa: F401
 import pllsim.fit  # noqa: F401
@@ -38,14 +39,18 @@ def _base() -> str:
         return sys._MEIPASS
     if "__compiled__" in globals():              # Nuitka: data sits next to
         return os.path.dirname(os.path.abspath(__file__))   # this module
-    # running from source: packaging/launch_web.py -> repo root
-    return os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    return ""                                    # source/wheel: ask the package
 
 
 def main() -> None:
     from streamlit.web import cli as stcli
 
-    script = os.path.join(_base(), "gui", "Home.py")
+    base = _base()
+    if base:      # frozen: the pages ride along as raw data files
+        script = os.path.join(base, "pllsim", "webgui", "Home.py")
+    else:         # source tree or installed wheel: the package knows
+        from pllsim.webgui import home_path
+        script = str(home_path())
     port = os.environ.get("PLLSIM_PORT", "8501")
     url = f"http://localhost:{port}"
 

@@ -21,8 +21,14 @@ from ..core.colored import synth_from_psd
 from ..core.engine import detect_lock, postprocess
 from ..core.freqresp import FreqResponse, default_grid, loop_metrics
 from ..core.jitter import ipn_dbc, rms_jitter_fs
-from ..core.noise import (FlickerFloorPhase, NoisePath, SampledChargeNoise,
-                          ResistorNoise, SampledKTC, output_psd)
+from ..core.noise import (
+    FlickerFloorPhase,
+    NoisePath,
+    ResistorNoise,
+    SampledChargeNoise,
+    SampledKTC,
+    output_psd,
+)
 from ..core.results import AnalysisResult, SimResult
 from .base import PLLBase
 

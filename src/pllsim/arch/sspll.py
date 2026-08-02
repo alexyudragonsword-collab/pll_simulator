@@ -24,8 +24,14 @@ from ..core.colored import synth_from_psd
 from ..core.engine import detect_lock, postprocess
 from ..core.freqresp import FreqResponse, default_grid, loop_metrics
 from ..core.jitter import ipn_dbc, rms_jitter_fs
-from ..core.noise import (FlickerFloorPhase, NoisePath, SampledChargeNoise,
-                          ResistorNoise, SampledKTC, output_psd)
+from ..core.noise import (
+    FlickerFloorPhase,
+    NoisePath,
+    ResistorNoise,
+    SampledChargeNoise,
+    SampledKTC,
+    output_psd,
+)
 from ..core.results import AnalysisResult, SimResult
 from .base import PLLBase
 
@@ -84,7 +90,6 @@ class SSPLL(PLLBase):
             f = default_grid(1e2, 1e9)
         n = c.n_mult
         s = c.sampler
-        duty = s.pulse_width * c.fref
         lf = LoopFilter(c.filt, 1.0 / c.fref)
         z = FreqResponse(f, lf.transimpedance(f))
         # exact discrete loop (SSPLLs run aggressive UGB/fref, the continuous
@@ -95,7 +100,6 @@ class SSPLL(PLLBase):
         zinv = np.exp(-2j * np.pi * f / c.fref)
         acc = FreqResponse(f, zinv / (1.0 - zinv))
         gol = hq * acc * (k_q * TWOPI * c.osc.gain / c.fref)
-        k_cp = s.amp_v * s.gm * duty                    # average A/rad (spur calc)
         vco_int = FreqResponse.integrator(f, TWOPI * c.osc.gain)
         h = gol.feedback()
         err = 1.0 / (1.0 + gol)

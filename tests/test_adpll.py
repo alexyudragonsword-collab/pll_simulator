@@ -1,6 +1,5 @@
 """ADPLL: loop metrics, cross-domain PSD, KDCO/TDC calibration, BB mode."""
 import numpy as np
-import pytest
 
 from pllsim.arch.adpll import ADPLL, ADPLLConfig, DLFConfig
 from pllsim.arch.cppll import FracConfig

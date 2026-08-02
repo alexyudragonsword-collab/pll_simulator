@@ -19,6 +19,7 @@ Four stories:
 import os
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -50,7 +51,7 @@ print("the ADPLL wins by an order of magnitude: a digital loop retunes at "
 
 # ------------------------------------------------ 2. hop-size scaling
 print("\n=== 2. sampling-PLL hop scaling and the FLL stability bound ===")
-from pllsim.settling import fll_stability                     # noqa: E402
+from pllsim.settling import fll_stability  # noqa: E402
 
 st = fll_stability(presets.spll_frac_52m_6p253g())
 print(f"slew per FLL decision: {st['slew_per_window_hz'] / 1e3:.0f} kHz, "

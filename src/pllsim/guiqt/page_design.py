@@ -3,16 +3,31 @@ from __future__ import annotations
 
 import matplotlib.pyplot as plt
 import numpy as np
-from PySide6.QtWidgets import (QCheckBox, QComboBox, QFormLayout, QHBoxLayout,
-                               QLabel, QPushButton, QTabWidget, QVBoxLayout,
-                               QWidget)
+from PySide6.QtWidgets import (
+    QCheckBox,
+    QComboBox,
+    QFormLayout,
+    QHBoxLayout,
+    QLabel,
+    QPushButton,
+    QTabWidget,
+    QVBoxLayout,
+    QWidget,
+)
 
 from .. import presets
 from ..selector import Requirement, select
-from ..synth import (cppll_kdet, design_adpll_dlf, design_cp_filter,
-                     design_spll_filter, design_sspll_filter, retune_loop,
-                     sweep_bandwidth, sweepable_presets)
-from .widgets import (FigList, Page, float_edit, in_scroll, table_from_rows)
+from ..synth import (
+    cppll_kdet,
+    design_adpll_dlf,
+    design_cp_filter,
+    design_spll_filter,
+    design_sspll_filter,
+    retune_loop,
+    sweep_bandwidth,
+    sweepable_presets,
+)
+from .widgets import FigList, Page, float_edit, in_scroll, table_from_rows
 
 
 def _filt_rows(filt):

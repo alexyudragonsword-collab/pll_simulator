@@ -13,19 +13,24 @@ the one-cycle update delay.  Time domain runs one step per reference cycle.
 """
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 
 import numpy as np
 
 from ..blocks.oscillator import OscConfig, Oscillator
 from ..blocks.tdc import BBPD, TDC, TDCConfig
 from ..core.colored import synth_from_psd
-from ..core.deltasigma import Mash11
 from ..core.engine import detect_lock, postprocess
 from ..core.freqresp import FreqResponse, default_grid, loop_metrics
 from ..core.jitter import ipn_dbc, rms_jitter_fs
-from ..core.noise import (DcoQuantPhase, FlickerFloorPhase, NoisePath,
-                          NoiseSource, ShapedQuantization, output_psd)
+from ..core.noise import (
+    DcoQuantPhase,
+    FlickerFloorPhase,
+    NoisePath,
+    NoiseSource,
+    ShapedQuantization,
+    output_psd,
+)
 from ..core.results import AnalysisResult, SimResult
 from .base import PLLBase
 from .cppll import FracConfig, frac_spur_offsets

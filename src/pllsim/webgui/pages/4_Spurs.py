@@ -7,18 +7,14 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
-
 from _common import L, show_fig, sidebar_lang_toggle
 
 st.set_page_config(page_title="Spurs", layout="wide")
 sidebar_lang_toggle()
 
-from pllsim import presets
-from pllsim.core.dtcspurs import dtc_spur_table
-from pllsim.guiutil import make_pll
+from pllsim.guiutil import frac_presets, make_pll
 
-FRAC_PRESETS = ["spll_frac_52m_6p253g", "sspll_frac_19p2m_4p806g",
-                "cppll_frac_38p4m_6g", "adpll_bb_100m_10g"]
+FRAC_PRESETS = frac_presets()
 
 st.title(L("DTC 小数杂散预测", "DTC fractional-spur prediction"))
 preset = st.selectbox("preset", FRAC_PRESETS)
@@ -52,12 +48,12 @@ if tab:
 
 st.subheader(L("最差通道扫描", "Worst-channel sweep"))
 if st.button("Sweep channels"):
-    pll0 = make_pll(FRAC_PRESETS[0])
+    pll0 = make_pll(preset)      # the preset picked above, not a fixed one
     fracs = [0.0013, 0.0053, 0.0161, 0.0503, 0.1253, 0.2503, 0.3753, 0.4703]
     worst = []
     with st.spinner("sweeping..."):
         for fr in fracs:
-            pll = make_pll(FRAC_PRESETS[0])
+            pll = make_pll(preset)
             pll.cfg.fout = (int(pll.cfg.fout / pll.cfg.fref) + fr) \
                 * pll.cfg.fref
             pll.cfg.frac.frac = fr

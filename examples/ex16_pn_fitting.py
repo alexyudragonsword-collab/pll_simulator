@@ -19,6 +19,7 @@ with 0.5 dB rms instrument noise, so ground truth is known):
 import os
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -26,8 +27,7 @@ import numpy as np
 from pllsim import presets
 from pllsim.blocks.oscillator import OscConfig
 from pllsim.core.jitter import ldbc_from_sphi
-from pllsim.fit import (attribute_budget, fit_closed_loop, fit_leeson,
-                        load_pn_csv)
+from pllsim.fit import attribute_budget, fit_closed_loop, fit_leeson, load_pn_csv
 
 OUT = os.path.join(os.path.dirname(__file__), "out")
 os.makedirs(OUT, exist_ok=True)

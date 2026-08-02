@@ -7,7 +7,6 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
-
 from _common import L, metric_row, show_fig, sidebar_lang_toggle
 
 st.set_page_config(page_title="Drift tracking", layout="wide")
@@ -15,9 +14,9 @@ sidebar_lang_toggle()
 
 from pllsim import presets
 from pllsim.core.dtcspurs import dtc_spur_table
+from pllsim.guiutil import frac_presets
 
-FRAC = ["spll_frac_52m_6p253g", "sspll_frac_19p2m_4p806g",
-        "cppll_frac_38p4m_6g", "adpll_bb_100m_10g"]
+FRAC = frac_presets()
 
 st.title(L("温漂下的后台校准", "Background calibration under drift"))
 c = st.columns(4)

@@ -27,7 +27,7 @@ from pllsim.blocks.chargepump import CPConfig
 from pllsim.blocks.loopfilter import FilterDesign
 from pllsim.blocks.oscillator import OscConfig
 from pllsim.blocks.sampler import SamplerConfig
-from pllsim.core.jitter import ldbc_from_sphi, rms_jitter_fs
+from pllsim.core.jitter import ldbc_from_sphi
 from pllsim.plotting import plot_pn_breakdown
 from pllsim.synth import design_sspll_filter
 
