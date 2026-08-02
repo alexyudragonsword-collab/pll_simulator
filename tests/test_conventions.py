@@ -127,3 +127,41 @@ def test_bbpd_sigma_includes_dtc_jitter():
     hi = presets.adpll_bb_100m_10g()
     hi.cfg.frac.dtc = replace(hi.cfg.frac.dtc, jitter_rms_s=500e-15)
     assert hi.analyze().loop.f_ugb < 0.97 * lo.analyze().loop.f_ugb
+
+
+# --------------------------------------------------- kwargs that did nothing
+def test_adpll_rejects_kwargs_its_mode_cannot_honour():
+    """A silently dropped mod_freq returns a normal-looking SimResult with no
+    modulation in it, and the EVM then reads as noise-limited."""
+    mod = np.zeros(5_000)
+    mod[1000:] = 1e6
+    bb = presets.adpll_bb_100m_10g()
+    with pytest.raises(TypeError, match="mod_freq"):
+        bb.simulate(5_000, mod_freq=mod)
+    with pytest.raises(TypeError, match="tdc_cal"):
+        presets.adpll_bb_100m_10g().simulate(5_000, tdc_cal=object())
+    with pytest.raises(TypeError, match="dtc_gain_init_error"):
+        presets.adpll_100m_10g().simulate(5_000, dtc_gain_init_error=0.05)
+    # the supported combinations still run
+    presets.adpll_100m_10g().simulate(3_000, mod_freq=np.zeros(3_000))
+    presets.adpll_bb_100m_10g().simulate(3_000, dtc_gain_init_error=0.02)
+
+
+def test_fll_stability_says_which_architectures_have_an_fll():
+    from pllsim.settling import fll_stability
+    assert fll_stability(presets.sspll_19p2m_4p8g())["margin"] > 0
+    for nm in ("cppll_19p2m_4p8g", "adpll_100m_10g", "ilcm_250m_12g",
+               "mdll_150m_2p4g"):
+        with pytest.raises(TypeError, match="no FLL hand-off"):
+            fll_stability(presets.ALL_PRESETS[nm]())
+
+
+def test_unconverged_calibration_is_flagged_not_silently_reported():
+    """bench_dartizio23 gear-shifts its DTC LMS at 100k cycles; below that the
+    jitter is dominated by an uncalibrated fractional spur."""
+    short = presets.bench_dartizio23_adpllbb_500m_9p2515g().simulate(80_000, seed=1)
+    assert short.jitter_fs > 1000            # ~20 ps, not the 78 fs headline
+    assert any("still settling" in n for n in short.notes), short.notes
+    long = presets.bench_dartizio23_adpllbb_500m_9p2515g().simulate(250_000, seed=1)
+    assert long.jitter_fs < 150
+    assert not any("still settling" in n for n in long.notes)

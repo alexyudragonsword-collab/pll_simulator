@@ -52,4 +52,5 @@ class SimResult:
     s_phi_psd: np.ndarray | None = None
     spurs_fft: dict[float, float] = field(default_factory=dict)
     jitter_fs: float | None = None                 # from time-domain PSD if computed
+    notes: list[str] = field(default_factory=list)  # caveats about the numbers
     extra: dict = field(default_factory=dict)

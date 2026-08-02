@@ -183,6 +183,10 @@ class WorkbenchPage(Page):
             ("f_end", f"{sim.freq_out[-1] / 1e9:.6f} GHz"),
         ])
         self._clear(self._s_lay)
+        for note in sim.notes:      # e.g. "still settling" — the jitter above
+            lab = QLabel("! " + note)   # then includes a calibration transient
+            lab.setWordWrap(True)
+            self._s_lay.addWidget(lab)
         figs = [plot_pn_breakdown(ar, sim)]
         fig, (a1, a2) = plt.subplots(2, 1, figsize=(8, 5), sharex=True)
         a1.plot(sim.t * 1e6, (sim.freq_out - sim.f0) / 1e6, lw=0.7)

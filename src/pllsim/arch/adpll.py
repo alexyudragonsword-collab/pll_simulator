@@ -205,17 +205,36 @@ class ADPLL(PLLBase):
                  kdco_cal=None, tdc_cal=None, dtc_gain_init_error: float = 0.0,
                  mod_freq: np.ndarray | None = None, mod_dp_gain: float = 1.0,
                  dtc_gain_drift: np.ndarray | None = None) -> SimResult:
-        """mod_freq: two-point modulation frequency trajectory [Hz] on the
-        fref grid (see pllsim.modulation); injected at the FCW (lowpass)
-        and DCO (highpass) points.  mod_dp_gain scales the direct point:
-        1.0 = matched, 1+eps models a direct-path gain error.  TDC mode."""
+        """The two modes take different knobs, and asking for the wrong one
+        raises rather than being ignored: a silently dropped mod_freq returns a
+        perfectly normal-looking SimResult with no modulation in it, and the
+        EVM then reads as noise-limited.
+
+        mode="tdc":      kdco_cal, tdc_cal, mod_freq, mod_dp_gain
+        mode="dtc_bbpd": dtc_gain_init_error, dtc_gain_drift
+        Both: noise, calibration, seed, f_start_offset.
+        """
         if self.cfg.mode == "tdc":
+            self._reject("tdc", dtc_gain_init_error=dtc_gain_init_error,
+                         dtc_gain_drift=dtc_gain_drift)
             return self._sim_tdc(n_cycles, noise, calibration, seed,
                                  f_start_offset, kdco_cal, tdc_cal,
                                  mod_freq, mod_dp_gain)
+        self._reject("dtc_bbpd", kdco_cal=kdco_cal, tdc_cal=tdc_cal,
+                     mod_freq=mod_freq, mod_dp_gain=None
+                     if mod_dp_gain == 1.0 else mod_dp_gain)
         return self._sim_bbpd(n_cycles, noise, calibration, seed,
                               f_start_offset, dtc_gain_init_error,
                               dtc_gain_drift)
+
+    @staticmethod
+    def _reject(mode: str, **unsupported):
+        for name, value in unsupported.items():
+            if value is None or (np.isscalar(value) and value == 0.0):
+                continue
+            raise TypeError(
+                f"ADPLL.simulate(): {name} is not supported in mode={mode!r} "
+                "and would have been ignored")
 
     def _ref_jitter(self, n_cycles, rng, noise):
         c = self.cfg

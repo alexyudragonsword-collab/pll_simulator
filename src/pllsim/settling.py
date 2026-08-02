@@ -103,6 +103,15 @@ def fll_stability(pll) -> dict:
     Returns the slew, the bound and the margin (>1 = stable hand-off).
     """
     c = pll.cfg
+    # only the two sampling loops hand off from a current-mode FLL; asking any
+    # other architecture used to surface as an AttributeError on cfg.fll_i
+    missing = [a for a in ("fll_i", "fll_window", "fll_release", "filt")
+               if not hasattr(c, a)]
+    if missing:
+        raise TypeError(
+            f"{type(pll).__name__} has no FLL hand-off to check: this bound is "
+            "about a bang-bang FLL charging the loop filter, and that "
+            "architecture has no such stage")
     slew = c.osc.gain * c.fll_i * c.fll_window / (c.fref * c.filt.c1)
     i_max = c.fll_release * c.fref * c.filt.c1 / (2.0 * c.osc.gain
                                                   * c.fll_window)
