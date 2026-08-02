@@ -36,7 +36,7 @@ from ..core.freqresp import FreqResponse, LoopMetrics, default_grid
 from ..core.jitter import ipn_dbc, rms_jitter_fs
 from ..core.noise import FlickerFloorPhase, NoisePath, NoiseSource, output_psd
 from ..core.results import AnalysisResult, SimResult
-from .base import PLLBase, supply_ripple_v
+from .base import PLLBase, attach_fine, no_fine_note, supply_ripple_v
 from .ilcm import injection_spur_dbc
 
 TWOPI = 2.0 * np.pi
@@ -168,23 +168,8 @@ class MDLL(PLLBase):
                         freq_out=freq_out, ctrl=ctrl, lock_time_s=None)
         sim.cal_traces["tune_acc"] = ctrl.copy()
         sim = postprocess(sim, int_band=c.int_band)
+        # edge replacement zeroes the error every Tref, so a ref-rate record
+        # sees only the mux/ref term and misses the whole intra-period build-up
         if fine is not None:
-            from ..core.spectrum import find_spurs, periodogram_psd
-            n0 = fine.size // 4
-            f_p, s_p = periodogram_psd(fine[n0:], m_os * c.fref)
-            sim.extra["fine_fs"] = m_os * c.fref
-            sim.extra["fine_f"], sim.extra["fine_psd"] = f_p, s_p
-            sim.spurs_fft.update(find_spurs(f_p, s_p, [c.fref, 2 * c.fref]))
-            # the honest MDLL jitter includes the intra-period accumulation
-            # that ref-rate sampling misses entirely (e = mux/ref only)
-            sim.jitter_fs = rms_jitter_fs(
-                f_p, s_p, c.fout,
-                max(c.int_band[0], f_p[0]), min(c.int_band[1], 0.45 * m_os * c.fref))
-            sim.notes.append(
-                f"jitter integrated on the {m_os}x oversampled phase "
-                "(includes intra-period accumulation)")
-        else:
-            sim.notes.append("jitter integrated at the reference rate: "
-                             "intra-period accumulation is NOT included — "
-                             "pass fine_oversample>1 to capture it")
-        return sim
+            return attach_fine(sim, fine, m_os, c.fref, c.int_band)
+        return no_fine_note(sim)

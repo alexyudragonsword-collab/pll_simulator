@@ -33,7 +33,7 @@ from ..core.noise import (
     output_psd,
 )
 from ..core.results import AnalysisResult, SimResult
-from .base import PLLBase, run_band_select, supply_ripple_v
+from .base import PLLBase, attach_fine, run_band_select, supply_ripple_v
 
 TWOPI = 2.0 * np.pi
 
@@ -153,13 +153,18 @@ class SSPLL(PLLBase):
         m = loop_metrics(gol)
         bd = output_psd(paths, f)
         jit = rms_jitter_fs(f, bd["total"], c.fout, *c.int_band)
-        # ref spur: pedestal charge ripple through Z at fref
-        dq = abs(s.gm * s.pedestal_v * s.pulse_width)
+        # Reference spur: from the sampling clock's kickback, NOT the pedestal.
+        # The pedestal shifts the held voltage and the gm converts that same
+        # held voltage over the same window, so the loop parks where the gm
+        # delivers zero charge -- zero charge is zero ripple.  See
+        # SamplerConfig.kick_q_c.
+        pd_a = SamplingPD(s, 1.0 / c.fref, np.random.default_rng(0), noise=False)
         zf = np.interp(np.log10(c.fref), np.log10(f), np.abs(z.h))
-        # pedestal charge once per period -> peak ripple 2*dq*fref*|Z(fref)|;
-        # narrowband FM sideband is beta/2 with beta = Kvco*V1/fref
-        beta = c.osc.gain * (2.0 * dq * c.fref * zf) / c.fref
-        spurs = {"ref_spur": float(20 * np.log10(max(beta / 2, 1e-30)))}
+        i1 = pd_a.ripple_fundamental_a(1.0 / c.fref)
+        beta = c.osc.gain * (i1 * zf) / c.fref
+        spurs = {}
+        if i1 > 0:
+            spurs["ref_spur"] = float(20 * np.log10(beta / 2))
         if c.frac is not None:
             from ..core.dtcspurs import dtc_spur_table
             d = c.frac.dtc
@@ -171,6 +176,14 @@ class SSPLL(PLLBase):
                 spurs[f"frac_spur@{off:.0f}Hz"] = dbc
         notes = [f"PD gain referred to output phase: CP/LF noise not multiplied "
                  f"by N={n} (the SSPLL advantage)"]
+        if i1 == 0.0:
+            notes.append(
+                "no reference spur reported: the sampling pedestal produces a "
+                "static phase offset, not ripple — the gm converts the held "
+                "voltage over the same window the loop uses to cancel it, so "
+                "in lock it delivers no charge.  Set SamplerConfig.kick_q_c "
+                "and kick_delay_s to model the sampling clock's kickback, "
+                "which is what actually makes this architecture's ref spur")
         return AnalysisResult(f=f, f0=c.fout, pn_breakdown=bd, loop=m,
                               jitter_fs=jit,
                               ipn_dbc=ipn_dbc(f, bd["total"], *c.int_band),
@@ -191,10 +204,15 @@ class SSPLL(PLLBase):
                  supply_ripple: tuple[float, float] | None = None,
                  band_select: bool = True,
                  dtc_gain_init_error: float = 0.0,
+                 fine_oversample: int = 1,
                  mod_freq: np.ndarray | None = None,
                  mod_dp_gain: float = 1.0,
                  dtc_gain_drift: np.ndarray | None = None) -> SimResult:
-        """mod_freq: two-point modulation trajectory [Hz] on the fref grid
+        """fine_oversample: record M control-voltage samples per reference
+        period instead of one, so the intra-period ripple that carries the
+        reference spur is observable at all (at M=1 it sits exactly at the
+        record's sampling rate and aliases to DC).
+        mod_freq: two-point modulation trajectory [Hz] on the fref grid
         (pllsim.modulation).  Lowpass point: the sampling instant is shifted
         by the accumulated modulation phase (DTC path, Markulic-style);
         highpass point: direct VCO frequency push scaled by mod_dp_gain
@@ -246,6 +264,8 @@ class SSPLL(PLLBase):
         cal_trace = np.empty(n_cycles) if dtc_cal is not None else None
         prev_extra = 0.0
         phi_m = 0.0                     # accumulated modulation phase [rad]
+        m_os = max(int(fine_oversample), 1)
+        fine = np.empty(n_cycles * m_os) if m_os > 1 else None
 
         for nn in range(n_cycles):
             d_osc = osc_noise[nn] - prev_on
@@ -297,13 +317,29 @@ class SSPLL(PLLBase):
                 cal_trace[nn] = dtc_cal.value if dtc_cal is not None else 1.0
             if mash is not None:
                 mash.step(frac_word)
-            lf.update_pulse(dq / max(c.sampler.pulse_width, 1e-12),
-                            c.sampler.pulse_width)
-            fv = max(osc.freq(lf.vctrl, v_sup[nn]), 0.05 * c.osc.f0)
-            if mod_freq is not None:    # highpass point: direct VCO push
-                fv += mod_freq[nn] * mod_dp_gain
+            if fine is None:
+                lf.update_pulse(dq / max(c.sampler.pulse_width, 1e-12),
+                                c.sampler.pulse_width)
+                fv = max(osc.freq(lf.vctrl, v_sup[nn]), 0.05 * c.osc.f0)
+                if mod_freq is not None:    # highpass point: direct VCO push
+                    fv += mod_freq[nn] * mod_dp_gain
+            else:
+                # clock kickback and the gm pulse land at different instants;
+                # that separation is the whole reference-spur mechanism here
+                vs = lf.drive_fine(pd.segments(dq), m_os)
+                f_sub = np.maximum(
+                    np.array([osc.freq(v, v_sup[nn]) for v in vs]),
+                    0.05 * c.osc.f0)
+                if mod_freq is not None:
+                    f_sub = f_sub + mod_freq[nn] * mod_dp_gain
+                fv = float(f_sub[-1])
 
-            phi_out += TWOPI * (fv - c.fout) * tref + d_osc
+            if fine is None:
+                phi_out += TWOPI * (fv - c.fout) * tref + d_osc
+            else:
+                inc = TWOPI * (f_sub - c.fout) * (tref / m_os) + d_osc / m_os
+                fine[nn * m_os:(nn + 1) * m_os] = phi_out + np.cumsum(inc)
+                phi_out = float(fine[(nn + 1) * m_os - 1])
             phase_err[nn] = phi_out
             freq_out[nn] = fv
             vctrl_rec[nn] = lf.vctrl
@@ -325,4 +361,7 @@ class SSPLL(PLLBase):
             sim.cal_traces["band_select"] = band_trace
         if supply_ripple is not None and supply_ripple[1] < 0.45 * c.fref:
             spur_offsets = (spur_offsets or []) + [supply_ripple[1]]
-        return postprocess(sim, int_band=c.int_band, spur_offsets=spur_offsets)
+        sim = postprocess(sim, int_band=c.int_band, spur_offsets=spur_offsets)
+        if fine is not None:
+            return attach_fine(sim, fine, m_os, c.fref, c.int_band, spur_offsets)
+        return sim

@@ -40,7 +40,7 @@ from ..core.freqresp import FreqResponse, LoopMetrics, default_grid
 from ..core.jitter import ipn_dbc, rms_jitter_fs
 from ..core.noise import FlickerFloorPhase, NoisePath, output_psd
 from ..core.results import AnalysisResult, SimResult
-from .base import PLLBase, supply_ripple_v
+from .base import PLLBase, attach_fine, no_fine_note, supply_ripple_v
 
 TWOPI = 2.0 * np.pi
 
@@ -253,25 +253,9 @@ class ILCM(PLLBase):
         if tcal is not None:
             sim.cal_traces["inj_timing"] = np.asarray(tcal.trace)
         sim = postprocess(sim, int_band=c.int_band)
+        # realignment resets the accumulated phase once per reference period,
+        # so ref-rate sampling sees only the residual AT the edge and misses
+        # what built up in between
         if fine is not None:
-            from ..core.spectrum import find_spurs, periodogram_psd
-            n0 = fine.size // 4
-            f_p, s_p = periodogram_psd(fine[n0:], m_os * c.fref)
-            sim.extra["fine_fs"] = m_os * c.fref
-            sim.extra["fine_f"], sim.extra["fine_psd"] = f_p, s_p
-            sim.spurs_fft.update(find_spurs(f_p, s_p, [c.fref, 2 * c.fref]))
-            # same accounting as the MDLL: realignment resets the accumulated
-            # phase once per reference period, so ref-rate sampling sees only
-            # the residual AT the edge and misses what built up in between
-            from ..core.jitter import rms_jitter_fs
-            sim.jitter_fs = rms_jitter_fs(
-                f_p, s_p, c.fout, max(c.int_band[0], f_p[0]),
-                min(c.int_band[1], 0.45 * m_os * c.fref))
-            sim.notes.append(
-                f"jitter integrated on the {m_os}x oversampled phase "
-                "(includes intra-period accumulation)")
-        else:
-            sim.notes.append("jitter integrated at the reference rate: "
-                             "intra-period accumulation is NOT included — "
-                             "pass fine_oversample>1 to capture it")
-        return sim
+            return attach_fine(sim, fine, m_os, c.fref, c.int_band)
+        return no_fine_note(sim)

@@ -77,28 +77,68 @@ def test_charge_pump_noise_agrees_across_domains(fc):
     assert 0.85 < ratio < 1.15, f"CP off by {20 * np.log10(ratio):.1f} dB"
 
 
-def test_reference_spur_is_the_narrowband_fm_sideband():
-    """L_spur = 20log10(beta/2) with beta = Kvco*V1/fref, V1 the PEAK ripple.
+def test_leakage_reference_spur_is_the_single_impulse_sideband():
+    """Leakage: L_spur = 20log10(beta/2), beta = Kvco*V1/fref, V1 = 2*dq*fref*|Z|.
 
-    The charge dq delivered once per reference period has a fundamental of
-    peak amplitude 2*dq*fref in current, so V1 = 2*dq*fref*|Z(fref)|.  Nothing
-    in the time domain can check this -- the engines step once per reference
-    cycle, so a tone at fref folds to DC -- which is why it is pinned here.
+    A constant leakage current has NO component at fref -- it is DC.  The
+    fundamental comes entirely from the narrow CP pulse the loop uses to cancel
+    it, one impulse of area dq = I_leak/fref per period, whose fundamental has
+    peak amplitude 2*dq*fref.  So for leakage the single-impulse formula is
+    exactly right, and this pins it.
     """
     p = presets.cppll_19p2m_4p8g()
     c = p.cfg
-    c.cp = replace(c.cp, mismatch_pct=3.0, leakage_a=2e-9)
-    ar = p.analyze()
-    got = ar.spurs_analytic["ref_spur"]
+    c.cp = replace(c.cp, mismatch_pct=0.0, leakage_a=2e-9)
+    got = p.analyze().spurs_analytic["ref_spur"]
 
-    dq = abs(c.cp.icp * 0.01 * c.cp.mismatch_pct * c.cp.t_reset) \
-        + abs(c.cp.leakage_a / c.fref)
+    dq = abs(c.cp.leakage_a / c.fref)
     from pllsim.blocks.loopfilter import LoopFilter
     z = abs(LoopFilter(c.filt, 1.0 / c.fref).transimpedance(np.array([c.fref]))[0])
-    v1 = 2.0 * dq * c.fref * z
-    beta = c.osc.gain * v1 / c.fref
+    beta = c.osc.gain * (2.0 * dq * c.fref * z) / c.fref
     expect = 20.0 * np.log10(beta / 2.0)
     assert abs(got - expect) < 1.0, f"{got:.1f} dBc vs textbook {expect:.1f} dBc"
+
+
+def test_mismatch_reference_spur_is_doublet_suppressed():
+    """Mismatch is NOT a single impulse, and treating it as one overstates it.
+
+    In lock a type-II loop has already driven the net per-period charge to
+    zero, so what is left is a pair of opposite-sign pulses inside the reset
+    window.  They cancel in area, and the fref component survives only through
+    their separation: a factor 2*sin(pi*fref*dt_sep) below the single-impulse
+    answer, which for a 200 ps reset at 19.2 MHz is ~38 dB.
+    """
+    p = presets.cppll_19p2m_4p8g()
+    c = p.cfg
+    c.cp = replace(c.cp, mismatch_pct=3.0, leakage_a=0.0)
+    got = p.analyze().spurs_analytic["ref_spur"]
+
+    dq = abs(c.cp.icp * 0.01 * c.cp.mismatch_pct * c.cp.t_reset)
+    from pllsim.blocks.loopfilter import LoopFilter
+    z = abs(LoopFilter(c.filt, 1.0 / c.fref).transimpedance(np.array([c.fref]))[0])
+    naive = 20.0 * np.log10(c.osc.gain * (2.0 * dq * c.fref * z) / c.fref / 2.0)
+    suppression = 20.0 * np.log10(2.0 * np.sin(np.pi * c.fref * c.cp.t_reset / 2.0))
+    assert abs(got - (naive + suppression)) < 1.5
+    assert got < naive - 30.0, "the doublet suppression is the whole point"
+
+
+@pytest.mark.parametrize("mismatch,leakage", [(0.0, 2e-9), (3.0, 0.0), (2.0, 1e-9)])
+def test_reference_spur_matches_the_time_domain(mismatch, leakage):
+    """The claim that used to be untestable, now tested.
+
+    This convention was pinned analytically with a note saying the time domain
+    could not check it, because a record sampled once per reference edge puts
+    the fref tone at its own sampling rate.  With an oversampled record it can,
+    and it does -- provided the sampling resolves the reset pulse, which is why
+    M is set from t_reset rather than picked.
+    """
+    p = presets.cppll_19p2m_4p8g()
+    c = p.cfg
+    c.cp = replace(c.cp, mismatch_pct=mismatch, leakage_a=leakage)
+    want = p.analyze().spurs_analytic["ref_spur"]
+    m = int(np.ceil(1.0 / (c.fref * c.cp.t_reset)))
+    got = p.simulate(4000, noise=False, fine_oversample=m).spurs_fft[c.fref]
+    assert abs(got - want) < 1.0, f"time domain {got:.1f} vs analytic {want:.1f}"
 
 
 @pytest.mark.parametrize("preset", ["cppll_frac_38p4m_6g", "adpll_bb_100m_10g",

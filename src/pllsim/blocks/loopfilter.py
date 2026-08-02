@@ -118,6 +118,66 @@ class LoopFilter:
         self.x = np.real(self._v @ xe)
         return self.vctrl
 
+    def drive_fine(self, segments, m: int, i_bias: float = 0.0,
+                   dq_impulse: float = 0.0) -> np.ndarray:
+        """One tstep driven by a piecewise-constant current, sampled m times.
+
+        ``segments`` is a sequence of (amplitude [A], duration [s]) applied back
+        to back from the start of the step; ``i_bias`` (leakage) flows for the
+        whole step and ``dq_impulse`` (noise charge) lands at t=0.  Samples are
+        taken at the END of each of the m equal sub-intervals, so the last one
+        is the state the step leaves behind.
+
+        Sampling inside the step is what makes the reference spur visible: the
+        control node's ripple lives entirely within one reference period, so a
+        record taken once per reference edge sees one point on it and reports no
+        ripple at all.  The segments matter for the same reason -- see
+        ChargePump.segments.
+        """
+        m = max(int(m), 1)
+        # clip the drive to one step and build sub-interval boundaries
+        segs, used = [], 0.0
+        for amp, dur in segments:
+            dur = min(max(dur, 0.0), self.tstep - used)
+            if dur <= 0.0:
+                break
+            segs.append((amp + i_bias, dur))
+            used += dur
+        if used < self.tstep:
+            segs.append((i_bias, self.tstep - used))
+        dt = self.tstep / m
+        xe = self._vinv @ self.x + self._vinv_b * dq_impulse
+        out = np.empty(m)
+        si, s_left = 0, (segs[0][1] if segs else 0.0)
+        for k in range(m):
+            left = dt
+            while left > 1e-18 and si < len(segs):
+                take = min(left, s_left)
+                xe = self._prop(xe, take, segs[si][0])
+                left -= take
+                s_left -= take
+                if s_left <= 1e-18:
+                    si += 1
+                    s_left = segs[si][1] if si < len(segs) else 0.0
+            if left > 1e-18:
+                xe = self._prop(xe, left, 0.0)
+            out[k] = float(np.real(self._v @ xe)[-1])
+        self.x = np.real(self._v @ xe)
+        return out
+
+    def _prop(self, xe: np.ndarray, t: float, i_cp: float) -> np.ndarray:
+        """Advance eigen-coordinates by t with a constant input current."""
+        if t <= 0.0:
+            return xe
+        wt = self._w * t
+        ew = np.exp(wt)
+        if i_cp == 0.0:
+            return ew * xe
+        small = np.abs(wt) < 1e-8
+        g = np.where(small, t * (1.0 + wt / 2.0 + wt * wt / 6.0),
+                     (ew - 1.0) / np.where(small, 1.0, self._w))
+        return ew * xe + g * self._vinv_b * i_cp
+
     # ------------------------------------------------------------ freq domain
     def transimpedance(self, f: np.ndarray) -> np.ndarray:
         """Z(f) = C (jwI - A)^-1 B  [V/A], vectorized over the grid."""
