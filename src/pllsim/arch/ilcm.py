@@ -66,6 +66,21 @@ class ILCMConfig:
     timing_cal_step_s: float = 50e-15
     int_band: tuple[float, float] = (1e3, 100e6)
 
+    def __post_init__(self):
+        # The FTL corrects the free-running frequency directly in Hz
+        # (ftl_f_lsb), so this architecture never evaluates a control-voltage
+        # law: OscConfig's tuning knobs would be accepted and ignored.
+        o = self.osc
+        ignored = [n for n in ("nl1", "nl2", "pushing_hz_v")
+                   if getattr(o, n, 0.0)] \
+            + [n for n in ("v_min", "v_max") if getattr(o, n, None) is not None]
+        if ignored:
+            raise ValueError(
+                f"ILCM does not evaluate a tuning law, so OscConfig "
+                f"{', '.join(ignored)} would have no effect: its FTL corrects "
+                "the free-running frequency directly in Hz (ftl_f_lsb), and "
+                "the injection sets the bandwidth")
+
     @property
     def n_mult(self) -> int:
         n = self.fout / self.fref
@@ -134,7 +149,10 @@ class ILCM(PLLBase):
         m = LoopMetrics(f_ugb=f_bw, pm_deg=float("nan"), gm_db=float("inf"),
                         f_3db=f_bw, peaking_db=0.0, n_crossings=1)
         dphi = TWOPI * f_free_error / c.fref
-        spurs = {"inj_spur_ref_offset": injection_spur_dbc(dphi, b)}
+        # the spur IS the residual frequency error; with none given there is
+        # nothing to report, and -600 dBc reads as "spurless by design"
+        spurs = ({"inj_spur_ref_offset": injection_spur_dbc(dphi, b)}
+                 if f_free_error else {})
         notes = [f"lock range |f_free-N·fref| < {c.lock_range_hz() / 1e6:.1f} MHz "
                  f"(realignment bound)"]
         alr = c.adler_lock_range_hz()
@@ -150,7 +168,7 @@ class ILCM(PLLBase):
     # ------------------------------------------------------------ simulate
     def simulate(self, n_cycles: int, *, noise: bool = True, calibration: bool = True,
                  seed: int = 0, f_free_error: float = 0.0,
-                 fine_oversample: int = 0) -> SimResult:
+                 fine_oversample: int = 4) -> SimResult:
         """f_free_error: initial free-running frequency error [Hz].
 
         fine_oversample=M > 1 additionally records the intra-period phase ramp
@@ -236,4 +254,18 @@ class ILCM(PLLBase):
             sim.extra["fine_fs"] = m_os * c.fref
             sim.extra["fine_f"], sim.extra["fine_psd"] = f_p, s_p
             sim.spurs_fft.update(find_spurs(f_p, s_p, [c.fref, 2 * c.fref]))
+            # same accounting as the MDLL: realignment resets the accumulated
+            # phase once per reference period, so ref-rate sampling sees only
+            # the residual AT the edge and misses what built up in between
+            from ..core.jitter import rms_jitter_fs
+            sim.jitter_fs = rms_jitter_fs(
+                f_p, s_p, c.fout, max(c.int_band[0], f_p[0]),
+                min(c.int_band[1], 0.45 * m_os * c.fref))
+            sim.notes.append(
+                f"jitter integrated on the {m_os}x oversampled phase "
+                "(includes intra-period accumulation)")
+        else:
+            sim.notes.append("jitter integrated at the reference rate: "
+                             "intra-period accumulation is NOT included — "
+                             "pass fine_oversample>1 to capture it")
         return sim

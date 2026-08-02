@@ -28,6 +28,7 @@ from .arch.ilcm import ILCM, ILCMConfig
 from .arch.mdll import MDLL, MDLLConfig
 from .arch.spll import SPLL, SPLLConfig
 from .arch.sspll import SSPLL, SSPLLConfig
+from .modulation import supports_two_point
 from .blocks.chargepump import CPConfig
 from .blocks.dtc import DTCConfig
 from .blocks.loopfilter import FilterDesign
@@ -209,7 +210,6 @@ _TEMPLATES = {
     "mdll": _mk_mdll,
 }
 
-_TWO_POINT = {"adpll_tdc", "sspll"}          # modulation-ready engines
 
 
 @dataclass
@@ -262,7 +262,11 @@ def select(req: Requirement) -> SelectorReport:
         c.jitter_fs = float(ar.jitter_fs)
         c.f_ugb = float(ar.loop.f_ugb)
         c.pm_deg = float(ar.loop.pm_deg)
-        if req.modulation and arch not in _TWO_POINT:
+        if req.modulation and not supports_two_point(pll):
+            # a hard gate, not a note: recommending an architecture whose
+            # engine cannot inject mod_freq means the modulation requirement
+            # silently did not participate in the ranking
+            c.feasible = False
             c.notes.append("no two-point TX wiring in this engine")
         if req.fractional and arch in ("cppll", "adpll_bbpd"):
             c.notes.append("MASH-2 + DTC")
