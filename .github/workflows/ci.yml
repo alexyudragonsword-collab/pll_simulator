@@ -62,11 +62,18 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
         run: pytest tests/ -v --tb=short --cov=pllsim --cov-report=term-missing:skip-covered
-      - name: Run examples (smoke, reduced plots check)
+      - name: Run examples (fast subset)
         if: matrix.python-version == '3.11'
         run: |
-          # every example, not two: they are the figures in docs/ and the
-          # only exercise several code paths get
-          for f in examples/ex*.py; do echo "--- $f"; python "$f" >/dev/null; done
+          python examples/ex01_cppll_intn_19p2m_4p8g.py
           test -f examples/out/ex01_pn_breakdown.png
+          python examples/ex13_export_vams.py
           test -f examples/out/export/INDEX.md
+      - name: Run every example (main only)
+        # the examples are the figures in docs/ and the only exercise several
+        # code paths get, but the full sweep is ~20 min of runner time and
+        # this is a private repo on a monthly minute budget -- so it gates
+        # merges to main rather than charging every branch push for it
+        if: matrix.python-version == '3.11' && github.ref == 'refs/heads/main'
+        run: |
+          for f in examples/ex*.py; do echo "--- $f"; python "$f" >/dev/null; done
