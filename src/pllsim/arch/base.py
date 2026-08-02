@@ -73,6 +73,45 @@ def supply_ripple_v(ripple, n_cycles: int, tref: float):
     return amp * np.sin(2.0 * np.pi * f_sup * np.arange(n_cycles) * tref)
 
 
+def attach_fine(sim: SimResult, fine: np.ndarray, m_os: int, fref: float,
+                int_band: tuple[float, float], offsets=None) -> SimResult:
+    """Re-derive the spur table and jitter from an oversampled phase record.
+
+    A record sampled once per reference edge cannot show anything at fref: the
+    reference spur sits exactly at that record's sampling rate, so it aliases
+    to DC and reads as spurless.  Every engine that wants its reference spur to
+    be observable has to keep an intra-period phase trace, and every one of
+    them then post-processes it identically — hence this.
+
+    ``jitter_fs`` is replaced, because the oversampled record is the honest one:
+    it contains the intra-period ripple that the reference-rate record drops.
+    """
+    from ..core.jitter import rms_jitter_fs
+    from ..core.spectrum import find_spurs, periodogram_psd
+    fs_fine = m_os * fref
+    n0 = fine.size // 4
+    f_p, s_p = periodogram_psd(fine[n0:], fs_fine)
+    sim.extra["fine_fs"] = fs_fine
+    sim.extra["fine_f"], sim.extra["fine_psd"] = f_p, s_p
+    want = [fref, 2.0 * fref] + list(offsets or [])
+    sim.spurs_fft.update(find_spurs(f_p, s_p, [o for o in want
+                                               if 0 < o < 0.45 * fs_fine]))
+    sim.jitter_fs = rms_jitter_fs(f_p, s_p, sim.f0,
+                                  max(int_band[0], f_p[0]),
+                                  min(int_band[1], 0.45 * fs_fine))
+    sim.notes.append(f"jitter integrated on the {m_os}x oversampled phase "
+                     "(includes intra-period ripple)")
+    return sim
+
+
+def no_fine_note(sim: SimResult) -> SimResult:
+    """Say plainly that the reference spur is not in this record."""
+    sim.notes.append("jitter integrated at the reference rate: intra-period "
+                     "ripple is NOT included and the reference spur aliases "
+                     "to DC — pass fine_oversample>1 to capture both")
+    return sim
+
+
 def run_band_select(osc, cfg, rng, noise: bool, enabled: bool = True):
     """Binary coarse-band search before the loop closes.
 

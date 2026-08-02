@@ -29,7 +29,7 @@ from ..core.noise import (
     output_psd,
 )
 from ..core.results import AnalysisResult, SimResult
-from .base import PLLBase, run_band_select, supply_ripple_v
+from .base import PLLBase, attach_fine, run_band_select, supply_ripple_v
 
 TWOPI = 2.0 * np.pi
 
@@ -80,6 +80,15 @@ class CPPLLConfig:
     # reference doubler: fref is the DOUBLED rate; duty-cycle error of the
     # crystal (duty-0.5) makes every other edge early/late -> fref/2 spur
     ref_doubler_duty_err: float = 0.0
+    # A retiming flip-flop re-clocks the divider output on a VCO edge, so the
+    # divider chain's own jitter never reaches the PFD -- only the retiming
+    # flop's does.  This is why a ripple divider's noise usually does not show
+    # up in a measured spectrum, and why the divider_pn number quoted in a
+    # datasheet often does not matter.  The flop is not free: it adds its own
+    # aperture jitter, and it costs a full VCO period of latency.
+    divider_retimed: bool = False
+    retime_jitter_rms_s: float = 0.0
+    lock_detect: "object | None" = None    # blocks.lockdetect.LockDetectConfig
     int_band: tuple[float, float] = (1e3, 100e6)
 
     @property
@@ -121,19 +130,42 @@ class CPPLL(PLLBase):
         paths = [
             NoisePath(FlickerFloorPhase.from_spot("ref", c.ref_pn_dbchz, c.ref_pn_fc),
                       h_lp * n),
-            NoisePath(FlickerFloorPhase.from_spot("divider", c.div_pn_dbchz, c.div_pn_fc),
-                      h_lp * n),
             NoisePath(cp_blk.noise_source(), h_lp * (TWOPI * n / c.cp.icp)),
             NoisePath(ResistorNoise(name="lf_r2", unit="V^2/Hz", r_ohm=c.filt.r2),
                       FreqResponse(f, self._r2_vnode_tf(f)) * vco_int * err),
             NoisePath(c.osc.leeson("vco"), err),
         ]
+        notes = []
+        if c.divider_retimed:
+            # the retiming flop replaces the divider chain's accumulated jitter
+            # with its own aperture jitter, referred to the PFD as a sampled
+            # timing error (2*sigma^2/fref into the one-sided PSD)
+            if c.retime_jitter_rms_s > 0:
+                paths.append(NoisePath(
+                    NoiseSource(name="retime_ff", unit="rad^2/Hz",
+                                level=2.0 * (TWOPI * c.fref
+                                             * c.retime_jitter_rms_s) ** 2
+                                / c.fref), h_lp * n))
+            notes.append("divider retimed on a VCO edge: the divider chain's "
+                         "own phase noise never reaches the PFD")
+        else:
+            paths.append(NoisePath(
+                FlickerFloorPhase.from_spot("divider", c.div_pn_dbchz,
+                                            c.div_pn_fc), h_lp * n))
         if c.filt.order == 3:
             h_r3 = 1.0 / (1.0 + 2j * np.pi * f * c.filt.r3 * c.filt.c3)
             paths.append(NoisePath(ResistorNoise(name="lf_r3", unit="V^2/Hz",
                                                  r_ohm=c.filt.r3),
                                    FreqResponse(f, h_r3) * vco_int * err))
-        notes = []
+        if c.cp.dead_zone_s > 0:
+            notes.append(
+                f"PFD dead zone {c.cp.dead_zone_s * 1e12:.1f} ps: the loop has "
+                "NO gain inside it, so this linear model overstates in-band "
+                "rejection — run simulate() to see the resulting wander")
+        if c.cp.pfd_mode == "wrap":
+            notes.append("tri-state PFD (wrap): linear only over +/-2pi, so "
+                         "acquisition from a large frequency error slips "
+                         "cycles; the linear model above assumes no slipping")
         if c.frac is not None:
             m = c.frac.mash_order
             dsm_src = ShapedQuantization(name="dsm_quant", unit="rad^2/Hz",
@@ -172,7 +204,8 @@ class CPPLL(PLLBase):
                              "range; loop gain and stability unreliable")
         bd = output_psd(paths, f)
         jit = rms_jitter_fs(f, bd["total"], c.fout, *c.int_band)
-        spurs = {"ref_spur": self._ref_spur_dbc(z)}
+        ref_spur = self._ref_spur_dbc(z)
+        spurs = {} if ref_spur == float("-inf") else {"ref_spur": ref_spur}
         if c.frac is not None:
             fo = min(c.frac.frac, 1 - c.frac.frac) * c.fref
             spurs["frac_offset_hz"] = fo
@@ -197,16 +230,48 @@ class CPPLL(PLLBase):
         zc2 = 1.0 / (s * c.c2)
         return zc2 / (c.r2 + zc1 + zc2)
 
-    def _ref_spur_dbc(self, z: FreqResponse) -> float:
-        """Reference spur from CP mismatch + leakage ripple (narrowband FM)."""
+    def _ref_spur_dbc(self, z: FreqResponse, vctrl: float | None = None) -> float:
+        """Reference spur from CP mismatch + leakage ripple (narrowband FM).
+
+        Evaluated at the control voltage the loop actually parks at, so a
+        mismatch that varies across the tuning range gives the spur that
+        channel really has rather than one number for the whole band.
+        """
         c = self.cfg
-        dq = abs(c.cp.icp * 0.01 * c.cp.mismatch_pct * c.cp.t_reset) \
-            + abs(c.cp.leakage_a / c.fref)
+        v = c.osc.v_for(c.fout) if vctrl is None else vctrl
+        cp = ChargePump(c.cp, 1.0 / c.fref, np.random.default_rng(0), noise=False)
         zf = np.interp(np.log10(c.fref), np.log10(z.f), np.abs(z.h))
-        # dq once per period -> fundamental of PEAK current 2*dq*fref
-        v1 = 2.0 * dq * c.fref * zf               # peak control ripple [V]
-        beta = c.osc.gain * v1 / c.fref           # FM modulation index
-        return float(20.0 * np.log10(max(beta / 2.0, 1e-30)))
+        v1 = cp.ripple_fundamental_a(v) * zf      # peak control ripple [V]
+        if v1 <= 0.0:
+            # no mismatch and no leakage means no ripple and so no spur; a
+            # made-up floor like -600 dBc reads as a measurement, not an absence
+            return float("-inf")
+        beta = c.osc.kvco_at(v) * v1 / c.fref     # FM modulation index
+        return float(20.0 * np.log10(beta / 2.0))
+
+    def ref_spur_vs_channel(self, fouts) -> dict[float, float]:
+        """Reference spur [dBc] across output frequencies, keyed by channel.
+
+        The measurement a constant mismatch cannot reproduce: with a
+        control-voltage-dependent mismatch this traces the V-shape, lowest near
+        the crossing voltage and rising toward both ends of the tuning range.
+
+        Requested frequencies are snapped to reachable channels -- integer
+        multiples of fref for an integer-N config -- and the keys are the
+        channels actually evaluated, so a caller can hand it a linspace.
+        """
+        from dataclasses import replace
+        lf = LoopFilter(self.cfg.filt, 1.0 / self.cfg.fref)
+        fgrid = default_grid(1e2, 1e9)
+        z = FreqResponse(fgrid, lf.transimpedance(fgrid))
+        out = {}
+        for fo in fouts:
+            fo = float(fo)
+            if self.cfg.frac is None:
+                fo = round(fo / self.cfg.fref) * self.cfg.fref
+            sub = CPPLL(replace(self.cfg, fout=fo))
+            out[fo] = sub._ref_spur_dbc(z)
+        return out
 
     # ----------------------------------------------------------- simulation
     def simulate(self, n_cycles: int, *, noise: bool = True, calibration: bool = True,
@@ -214,11 +279,18 @@ class CPPLL(PLLBase):
                  dtc_gain_init_error: float = 0.0,
                  supply_ripple: tuple[float, float] | None = None,
                  band_select: bool = True,
+                 fine_oversample: int = 1,
                  dtc_gain_drift: np.ndarray | None = None) -> SimResult:
         """supply_ripple: (amplitude_v, freq_hz) sine on the VCO supply,
         converted to frequency via osc.pushing_hz_v.
         band_select: run the coarse binary band search before closing the
-        loop when the oscillator has multiple bands."""
+        loop when the oscillator has multiple bands.
+        fine_oversample: record M control-voltage samples per reference period
+        instead of one.  The control ripple that makes the reference spur lives
+        entirely inside one period, so at M=1 the spur sits exactly at the
+        record's own sampling rate and aliases to DC -- analyze() has always
+        predicted a reference spur that the time domain could not show.  M>=8
+        makes it observable, at M times the phase-record memory."""
         c = self.cfg
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
@@ -241,7 +313,15 @@ class CPPLL(PLLBase):
             ref_src = FlickerFloorPhase.from_spot("ref", c.ref_pn_dbchz, c.ref_pn_fc)
             div_src = FlickerFloorPhase.from_spot("div", c.div_pn_dbchz, c.div_pn_fc)
             jit_ref = synth_from_psd(ref_src.psd, c.fref, n_cycles, rng) / (TWOPI * c.fref)
-            jit_div = synth_from_psd(div_src.psd, c.fref, n_cycles, rng) / (TWOPI * c.fref)
+            if c.divider_retimed:
+                # a VCO-clocked flop re-issues the edge, so the chain's own
+                # accumulated jitter is discarded and only the flop's aperture
+                # jitter survives
+                jit_div = (rng.normal(0.0, c.retime_jitter_rms_s, n_cycles)
+                           if c.retime_jitter_rms_s > 0 else np.zeros(n_cycles))
+            else:
+                jit_div = synth_from_psd(div_src.psd, c.fref, n_cycles,
+                                         rng) / (TWOPI * c.fref)
         else:
             jit_ref = np.zeros(n_cycles)
             jit_div = np.zeros(n_cycles)
@@ -266,6 +346,11 @@ class CPPLL(PLLBase):
                 dtc_cal = c.frac.dtc_cal
                 lut_cal = c.frac.dtc_lut_cal
 
+        det = None
+        if c.lock_detect is not None:
+            from ..blocks.lockdetect import LockDetector
+            det = LockDetector(c.lock_detect)
+
         t_div = 0.0
         phi_out = 0.0        # true output phase deviation vs ideal fout timebase
         phase_err = np.empty(n_cycles)
@@ -276,6 +361,10 @@ class CPPLL(PLLBase):
         prev_osc_phi = 0.0
         fv = osc.freq(lf.vctrl, v_sup[0])
         n_next = n_nom if mash is None else int(c.fout // c.fref)
+        m_os = max(int(fine_oversample), 1)
+        fine = np.empty(n_cycles * m_os) if m_os > 1 else None
+        n_slips = 0
+        n_oor = 0
 
         for n in range(n_cycles):
             t_ref = n * tref + jit_ref[n]
@@ -293,12 +382,29 @@ class CPPLL(PLLBase):
                     t_target += lut_cal.correction(residual_ui)
                 t_ref += dtc.delay(t_target)
             dt = t_div + jit_div[n] - t_ref
-            dt_eff = min(max(dt, -0.45 * tref), 0.45 * tref)   # PFD slip clamp
-            dq = cp.charge(dt_eff)
-            t_on = min(abs(dt_eff) + c.cp.t_reset, 0.9 * tref)
-            lf.update_pulse(dq / t_on, t_on)
-            fv = osc.freq(lf.vctrl, v_sup[n])
-            fv = max(fv, 0.05 * c.osc.f0)
+            dt_eff, out_of_range = cp.pfd_error(dt)
+            n_oor += int(out_of_range)
+            # a saturating detector cannot slip by construction; only the
+            # wrapping one reverses its own error signal
+            n_slips += int(out_of_range and c.cp.pfd_mode == "wrap")
+            if det is not None:
+                det.step(dt)
+            if fine is None:
+                dq = cp.charge(dt_eff, lf.vctrl)
+                t_on = min(abs(dt_eff) + c.cp.t_reset, 0.9 * tref)
+                lf.update_pulse(dq / t_on, t_on)
+                fv = max(osc.freq(lf.vctrl, v_sup[n]), 0.05 * c.osc.f0)
+            else:
+                # drive the filter with the actual CP current waveform instead
+                # of one net pulse: the up/down segments cancel in area but not
+                # in time, and that residue IS the reference spur
+                vs = lf.drive_fine(cp.segments(dt_eff, lf.vctrl), m_os,
+                                   i_bias=c.cp.leakage_at(lf.vctrl),
+                                   dq_impulse=cp.noise_charge(dt_eff))
+                f_sub = np.maximum(
+                    np.array([osc.freq(v, v_sup[n]) for v in vs]),
+                    0.05 * c.osc.f0)
+                fv = float(f_sub[-1])
 
             if dtc_cal is not None:
                 # under-delayed reference (gain_corr low) makes dt correlate
@@ -320,7 +426,15 @@ class CPPLL(PLLBase):
             # output phase deviation = integrated frequency error + osc noise
             # (the divider-edge wobble from the DSM is NOT output phase — the
             # loop lowpasses it; the VCO only sees it through vctrl)
-            phi_out += TWOPI * (fv - c.fout) * tref + d_osc
+            if fine is None:
+                phi_out += TWOPI * (fv - c.fout) * tref + d_osc
+            else:
+                # integrate the sub-samples instead of holding the end-of-
+                # period frequency across the whole period; the oscillator's
+                # own phase step is spread evenly over the M sub-intervals
+                inc = TWOPI * (f_sub - c.fout) * (tref / m_os) + d_osc / m_os
+                fine[n * m_os:(n + 1) * m_os] = phi_out + np.cumsum(inc)
+                phi_out = float(fine[(n + 1) * m_os - 1])
             phase_err[n] = phi_out
             freq_out[n] = fv
             vctrl_rec[n] = lf.vctrl
@@ -335,6 +449,26 @@ class CPPLL(PLLBase):
         if band_trace is not None:
             sim.cal_traces["band_select"] = band_trace
             sim.extra["band"] = osc.band
+        sim.extra["cycle_slips"] = n_slips
+        sim.extra["pfd_out_of_range_cycles"] = n_oor
+        if n_slips:
+            sim.notes.append(
+                f"{n_slips} cycle slips: the wrapping PFD reversed its own "
+                "error signal, so acquisition here is nothing like what the "
+                "linear model predicts")
+        elif n_oor:
+            sim.notes.append(
+                f"PFD saturated on {n_oor} cycles: the clamping detector held "
+                "at its limit instead of slipping — set cp.pfd_mode='wrap' for "
+                "a tri-state PFD, which slips instead")
+        if det is not None:
+            from ..blocks.lockdetect import LockStats
+            sim.cal_traces["lock_detect"] = det.trace_array
+            st = LockStats.from_trace(det.trace_array, tref, det.first_lock_cycle)
+            sim.extra["lock_detect"] = st
+            # what the chip's own detector says, as opposed to what a
+            # frequency-error threshold concludes with hindsight
+            sim.extra["lock_detect_time_s"] = st.lock_time_s
         spur_offsets = None
         if c.frac is not None:
             spur_offsets = frac_spur_offsets(c.frac.frac, c.fref,
@@ -343,5 +477,19 @@ class CPPLL(PLLBase):
             spur_offsets = (spur_offsets or []) + [supply_ripple[1]]
         if c.ref_doubler_duty_err != 0.0:
             spur_offsets = (spur_offsets or []) + [c.fref / 2.0]
-        return postprocess(sim, settle_frac=0.25, int_band=c.int_band,
-                           spur_offsets=spur_offsets)
+        sim = postprocess(sim, settle_frac=0.25, int_band=c.int_band,
+                          spur_offsets=spur_offsets)
+        if fine is not None:
+            sim = attach_fine(sim, fine, m_os, c.fref, c.int_band, spur_offsets)
+            sub = tref / m_os
+            if c.cp.t_reset > 0 and sub > c.cp.t_reset:
+                # the mismatch ripple is a notch t_reset wide; sampling coarser
+                # than that under-reads the reference spur, converging from
+                # below as M rises
+                sim.notes.append(
+                    f"fine_oversample={m_os} gives {sub * 1e12:.0f} ps between "
+                    f"samples but the CP reset pulse is {c.cp.t_reset * 1e12:.0f} "
+                    "ps: the reference spur here is UNDER-read — raise it to "
+                    f"{int(np.ceil(tref / c.cp.t_reset))} to resolve the pulse")
+            return sim
+        return sim
