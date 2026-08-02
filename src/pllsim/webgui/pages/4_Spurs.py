@@ -13,6 +13,7 @@ st.set_page_config(page_title="Spurs", layout="wide")
 sidebar_lang_toggle()
 
 from pllsim.guiutil import frac_presets, make_pll
+from pllsim.plotting import plot_spur_spectrum
 
 FRAC_PRESETS = frac_presets()
 
@@ -45,6 +46,24 @@ if tab:
                  "低于本底后受噪底限制。",
                  "matches the noise-free time domain within 0.2 dB (ex15); "
                  "measured readings floor at the local noise."))
+
+st.subheader(L("时域实测谱（与上表对照）",
+               "Measured spectrum (against the table above)"))
+st.caption(L("解析表是预测，这里是同一配置跑出来的周期图，杂散位置已标注 —— "
+             "ex15 的对照就是这两者。",
+             "the table is the prediction; this is the periodogram of the same "
+             "config with the detected spurs marked — ex15 compares the two."))
+n_meas = int(st.number_input(L("参考周期数", "ref cycles"), 50_000, 500_000,
+                             150_000, 50_000))
+if st.button(L("仿真并画谱", "Simulate and plot")):
+    pll = make_pll(preset)
+    pll.cfg.frac.dtc.inl_sin = (inl_amp, inl_cyc, 0.3) if inl_amp else ()
+    pll.cfg.frac.dtc.gain_error_residual = gain_eps
+    with st.spinner(L("时域仿真中…", "simulating...")):
+        sim = pll.simulate(n_meas, seed=2)
+    for note in sim.notes:
+        st.warning(note)
+    show_fig(plot_spur_spectrum(sim, ar=make_pll(preset).analyze()))
 
 st.subheader(L("最差通道扫描", "Worst-channel sweep"))
 if st.button("Sweep channels"):

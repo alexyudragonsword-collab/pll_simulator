@@ -18,6 +18,7 @@ from .. import presets
 from ..core.jitter import ldbc_from_sphi
 from ..fit import attribute_budget, fit_closed_loop, fit_leeson, load_pn_csv
 from ..guiutil import frac_presets, make_pll
+from ..plotting import plot_spur_spectrum
 from .widgets import FigList, Page, float_edit, table_from_rows
 
 FRAC_PRESETS = frac_presets()
@@ -44,8 +45,10 @@ class SpursPage(Page):
             row.addWidget(w)
         self.btn = QPushButton("Predict")
         self.btn_sweep = QPushButton("Worst-channel sweep")
+        self.btn_meas = QPushButton("Simulate + plot spectrum")
         row.addWidget(self.btn)
         row.addWidget(self.btn_sweep)
+        row.addWidget(self.btn_meas)
         row.addStretch(1)
         lay.addLayout(row)
         self._body = QVBoxLayout()
@@ -54,6 +57,19 @@ class SpursPage(Page):
         lay.addWidget(self.figs, 1)
         self.btn.clicked.connect(self._go)
         self.btn_sweep.clicked.connect(self._go_sweep)
+        self.btn_meas.clicked.connect(self._go_measure)
+
+    def _go_measure(self):
+        """The table is the prediction; this is the measured periodogram of
+        the same config, which is the comparison ex15 is built on."""
+        def fn():
+            pll = self._cfg_pll()
+            return pll.simulate(150_000, seed=2), self._cfg_pll().analyze()
+
+        def done(res):
+            sim, ar = res
+            self.figs.set_figs([plot_spur_spectrum(sim, ar=ar)])
+        self.run_async(fn, done, self.btn_meas)
 
     def _cfg_pll(self, frac=None):
         pll = make_pll(self.preset.currentText())
