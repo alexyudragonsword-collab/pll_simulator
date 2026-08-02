@@ -13,21 +13,10 @@ from pllsim import presets
 st.set_page_config(page_title="Benchmarks", layout="wide")
 sidebar_lang_toggle()
 
-st.title(L("文献对标（四篇 JSSC）", "Literature benchmarks (four JSSC papers)"))
+st.title(L("文献对标（四篇 JSSC 论文，五个通道）",
+           "Literature benchmarks (four JSSC papers, five channels)"))
 
-ROWS = [
-    {"paper": "Gao'09 SSPLL 2.21G int-N (10k-100M)",
-     "published [fs]": "150", "linear [fs]": 122, "time-domain [fs]": 139},
-    {"paper": "Dartizio'23 DTC-BB digital PLL 9.25G frac-N",
-     "published [fs]": "77", "linear [fs]": 57, "time-domain [fs]": 77},
-    {"paper": "Markulic'16 SSPLL 10.24G int-N",
-     "published [fs]": "176", "linear [fs]": 165, "time-domain [fs]": 154},
-    {"paper": "Markulic'16 SSPLL 10.24G frac-N",
-     "published [fs]": "198 (worst)", "linear [fs]": 199,
-     "time-domain [fs]": 155},
-    {"paper": "Wu'19 sampling PLL 6.25G frac-N (10k-10M)",
-     "published [fs]": "75", "linear [fs]": 77, "time-domain [fs]": 78},
-]
+ROWS = presets.benchmark_table()
 st.dataframe(ROWS, use_container_width=True)
 st.caption(L("完整方法学与假设清单见 examples/ex10、ex14 与 docs §11.4；"
              "所有未公开电路参数均为标注过的工艺合理假设——验证的是架构一致性。",

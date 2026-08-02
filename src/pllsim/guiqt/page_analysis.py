@@ -247,23 +247,6 @@ class FitPage(Page):
 class BenchmarksPage(Page):
     title = "Benchmarks"
 
-    ROWS = [
-        {"paper": "Gao'09 SSPLL 2.21G int-N (10k-100M)",
-         "published [fs]": "150", "linear [fs]": "122",
-         "time-domain [fs]": "139"},
-        {"paper": "Dartizio'23 DTC-BB digital PLL 9.25G frac-N",
-         "published [fs]": "77", "linear [fs]": "57",
-         "time-domain [fs]": "77"},
-        {"paper": "Markulic'16 SSPLL 10.24G int-N",
-         "published [fs]": "176", "linear [fs]": "165",
-         "time-domain [fs]": "154"},
-        {"paper": "Markulic'16 SSPLL 10.24G frac-N",
-         "published [fs]": "198 (worst)", "linear [fs]": "199",
-         "time-domain [fs]": "155"},
-        {"paper": "Wu'19 sampling PLL 6.25G frac-N (10k-10M)",
-         "published [fs]": "75", "linear [fs]": "77",
-         "time-domain [fs]": "78"},
-    ]
 
     def __init__(self):
         super().__init__()
@@ -272,5 +255,5 @@ class BenchmarksPage(Page):
             "Four-paper JSSC anchor — all undisclosed parameters are "
             "labelled technology-plausible assumptions; the check is "
             "architectural consistency (examples/ex10, ex14, docs 11.4)."))
-        lay.addWidget(table_from_rows(self.ROWS))
+        lay.addWidget(table_from_rows(presets.benchmark_table()))
         lay.addStretch(1)

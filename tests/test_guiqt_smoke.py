@@ -70,7 +70,16 @@ def test_selector_page_flow(app):
 
 
 def test_benchmarks_page_static(app):
+    from PySide6.QtWidgets import QTableWidget
+
+    from pllsim import presets
     from pllsim.guiqt.page_analysis import BenchmarksPage
     page = BenchmarksPage()
-    assert len(page.ROWS) == 5
+    # the table is built from the single source in presets, not a GUI-local
+    # copy: a stale duplicate is how the published-vs-model numbers drifted
+    rows = presets.benchmark_table()
+    assert len(rows) == 5
+    table = page.findChild(QTableWidget)
+    assert table is not None
+    assert table.rowCount() == len(rows)
     page.deleteLater()
