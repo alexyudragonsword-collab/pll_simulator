@@ -73,6 +73,64 @@ def supply_ripple_v(ripple, n_cycles: int, tref: float):
     return amp * np.sin(2.0 * np.pi * f_sup * np.arange(n_cycles) * tref)
 
 
+def pull_hz(osc_cfg, n_cycles: int, tref: float) -> np.ndarray:
+    """Per-cycle oscillator frequency perturbation from an aggressor [Hz].
+
+    Shared for the same reason supply_ripple_v is: the knob lives on the common
+    OscConfig, so every engine has to read it or it is a decoration.  Pulling
+    is coupling into the tank, not into the loop, so it applies to all six
+    architectures -- including the injection-locked ones, where the same
+    realignment that highpasses oscillator noise also suppresses this.
+    """
+    if not getattr(osc_cfg, "pulled", False):
+        return np.zeros(n_cycles)
+    t = np.arange(n_cycles) * tref
+    return osc_cfg.pull_lock_range_hz * np.sin(
+        2.0 * np.pi * osc_cfg.pull_offset_hz * t)
+
+
+def add_pull_offset(offsets, osc_cfg, fref: float):
+    """Add the pulling beat to a spur-offset list when it is observable.
+
+    Above fref/2 a reference-rate record cannot resolve it -- that offset is
+    left out rather than reported at its alias, which would be a wrong number
+    rather than a missing one.
+    """
+    if getattr(osc_cfg, "pulled", False) and osc_cfg.pull_offset_hz < 0.45 * fref:
+        return (list(offsets) if offsets else []) + [osc_cfg.pull_offset_hz]
+    return offsets
+
+
+def pull_spur(osc_cfg, err_fr=None) -> dict[str, float]:
+    """{"pull_spur": dBc} for an aggressor, after the loop's rejection.
+
+    Empty when nothing is configured -- an absent aggressor is an absent key,
+    not a number.  Also empty (with the caller warned separately) when the
+    aggressor is inside the lock range, where the oscillator is captured and
+    the weak-pulling expression does not describe anything.
+    """
+    if not getattr(osc_cfg, "pulled", False) or osc_cfg.within_lock_range():
+        return {}
+    gain = 1.0
+    if err_fr is not None:
+        gain = float(np.interp(osc_cfg.pull_offset_hz, err_fr.f,
+                               np.abs(err_fr.h)))
+    return {"pull_spur": osc_cfg.pull_spur_dbc(gain)}
+
+
+def pull_notes(osc_cfg) -> list[str]:
+    if not getattr(osc_cfg, "pulled", False):
+        return []
+    if osc_cfg.within_lock_range():
+        return [f"aggressor is {osc_cfg.pull_offset_hz / 1e6:.2f} MHz away but "
+                f"the lock range is {osc_cfg.pull_lock_range_hz / 1e6:.2f} MHz: "
+                "the oscillator is CAPTURED, not pulled — no sideband is "
+                "reported because the loop no longer owns the frequency"]
+    return [f"injection pulling: f_L={osc_cfg.pull_lock_range_hz / 1e6:.2f} MHz "
+            f"aggressor at {osc_cfg.pull_offset_hz / 1e6:.2f} MHz offset "
+            "(coupling into the tank — the loop filter cannot fix it)"]
+
+
 def attach_fine(sim: SimResult, fine: np.ndarray, m_os: int, fref: float,
                 int_band: tuple[float, float], offsets=None) -> SimResult:
     """Re-derive the spur table and jitter from an oversampled phase record.

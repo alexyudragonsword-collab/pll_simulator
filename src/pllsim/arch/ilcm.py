@@ -40,7 +40,16 @@ from ..core.freqresp import FreqResponse, LoopMetrics, default_grid
 from ..core.jitter import ipn_dbc, rms_jitter_fs
 from ..core.noise import FlickerFloorPhase, NoisePath, output_psd
 from ..core.results import AnalysisResult, SimResult
-from .base import PLLBase, attach_fine, no_fine_note, supply_ripple_v
+from .base import (
+    PLLBase,
+    add_pull_offset,
+    attach_fine,
+    no_fine_note,
+    pull_hz,
+    pull_notes,
+    pull_spur,
+    supply_ripple_v,
+)
 
 TWOPI = 2.0 * np.pi
 
@@ -156,8 +165,9 @@ class ILCM(PLLBase):
         # nothing to report, and -600 dBc reads as "spurless by design"
         spurs = ({"inj_spur_ref_offset": injection_spur_dbc(dphi, b)}
                  if f_free_error else {})
+        spurs.update(pull_spur(c.osc, h_osc_eff))
         notes = [f"lock range |f_free-N·fref| < {c.lock_range_hz() / 1e6:.1f} MHz "
-                 f"(realignment bound)"]
+                 f"(realignment bound)"] + pull_notes(c.osc)
         alr = c.adler_lock_range_hz()
         if alr is not None:
             notes.append(f"Adler LC cross-check lock range: {alr / 1e6:.1f} MHz")
@@ -184,6 +194,7 @@ class ILCM(PLLBase):
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
         v_sup = supply_ripple_v(supply_ripple, n_cycles, tref)
+        f_pull = pull_hz(c.osc, n_cycles, tref)
         c.n_mult          # validates the integer multiple; raises if not
         b = c.beta
 
@@ -213,7 +224,7 @@ class ILCM(PLLBase):
             d_osc = osc_noise[nn] - prev_on
             prev_on = osc_noise[nn]
             f_free = (c.osc.f0 + f_free_error + f_corr
-                      + c.osc.pushing_hz_v * v_sup[nn])
+                      + c.osc.pushing_hz_v * v_sup[nn] + f_pull[nn])
             dphi_drift = TWOPI * (f_free - c.fout) * tref
             e_pre = e + dphi_drift + d_osc          # drifted phase at injection
             if fine is not None:
@@ -252,10 +263,12 @@ class ILCM(PLLBase):
             sim.cal_traces["ftl_fcorr"] = np.asarray(ftl.trace)
         if tcal is not None:
             sim.cal_traces["inj_timing"] = np.asarray(tcal.trace)
-        sim = postprocess(sim, int_band=c.int_band)
+        sim = postprocess(sim, int_band=c.int_band,
+                          spur_offsets=add_pull_offset(None, c.osc, c.fref))
         # realignment resets the accumulated phase once per reference period,
         # so ref-rate sampling sees only the residual AT the edge and misses
         # what built up in between
         if fine is not None:
-            return attach_fine(sim, fine, m_os, c.fref, c.int_band)
+            return attach_fine(sim, fine, m_os, c.fref, c.int_band,
+                               add_pull_offset(None, c.osc, c.fref))
         return no_fine_note(sim)
