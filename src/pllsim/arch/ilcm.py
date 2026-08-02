@@ -40,7 +40,7 @@ from ..core.freqresp import FreqResponse, LoopMetrics, default_grid
 from ..core.jitter import ipn_dbc, rms_jitter_fs
 from ..core.noise import FlickerFloorPhase, NoisePath, output_psd
 from ..core.results import AnalysisResult, SimResult
-from .base import PLLBase
+from .base import PLLBase, supply_ripple_v
 
 TWOPI = 2.0 * np.pi
 
@@ -67,6 +67,9 @@ class ILCMConfig:
     int_band: tuple[float, float] = (1e3, 100e6)
 
     def __post_init__(self):
+        if self.osc.n_bands > 1:
+            raise ValueError("ILCM models no coarse-band search: "
+                             "its oscillator runs free and the FTL corrects it in Hz")
         # The FTL corrects the free-running frequency directly in Hz
         # (ftl_f_lsb), so this architecture never evaluates a control-voltage
         # law: OscConfig's tuning knobs would be accepted and ignored.
@@ -168,6 +171,7 @@ class ILCM(PLLBase):
     # ------------------------------------------------------------ simulate
     def simulate(self, n_cycles: int, *, noise: bool = True, calibration: bool = True,
                  seed: int = 0, f_free_error: float = 0.0,
+                 supply_ripple: tuple[float, float] | None = None,
                  fine_oversample: int = 4) -> SimResult:
         """f_free_error: initial free-running frequency error [Hz].
 
@@ -179,6 +183,7 @@ class ILCM(PLLBase):
         c = self.cfg
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
+        v_sup = supply_ripple_v(supply_ripple, n_cycles, tref)
         c.n_mult          # validates the integer multiple; raises if not
         b = c.beta
 
@@ -207,7 +212,8 @@ class ILCM(PLLBase):
         for nn in range(n_cycles):
             d_osc = osc_noise[nn] - prev_on
             prev_on = osc_noise[nn]
-            f_free = c.osc.f0 + f_free_error + f_corr
+            f_free = (c.osc.f0 + f_free_error + f_corr
+                      + c.osc.pushing_hz_v * v_sup[nn])
             dphi_drift = TWOPI * (f_free - c.fout) * tref
             e_pre = e + dphi_drift + d_osc          # drifted phase at injection
             if fine is not None:

@@ -32,7 +32,7 @@ from ..core.noise import (
     output_psd,
 )
 from ..core.results import AnalysisResult, SimResult
-from .base import PLLBase
+from .base import PLLBase, supply_ripple_v
 from .cppll import FracConfig, frac_spur_offsets
 
 TWOPI = 2.0 * np.pi
@@ -75,6 +75,18 @@ class ADPLLConfig:
             raise ValueError("tdc mode requires TDCConfig")
         if self.mode == "dtc_bbpd" and self.frac is None:
             raise ValueError("dtc_bbpd mode requires FracConfig (MASH + DTC)")
+        if self.frac is not None and self.frac.dtc_lut_cal is not None:
+            raise ValueError(
+                "dtc_lut_cal is wired for the CPPLL only: its update"
+                " regresses a TIMING error against the MASH residue, and"
+                " the bang-bang detector exposes only a sign — wiring it"
+                " naively measurably made the INL spur worse.")
+        if self.osc.n_bands > 1:
+            raise ValueError(
+                "the ADPLL engine has no coarse-band search: the DCO word is\n"
+                "the only tuning control it models, so n_bands would be\n"
+                "accepted and never acted on (and export would still emit a\n"
+                "band-search FSM for it)")
 
 
 class ADPLL(PLLBase):
@@ -220,6 +232,7 @@ class ADPLL(PLLBase):
     def simulate(self, n_cycles: int, *, noise: bool = True, calibration: bool = True,
                  seed: int = 0, f_start_offset: float = 0.0,
                  kdco_cal=None, tdc_cal=None, dtc_gain_init_error: float = 0.0,
+                 supply_ripple: tuple[float, float] | None = None,
                  mod_freq: np.ndarray | None = None, mod_dp_gain: float = 1.0,
                  dtc_gain_drift: np.ndarray | None = None) -> SimResult:
         """The two modes take different knobs, and asking for the wrong one
@@ -236,13 +249,13 @@ class ADPLL(PLLBase):
                          dtc_gain_drift=dtc_gain_drift)
             return self._sim_tdc(n_cycles, noise, calibration, seed,
                                  f_start_offset, kdco_cal, tdc_cal,
-                                 mod_freq, mod_dp_gain)
+                                 mod_freq, mod_dp_gain, supply_ripple)
         self._reject("dtc_bbpd", kdco_cal=kdco_cal, tdc_cal=tdc_cal,
                      mod_freq=mod_freq, mod_dp_gain=None
                      if mod_dp_gain == 1.0 else mod_dp_gain)
         return self._sim_bbpd(n_cycles, noise, calibration, seed,
                               f_start_offset, dtc_gain_init_error,
-                              dtc_gain_drift)
+                              dtc_gain_drift, supply_ripple)
 
     @staticmethod
     def _reject(mode: str, **unsupported):
@@ -261,10 +274,12 @@ class ADPLL(PLLBase):
         return synth_from_psd(src.psd, c.fref, n_cycles, rng) / (TWOPI * c.fref)
 
     def _sim_tdc(self, n_cycles, noise, calibration, seed, f_start_offset,
-                 kdco_cal, tdc_cal, mod_freq=None, mod_dp_gain=1.0):
+                 kdco_cal, tdc_cal, mod_freq=None, mod_dp_gain=1.0,
+                 supply_ripple=None):
         c = self.cfg
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
+        v_sup = supply_ripple_v(supply_ripple, n_cycles, tref)
         fcw = c.fcw
         osc = Oscillator(c.osc, c.fref, rng, noise=noise, name="dco")
         tdc = TDC(c.tdc, rng, noise=noise)
@@ -336,7 +351,7 @@ class ADPLL(PLLBase):
                 qerr = otw + qerr - otw_q
             else:
                 otw_q = np.round(otw)
-            fv = c.osc.freq_law(otw_q)   # Kdco nonlinearity + OTW range
+            fv = c.osc.freq_law(otw_q) + c.osc.pushing_hz_v * v_sup[n]
 
             phase_err[n] = TWOPI * (phi_v - (n + 1) * fcw)
             freq_out[n] = fv
@@ -355,13 +370,17 @@ class ADPLL(PLLBase):
         # else -- tabulate it instead of leaving the user to find it by eye
         frac = c.fcw % 1.0
         offs = frac_spur_offsets(frac, c.fref) if frac > 1e-9 else None
+        if supply_ripple is not None and supply_ripple[1] < 0.45 * c.fref:
+            offs = (offs or []) + [supply_ripple[1]]
         return postprocess(sim, int_band=c.int_band, spur_offsets=offs)
 
     def _sim_bbpd(self, n_cycles, noise, calibration, seed, f_start_offset,
-                  dtc_gain_init_error, dtc_gain_drift=None):
+                  dtc_gain_init_error, dtc_gain_drift=None,
+                  supply_ripple=None):
         c = self.cfg
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
+        v_sup = supply_ripple_v(supply_ripple, n_cycles, tref)
         osc = Oscillator(c.osc, c.fref, rng, noise=noise, name="dco")
         bb = BBPD(c.bb_jitter_rms_s, rng, noise=noise)
         mash = c.frac.make_mash()
@@ -413,7 +432,7 @@ class ADPLL(PLLBase):
                 qerr = otw + qerr - otw_q
             else:
                 otw_q = np.round(otw)
-            fv = c.osc.freq_law(otw_q)   # Kdco nonlinearity + OTW range
+            fv = c.osc.freq_law(otw_q) + c.osc.pushing_hz_v * v_sup[n]
 
             n_next = n_int + mash.step(frac_word)
             d_osc = osc_noise[n] - prev_phi_n

@@ -239,3 +239,55 @@ def test_selector_will_not_recommend_an_engine_that_cannot_modulate():
     # and the GUIs read the same predicate rather than their own name list
     assert "adpll_bb_100m_10g" not in two_point_presets()
     assert "adpll_100m_10g" in two_point_presets()
+
+
+# ------------------------------- shared knobs: implemented, or refused loudly
+@pytest.mark.parametrize("preset", ["cppll_19p2m_4p8g", "sspll_19p2m_4p8g",
+                                    "spll_100m_8g", "adpll_100m_10g",
+                                    "adpll_bb_100m_10g", "ilcm_250m_12g",
+                                    "mdll_150m_2p4g"])
+def test_supply_pushing_reaches_every_engine(preset):
+    """pushing_hz_v is on the shared OscConfig; for a long time only the CPPLL
+    read it, so it was a decoration on the other five."""
+    p = presets.ALL_PRESETS[preset]()
+    p.cfg.osc = replace(p.cfg.osc, pushing_hz_v=50e6)
+    f_r = min(1e6, p.cfg.fref / 8)
+    hit = p.simulate(40_000, seed=1, supply_ripple=(5e-3, f_r))
+    flat = presets.ALL_PRESETS[preset]().simulate(40_000, seed=1)
+    assert not np.allclose(hit.freq_out, flat.freq_out)
+
+
+@pytest.mark.parametrize("preset", ["cppll_19p2m_4p8g", "sspll_19p2m_4p8g",
+                                    "spll_100m_8g"])
+def test_band_search_runs_in_every_architecture_that_accepts_bands(preset):
+    p = presets.ALL_PRESETS[preset]()
+    p.cfg.osc = replace(p.cfg.osc, n_bands=32, band_step_hz=40e6)
+    sim = p.simulate(40_000, seed=1)
+    assert sim.cal_traces.get("band_select") is not None
+    assert abs(sim.freq_out[-1] - p.cfg.fout) < 1e-4 * p.cfg.fout
+
+
+@pytest.mark.parametrize("preset", ["adpll_100m_10g", "ilcm_250m_12g",
+                                    "mdll_150m_2p4g"])
+def test_architectures_without_a_band_search_refuse_bands(preset):
+    """export emits a band-search FSM for any osc.n_bands > 1, so an engine
+    that never searches must not accept the field."""
+    cfg = presets.ALL_PRESETS[preset]().cfg
+    fields = dict(cfg.__dict__)
+    fields["osc"] = replace(cfg.osc, n_bands=8, band_step_hz=1e6)
+    with pytest.raises(ValueError, match="coarse-band search"):
+        type(cfg)(**fields)
+
+
+@pytest.mark.parametrize("preset", ["sspll_frac_19p2m_4p806g",
+                                    "spll_frac_52m_6p253g",
+                                    "adpll_bb_100m_10g"])
+def test_lut_cal_is_refused_where_it_is_not_wired(preset):
+    """It lives on the shared FracConfig but only the CPPLL consumes it.
+    Wiring it naively into the others measurably made the INL spur worse with
+    either update sign, so refusing beats silently ignoring."""
+    from pllsim.calibration.lms import LUTCal
+    cfg = presets.ALL_PRESETS[preset]().cfg
+    cfg.frac.dtc_lut_cal = LUTCal(k=8, lo=-1.0, hi=0.0, mu=1e-15)
+    with pytest.raises(ValueError, match="dtc_lut_cal"):
+        type(cfg)(**cfg.__dict__)

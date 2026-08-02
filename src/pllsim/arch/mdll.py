@@ -36,7 +36,7 @@ from ..core.freqresp import FreqResponse, LoopMetrics, default_grid
 from ..core.jitter import ipn_dbc, rms_jitter_fs
 from ..core.noise import FlickerFloorPhase, NoisePath, NoiseSource, output_psd
 from ..core.results import AnalysisResult, SimResult
-from .base import PLLBase
+from .base import PLLBase, supply_ripple_v
 from .ilcm import injection_spur_dbc
 
 TWOPI = 2.0 * np.pi
@@ -54,6 +54,11 @@ class MDLLConfig:
     # integrator on the DCO word (step size in LSB per reference cycle)
     tune_ki_lsb: float = 0.02
     int_band: tuple[float, float] = (1e3, 100e6)
+
+    def __post_init__(self):
+        if self.osc.n_bands > 1:
+            raise ValueError("MDLL models no coarse-band search: "
+                             "its ring is tuned by the digital word alone")
 
     @property
     def n_mult(self) -> int:
@@ -111,10 +116,12 @@ class MDLL(PLLBase):
     # ------------------------------------------------------------ simulate
     def simulate(self, n_cycles: int, *, noise: bool = True, calibration: bool = True,
                  seed: int = 0, f_free_error: float = 0.0,
+                 supply_ripple: tuple[float, float] | None = None,
                  fine_oversample: int = 4) -> SimResult:
         c = self.cfg
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
+        v_sup = supply_ripple_v(supply_ripple, n_cycles, tref)
 
         osc = Oscillator(c.osc, c.fref, rng, noise=noise)
         jit_ref = (synth_from_psd(
@@ -135,7 +142,8 @@ class MDLL(PLLBase):
         for nn in range(n_cycles):
             d_osc = osc_noise[nn] - prev_on
             prev_on = osc_noise[nn]
-            f_free = c.osc.freq_law(tune_acc) + f_free_error
+            f_free = (c.osc.freq_law(tune_acc) + f_free_error
+                      + c.osc.pushing_hz_v * v_sup[nn])
             dphi_drift = TWOPI * (f_free - c.fout) * tref
             e_pre = e + dphi_drift + d_osc
             if fine is not None:

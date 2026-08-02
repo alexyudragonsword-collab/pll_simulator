@@ -33,7 +33,7 @@ from ..core.noise import (
     output_psd,
 )
 from ..core.results import AnalysisResult, SimResult
-from .base import PLLBase
+from .base import PLLBase, run_band_select, supply_ripple_v
 
 TWOPI = 2.0 * np.pi
 
@@ -72,6 +72,14 @@ class SSPLLConfig:
             if self.frac.dtc is None:
                 raise ValueError("fractional SSPLL requires a DTC in FracConfig "
                                  "(the sampler needs edge alignment)")
+            if self.frac.dtc_lut_cal is not None:
+                raise ValueError(
+                    "dtc_lut_cal is wired for the CPPLL only. Its update"
+                    " regresses the PD's TIMING error against the MASH"
+                    " residue; this architecture's detector exposes a"
+                    " different quantity, and wiring it naively measurably"
+                    " made the INL spur WORSE with either update sign, so it"
+                    " is refused rather than silently ignored.")
             if self.frac.mash_order != 1:
                 raise ValueError(
                     "fractional SSPLL uses a 1st-order EFM: its residue spans "
@@ -180,6 +188,8 @@ class SSPLL(PLLBase):
     def simulate(self, n_cycles: int, *, noise: bool = True, calibration: bool = True,
                  seed: int = 0, f_start_offset: float = 0.0,
                  fll_enable: bool = True,
+                 supply_ripple: tuple[float, float] | None = None,
+                 band_select: bool = True,
                  dtc_gain_init_error: float = 0.0,
                  mod_freq: np.ndarray | None = None,
                  mod_dp_gain: float = 1.0,
@@ -196,8 +206,10 @@ class SSPLL(PLLBase):
 
         lf = LoopFilter(c.filt, tref)
         vlock = (c.fout - c.osc.f0) / c.osc.gain
-        lf.reset(vlock + f_start_offset / c.osc.gain)
         osc = Oscillator(c.osc, c.fref, rng, noise=noise)
+        band_trace = run_band_select(osc, c, rng, noise, band_select)
+        lf.reset((0.0 if band_trace is not None else vlock)
+                 + f_start_offset / c.osc.gain)
         pd = SamplingPD(c.sampler, tref, rng, noise=noise)
         fll = FLLStateMachine(n, c.fref, window=c.fll_window,
                               f_engage=c.fll_engage, f_release=c.fll_release,
@@ -224,7 +236,8 @@ class SSPLL(PLLBase):
         prev_on = 0.0
         phi_frac = 0.0          # VCO phase modulo 2pi at the sampling instant
         phi_out = 0.0
-        fv = osc.freq(lf.vctrl)
+        v_sup = supply_ripple_v(supply_ripple, n_cycles, tref)
+        fv = osc.freq(lf.vctrl, v_sup[0])
 
         phase_err = np.empty(n_cycles)
         freq_out = np.empty(n_cycles)
@@ -286,7 +299,7 @@ class SSPLL(PLLBase):
                 mash.step(frac_word)
             lf.update_pulse(dq / max(c.sampler.pulse_width, 1e-12),
                             c.sampler.pulse_width)
-            fv = max(osc.freq(lf.vctrl), 0.05 * c.osc.f0)
+            fv = max(osc.freq(lf.vctrl, v_sup[nn]), 0.05 * c.osc.f0)
             if mod_freq is not None:    # highpass point: direct VCO push
                 fv += mod_freq[nn] * mod_dp_gain
 
@@ -308,4 +321,8 @@ class SSPLL(PLLBase):
             from .cppll import frac_spur_offsets
             spur_offsets = frac_spur_offsets(c.frac.frac, c.fref,
                                              fmin=8.0 * c.fref / n_cycles)
+        if band_trace is not None:
+            sim.cal_traces["band_select"] = band_trace
+        if supply_ripple is not None and supply_ripple[1] < 0.45 * c.fref:
+            spur_offsets = (spur_offsets or []) + [supply_ripple[1]]
         return postprocess(sim, int_band=c.int_band, spur_offsets=spur_offsets)

@@ -58,3 +58,39 @@ def start_offset_kwarg(pll) -> str | None:
         if name in params:
             return name
     return None
+
+
+def supply_ripple_v(ripple, n_cycles: int, tref: float):
+    """Per-cycle supply deviation [V] from a (amplitude_v, freq_hz) sine.
+
+    Shared so that every engine spells supply pushing the same way: the knob
+    lives on the common OscConfig (pushing_hz_v), and for a long time only the
+    CPPLL actually read it, which made it a decoration on five architectures.
+    """
+    if ripple is None:
+        return np.zeros(n_cycles)
+    amp, f_sup = ripple
+    return amp * np.sin(2.0 * np.pi * f_sup * np.arange(n_cycles) * tref)
+
+
+def run_band_select(osc, cfg, rng, noise: bool, enabled: bool = True):
+    """Binary coarse-band search before the loop closes.
+
+    Returns the trace, or None when the bank is a single band or the caller
+    disabled it.  Lives here because the search is identical for every
+    architecture whose oscillator has a control voltage — it was CPPLL-only
+    for a while, which made n_bands a decoration on the other analog loops
+    while `export` happily emitted a band-search FSM for them.
+    """
+    if cfg.osc.n_bands <= 1 or not enabled:
+        return None
+    from ..calibration.gain_cal import BandSelect
+    bs = BandSelect(cfg.osc.n_bands, cfg.fout)
+    while not bs.done:
+        osc.band = bs.band
+        f_meas = osc.freq(0.0)
+        if noise:      # counter accuracy over meas_n reference cycles
+            f_meas += rng.normal(0.0, cfg.fref / (bs.meas_n * np.sqrt(12)))
+        bs.observe(f_meas)
+    osc.band = bs.band
+    return np.asarray(bs.trace, dtype=float)
