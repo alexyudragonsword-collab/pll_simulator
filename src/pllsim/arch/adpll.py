@@ -129,6 +129,12 @@ class ADPLL(PLLBase):
                 paths.append(NoisePath(
                     ShapedQuantization(name="dtc_quant", unit="rad^2/Hz",
                                        q=TWOPI * q_dtc * c.fout, fs=c.fref, order=0), h))
+                j_dtc = getattr(c.frac.dtc, "jitter_rms_s", 0.0)
+                if j_dtc > 0:      # DTC.delay injects it every cycle in sim
+                    paths.append(NoisePath(
+                        NoiseSource(name="dtc_jitter", unit="rad^2/Hz",
+                                    level=2.0 * (TWOPI * c.fout * j_dtc) ** 2
+                                    / c.fref), h))
                 eps = getattr(c.frac.dtc, "gain_error_residual", 0.01)
                 paths.append(NoisePath(
                     ShapedQuantization(name="dsm_residual", unit="rad^2/Hz",
@@ -167,6 +173,7 @@ class ADPLL(PLLBase):
         """Self-consistent BBPD linearization: Kbb = sqrt(2/pi)/sigma_t."""
         c = self.cfg
         q_dtc = c.frac.dtc.t_res if c.frac.dtc is not None else 0.0
+        j_dtc = c.frac.dtc.jitter_rms_s if c.frac.dtc is not None else 0.0
         sigma_t = max(c.bb_jitter_rms_s, 1e-15)
         gol = None
         for _ in range(8):
@@ -180,8 +187,11 @@ class ADPLL(PLLBase):
             s_dco = c.osc.leeson("dco").psd(f) * err.mag2()
             from ..core.jitter import integrate_pn
             var_phi = integrate_pn(f, s_dco, 1e4, c.fref / 2)
+            # everything the comparator actually sees: loop-shaped DCO noise,
+            # DTC quantization AND the DTC's own random jitter (it sits in the
+            # same edge path, so leaving it out over-predicts Kbb and the BW)
             var_t = var_phi / (TWOPI * c.fout) ** 2 \
-                + q_dtc**2 / 12.0 + c.bb_jitter_rms_s**2
+                + q_dtc**2 / 12.0 + j_dtc**2 + c.bb_jitter_rms_s**2
             sigma_new = np.sqrt(var_t)
             if abs(sigma_new - sigma_t) < 1e-18:
                 break
