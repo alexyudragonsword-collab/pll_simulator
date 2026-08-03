@@ -62,7 +62,7 @@ python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 pip install -e .[gui]     # browser (streamlit), bilingual zh/EN
 pllsim-web
 
-pip install -e .[guiqt]   # native desktop (PySide6), English
+pip install -e .[guiqt]   # native desktop (PySide6), bilingual zh/EN
 pllsim-gui                # or: python -m pllsim.guiqt
 ```
 

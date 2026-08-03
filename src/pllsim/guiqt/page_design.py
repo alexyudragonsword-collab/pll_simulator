@@ -27,6 +27,7 @@ from ..synth import (
     sweep_bandwidth,
     sweepable_presets,
 )
+from .i18n import L, tr
 from .widgets import FigList, Page, float_edit, in_scroll, table_from_rows
 
 
@@ -37,14 +38,18 @@ def _filt_rows(filt):
 
 class SynthesisPage(Page):
     title = "Loop synthesis"
+    title_zh = "环路综合"
 
     def __init__(self):
         super().__init__()
         lay = QVBoxLayout(self)
-        note = QLabel("ILCM / MDLL are absent by design: they have no loop "
-                      "filter — bandwidth comes from per-cycle edge "
-                      "realignment, and the only tunable loop is the "
-                      "frequency-tracking gain.")
+        note = tr(QLabel(),
+                  "此处没有 ILCM / MDLL 是有意的：它们没有可解的环路滤波器 —— "
+                  "带宽来自每周期的边沿重对齐，唯一可调的环路是频率跟踪增益。",
+                  "ILCM / MDLL are absent by design: they have no loop "
+                  "filter — bandwidth comes from per-cycle edge "
+                  "realignment, and the only tunable loop is the "
+                  "frequency-tracking gain.")
         note.setWordWrap(True)
         lay.addWidget(note)
         tabs = QTabWidget()
@@ -63,7 +68,7 @@ class SynthesisPage(Page):
                        ("Kvco [Hz/V]", self.cp_kvco), ("UGB [Hz]", self.cp_ugb),
                        ("PM [deg]", self.cp_pm), ("fref [Hz]", self.cp_fref)]:
             f.addRow(lab, w)
-        self.cp_btn = QPushButton("Synthesize")
+        self.cp_btn = tr(QPushButton(), "综合", "Synthesize")
         f.addRow(self.cp_btn)
         self.cp_out = QVBoxLayout()
         f.addRow(self.cp_out)
@@ -85,7 +90,8 @@ class SynthesisPage(Page):
                        ("UGB [Hz]", self.ss_ugb), ("PM [deg]", self.ss_pm),
                        ("fref [Hz]", self.ss_fref)]:
             f2.addRow(lab, w)
-        self.ss_btn = QPushButton("Synthesize (exact discrete loop)")
+        self.ss_btn = tr(QPushButton(), "综合（精确离散环路）",
+                         "Synthesize (exact discrete loop)")
         f2.addRow(self.ss_btn)
         self.ss_out = QVBoxLayout()
         f2.addRow(self.ss_out)
@@ -110,7 +116,8 @@ class SynthesisPage(Page):
                        ("UGB [Hz]", self.sp_ugb), ("PM [deg]", self.sp_pm),
                        ("fref [Hz]", self.sp_fref)]:
             f2b.addRow(lab, w)
-        self.sp_btn = QPushButton("Synthesize (exact discrete loop)")
+        self.sp_btn = tr(QPushButton(), "综合（精确离散环路）",
+                         "Synthesize (exact discrete loop)")
         f2b.addRow(self.sp_btn)
         self.sp_out = QVBoxLayout()
         f2b.addRow(self.sp_out)
@@ -126,7 +133,7 @@ class SynthesisPage(Page):
         for lab, w in [("fref [Hz]", self.dl_fref), ("UGB [Hz]", self.dl_ugb),
                        ("PM [deg]", self.dl_pm)]:
             f3.addRow(lab, w)
-        self.dl_btn = QPushButton("Synthesize")
+        self.dl_btn = tr(QPushButton(), "综合", "Synthesize")
         f3.addRow(self.dl_btn)
         self.dl_out = QLabel("")
         f3.addRow(self.dl_out)
@@ -152,7 +159,7 @@ class SynthesisPage(Page):
             f4.addRow(lab, w)
         f4.addRow(QLabel(f"{len(names)} of {len(presets.ALL_PRESETS)} presets: "
                          "ILCM/MDLL have no loop to re-synthesize"))
-        self.sw_btn = QPushButton("Sweep")
+        self.sw_btn = tr(QPushButton(), "扫描", "Sweep")
         f4.addRow(self.sw_btn)
         self.sw_figs = FigList()
         f4.addRow(self.sw_figs)
@@ -232,6 +239,7 @@ class SynthesisPage(Page):
 
 class SelectorPage(Page):
     title = "Architecture selector"
+    title_zh = "架构选型"
 
     def __init__(self):
         super().__init__()
@@ -241,14 +249,14 @@ class SelectorPage(Page):
         self.fout = float_edit("8e9")
         self.jmax = float_edit("120")
         self.band = float_edit("10e3, 40e6", width=140)
-        self.mod = QCheckBox("needs two-point TX")
+        self.mod = tr(QCheckBox(), "需要两点调制发射", "needs two-point TX")
         for lab, w in [("fref [Hz]", self.fref), ("fout [Hz]", self.fout),
                        ("jitter target [fs]", self.jmax),
                        ("int band [Hz]", self.band)]:
             row.addWidget(QLabel(lab))
             row.addWidget(w)
         row.addWidget(self.mod)
-        self.btn = QPushButton("Select")
+        self.btn = tr(QPushButton(), "选型", "Select")
         row.addWidget(self.btn)
         row.addStretch(1)
         lay.addLayout(row)
@@ -288,6 +296,7 @@ class SelectorPage(Page):
                     "notes": "; ".join(c.notes),
                 })
             self._body.addWidget(table_from_rows(rows))
+            self._add_handoff(rep)
             b = rep.best
             self.verdict.setText(
                 f"recommendation: <b>{b.arch}</b> ({b.jitter_fs:.0f} fs, "
@@ -296,3 +305,37 @@ class SelectorPage(Page):
                 "no architecture meets the target — relax it, improve the "
                 "oscillator class, or raise fref")
         self.run_async(fn, done, self.btn)
+
+    def _add_handoff(self, rep):
+        """One button per feasible candidate, opening it in the workbench.
+
+        The flow the docs describe and nothing implemented: ranking
+        architectures is only half the job, and retyping fref/fout into the
+        workbench to look at the winner is the other half.  The candidate
+        object the selector already built is handed straight over, so what
+        opens is the design sized for the stated requirement rather than the
+        nearest stock preset.
+        """
+        win = self.main_window()
+        if win is None:
+            return
+        row = QHBoxLayout()
+        row.addWidget(tr(QLabel(), "在工作台中打开：", "Open in workbench:"))
+        for c in sorted(rep.candidates, key=lambda c: c.key):
+            if not c.feasible or c.pll is None:
+                continue
+            b = QPushButton(c.arch)
+            b.clicked.connect(
+                lambda _=False, cand=c: self._open(win, cand))
+            row.addWidget(b)
+        row.addStretch(1)
+        host = QWidget()
+        host.setLayout(row)
+        self._body.addWidget(host)
+
+    @staticmethod
+    def _open(win, cand):
+        wb = win.pages[0]
+        wb.load_config(cand.pll, L(f"选型结果：{cand.arch}",
+                                   f"from selector: {cand.arch}"))
+        win.nav.setCurrentRow(0)

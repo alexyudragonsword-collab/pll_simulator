@@ -52,10 +52,19 @@ if rep is not None:
                      f"余量 {rep.req.jitter_fs_max - rep.best.jitter_fs:.0f} fs）",
                      f"recommendation: {rep.best.arch} "
                      f"({rep.best.jitter_fs:.0f} fs)"))
-        st.caption(L("提示：拿到推荐后到架构工作台，选最接近的 preset 并把"
-                     "这里的 fref/fout 填进去细化。",
-                     "tip: continue in the Workbench — pick the closest "
-                     "preset and enter this fref/fout to refine."))
+        # The handoff the caption used to describe and ask the user to do by
+        # hand.  The candidate is already sized for the stated requirement, so
+        # it goes across as-is rather than sending anyone to find the nearest
+        # preset and retype fref/fout into it.
+        st.subheader(L("在工作台中打开", "Open in the workbench"))
+        feasible = [c for c in sorted(rep.candidates, key=lambda c: c.key)
+                    if c.feasible and c.pll is not None]
+        cols = st.columns(max(len(feasible), 1))
+        for col, cand in zip(cols, feasible):
+            if col.button(cand.arch, key=f"open_{cand.arch}"):
+                st.session_state["wb_handoff"] = cand.pll
+                st.session_state["wb_handoff_label"] = cand.arch
+                st.switch_page("pages/1_Workbench.py")
     else:
         st.warning(L("没有架构达标：放宽目标、改善振荡器档或提高 fref。",
                      "no architecture meets the target — relax it, improve "

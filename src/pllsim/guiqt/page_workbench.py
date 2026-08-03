@@ -19,6 +19,7 @@ from PySide6.QtWidgets import (
 from .. import presets
 from ..guiutil import make_pll, osc_bank_report, simulate_kwargs
 from ..plotting import plot_pn_breakdown
+from .i18n import tr
 from .widgets import (
     ConfigForm,
     FigList,
@@ -32,13 +33,14 @@ from .widgets import (
 
 class WorkbenchPage(Page):
     title = "Workbench"
+    title_zh = "工作台"
 
     def __init__(self):
         super().__init__()
         lay = QVBoxLayout(self)
 
         top = QHBoxLayout()
-        top.addWidget(QLabel("Preset:"))
+        top.addWidget(tr(QLabel(), "预设：", "Preset:"))
         self.preset = QComboBox()
         self.preset.addItems(list(presets.ALL_PRESETS))
         self.preset.currentTextChanged.connect(self._rebuild_form)
@@ -65,7 +67,7 @@ class WorkbenchPage(Page):
         # --- analyze tab
         atab = QWidget()
         alay = QVBoxLayout(atab)
-        self.btn_analyze = QPushButton("Run analyze()")
+        self.btn_analyze = tr(QPushButton(), "运行 analyze()", "Run analyze()")
         self.btn_analyze.clicked.connect(self._go_analyze)
         alay.addWidget(self.btn_analyze)
         self.a_metrics = MetricRow()
@@ -79,32 +81,32 @@ class WorkbenchPage(Page):
         stab = QWidget()
         slay = QVBoxLayout(stab)
         row = QHBoxLayout()
-        row.addWidget(QLabel("cycles"))
+        row.addWidget(tr(QLabel(), "周期数", "cycles"))
         self.n_cycles = QSpinBox()
         self.n_cycles.setRange(10_000, 2_000_000)
         self.n_cycles.setSingleStep(10_000)
         self.n_cycles.setValue(150_000)
         row.addWidget(self.n_cycles)
-        row.addWidget(QLabel("seed"))
+        row.addWidget(tr(QLabel(), "随机种子", "seed"))
         self.seed = QSpinBox()
         self.seed.setRange(0, 9999)
         self.seed.setValue(1)
         row.addWidget(self.seed)
-        row.addWidget(QLabel("start offset [Hz]"))
+        row.addWidget(tr(QLabel(), "起始频偏 [Hz]", "start offset [Hz]"))
         self.f_off = float_edit("0")
         row.addWidget(self.f_off)
-        self.cb_noise = QCheckBox("noise")
+        self.cb_noise = tr(QCheckBox(), "噪声", "noise")
         self.cb_noise.setChecked(True)
         row.addWidget(self.cb_noise)
-        self.cb_cal = QCheckBox("calibration")
+        self.cb_cal = tr(QCheckBox(), "校准", "calibration")
         self.cb_cal.setChecked(True)
         row.addWidget(self.cb_cal)
-        row.addWidget(QLabel("DTC gain err"))
+        row.addWidget(tr(QLabel(), "DTC 增益误差", "DTC gain err"))
         self.dtc_err = float_edit("0")
         row.addWidget(self.dtc_err)
         row.addStretch(1)
         slay.addLayout(row)
-        self.btn_sim = QPushButton("Run simulate()")
+        self.btn_sim = tr(QPushButton(), "运行 simulate()", "Run simulate()")
         self.btn_sim.clicked.connect(self._go_sim)
         slay.addWidget(self.btn_sim)
         self.s_metrics = MetricRow()
@@ -114,22 +116,47 @@ class WorkbenchPage(Page):
         slay.addWidget(in_scroll(self._s_body), 1)
         right.addTab(stab, "Simulate (time domain)")
 
+        self._handoff = None       # a config handed over by the selector
         self._rebuild_form(self.preset.currentText())
 
     # ------------------------------------------------------------- helpers
+    def load_preset(self, name: str) -> None:
+        """Show `name` in the editor.  Used by the selector handoff."""
+        self._handoff = None
+        if name in presets.ALL_PRESETS:
+            self.preset.setCurrentText(name)
+
+    def load_config(self, pll, label: str = "") -> None:
+        """Edit an arbitrary PLL instance rather than a stock preset.
+
+        The selector builds a candidate sized for the stated requirement, so
+        handing over that object beats opening the nearest preset and making
+        the user retype fref and fout.
+        """
+        self._handoff = pll
+        self._show_config(pll, label)
+
     def _rebuild_form(self, name: str):
+        self._handoff = None
+        self._show_config(presets.ALL_PRESETS[name](), "")
+
+    def _show_config(self, pll, label: str):
         while self._form_lay.count():
             w = self._form_lay.takeAt(0).widget()
             if w is not None:
                 w.deleteLater()
-        pll = presets.ALL_PRESETS[name]()
         self.form = ConfigForm(pll.cfg)
         self._form_lay.addWidget(self.form)
-        self.info.setText(f"{type(pll).__name__}: "
+        head = f"{label} — " if label else ""
+        self.info.setText(f"{head}{type(pll).__name__}: "
                           f"fref {pll.cfg.fref / 1e6:g} MHz -> "
                           f"fout {pll.cfg.fout / 1e9:.6g} GHz")
 
     def _pll(self):
+        if self._handoff is not None:
+            from ..guiutil import apply_overrides
+            apply_overrides(self._handoff.cfg, self.form.overrides())
+            return self._handoff
         return make_pll(self.preset.currentText(), self.form.overrides())
 
     @staticmethod
@@ -213,9 +240,9 @@ class WorkbenchPage(Page):
         a2.set_xlabel("t [us]")
         a2.grid(alpha=0.3)
         figs.append(fig)
-        for k, tr in sim.cal_traces.items():
+        for k, trace in sim.cal_traces.items():
             f2, ax = plt.subplots(figsize=(8, 2.2))
-            ax.plot(sim.t * 1e6, tr, lw=0.8)
+            ax.plot(sim.t * 1e6, trace, lw=0.8)
             ax.set_ylabel(k)
             ax.set_xlabel("t [us]")
             ax.grid(alpha=0.3)

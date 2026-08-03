@@ -56,10 +56,30 @@ class Worker(QThread):
 class Page(QWidget):
     """Base page: single-flight worker + busy handling + error dialog."""
 
+    title = "page"
+    title_zh: str | None = None
+
     def __init__(self):
         super().__init__()
         self._worker = None
         self._busy_buttons: list[QPushButton] = []
+
+    @classmethod
+    def nav_title(cls) -> str:
+        """Name shown in the sidebar, in the current language."""
+        from .i18n import lang
+        if cls.title_zh and lang() == "zh":
+            return cls.title_zh
+        return cls.title
+
+    def main_window(self):
+        """The MainWindow this page sits in, or None when standalone.
+
+        Pages are constructed directly by the tests, so nothing may assume a
+        parent window exists.
+        """
+        w = self.window()
+        return w if hasattr(w, "open_in_workbench") else None
 
     def run_async(self, fn, on_done, *buttons: QPushButton):
         if self._worker is not None and self._worker.isRunning():
