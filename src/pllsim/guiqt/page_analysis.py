@@ -19,6 +19,7 @@ from ..core.jitter import ldbc_from_sphi
 from ..fit import attribute_budget, fit_closed_loop, fit_leeson, load_pn_csv
 from ..guiutil import frac_presets, make_pll
 from ..plotting import plot_spur_spectrum
+from .i18n import tr
 from .widgets import FigList, Page, float_edit, table_from_rows
 
 FRAC_PRESETS = frac_presets()
@@ -26,6 +27,7 @@ FRAC_PRESETS = frac_presets()
 
 class SpursPage(Page):
     title = "Spur prediction"
+    title_zh = "杂散预测"
 
     def __init__(self):
         super().__init__()
@@ -33,19 +35,20 @@ class SpursPage(Page):
         row = QHBoxLayout()
         self.preset = QComboBox()
         self.preset.addItems(FRAC_PRESETS)
-        row.addWidget(QLabel("preset"))
+        row.addWidget(tr(QLabel(), "预设", "preset"))
         row.addWidget(self.preset)
         self.inl_amp = float_edit("50e-15")
         self.inl_cyc = float_edit("1.0")
         self.gain_eps = float_edit("0.002")
-        for lab, w in [("sine INL amp [s]", self.inl_amp),
-                       ("INL cycles", self.inl_cyc),
-                       ("gain residual", self.gain_eps)]:
-            row.addWidget(QLabel(lab))
+        for zh, en, w in [("正弦 INL 幅度 [s]", "sine INL amp [s]", self.inl_amp),
+                          ("INL 周期数", "INL cycles", self.inl_cyc),
+                          ("增益残差", "gain residual", self.gain_eps)]:
+            row.addWidget(tr(QLabel(), zh, en))
             row.addWidget(w)
-        self.btn = QPushButton("Predict")
-        self.btn_sweep = QPushButton("Worst-channel sweep")
-        self.btn_meas = QPushButton("Simulate + plot spectrum")
+        self.btn = tr(QPushButton(), "预测", "Predict")
+        self.btn_sweep = tr(QPushButton(), "最差通道扫描", "Worst-channel sweep")
+        self.btn_meas = tr(QPushButton(), "仿真并画谱",
+                           "Simulate + plot spectrum")
         row.addWidget(self.btn)
         row.addWidget(self.btn_sweep)
         row.addWidget(self.btn_meas)
@@ -129,30 +132,32 @@ class SpursPage(Page):
 
 class FitPage(Page):
     title = "Measured-PN fitting"
+    title_zh = "实测相噪拟合"
 
     def __init__(self):
         super().__init__()
         lay = QVBoxLayout(self)
         row = QHBoxLayout()
-        self.btn_open = QPushButton("Open CSV...")
-        self.btn_demo = QPushButton("Load synthetic demo")
+        self.btn_open = tr(QPushButton(), "打开 CSV…", "Open CSV...")
+        self.btn_demo = tr(QPushButton(), "载入合成示例",
+                           "Load synthetic demo")
         self.mode = QComboBox()
         self.mode.addItems(["free-running (Leeson)", "locked spectrum",
                             "budget attribution"])
         self.baseline = QComboBox()
         self.baseline.addItems(list(presets.ALL_PRESETS))
         self.baseline.setCurrentText("spll_frac_52m_6p253g")
-        self.btn_fit = QPushButton("Fit")
+        self.btn_fit = tr(QPushButton(), "拟合", "Fit")
         row.addWidget(self.btn_open)
         row.addWidget(self.btn_demo)
-        row.addWidget(QLabel("mode"))
+        row.addWidget(tr(QLabel(), "模式", "mode"))
         row.addWidget(self.mode)
-        row.addWidget(QLabel("budget baseline"))
+        row.addWidget(tr(QLabel(), "预算基准", "budget baseline"))
         row.addWidget(self.baseline)
         row.addWidget(self.btn_fit)
         row.addStretch(1)
         lay.addLayout(row)
-        self.status = QLabel("no data loaded")
+        self.status = tr(QLabel(), "未载入数据", "no data loaded")
         lay.addWidget(self.status)
         self._body = QVBoxLayout()
         lay.addLayout(self._body)
@@ -246,14 +251,56 @@ class FitPage(Page):
 
 class BenchmarksPage(Page):
     title = "Benchmarks"
+    title_zh = "文献对标"
 
+    # published vs the linear model, for the re-run button.  Built from the
+    # bench_* presets rather than from tests/, because a packaged build ships
+    # no test suite and importing one there is a guaranteed ImportError.
+    LIVE = [("Dartizio'23 (linear under-reads BB loops)",
+             "bench_dartizio23_adpllbb_500m_9p2515g", "77"),
+            ("Markulic'16 int-N", "bench_markulic16_sspll_40m_10p24g", "176"),
+            ("Markulic'16 frac-N",
+             "bench_markulic16_sspll_frac_40m_10p25g", "198"),
+            ("Wu'19", "bench_wu19_spll_frac_52m_6p253g", "75")]
 
     def __init__(self):
         super().__init__()
         lay = QVBoxLayout(self)
-        lay.addWidget(QLabel(
-            "Four-paper JSSC anchor — all undisclosed parameters are "
+        lay.addWidget(tr(
+            QLabel(),
+            "四篇 JSSC 论文、五个通道 —— 所有未公开的电路参数都是标注过的工艺"
+            "合理假设；验证的是架构一致性（examples/ex10、ex14，docs 11.4）。",
+            "Four JSSC papers, five channels — all undisclosed parameters are "
             "labelled technology-plausible assumptions; the check is "
             "architectural consistency (examples/ex10, ex14, docs 11.4)."))
         lay.addWidget(table_from_rows(presets.benchmark_table()))
+        row = QHBoxLayout()
+        self.btn = tr(QPushButton(), "现场重跑（线性模型，数秒）",
+                      "Re-run live (linear models, seconds)")
+        row.addWidget(self.btn)
+        row.addStretch(1)
+        lay.addLayout(row)
+        self._body = QVBoxLayout()
+        lay.addLayout(self._body)
         lay.addStretch(1)
+        self.btn.clicked.connect(self._go)
+
+    def _go(self):
+        def fn():
+            return [{"benchmark": label,
+                     "published [fs]": pub,
+                     "linear model [fs]": round(
+                         float(getattr(presets, mk)().analyze().jitter_fs), 1)}
+                    for label, mk, pub in self.LIVE]
+
+        def done(rows):
+            while self._body.count():
+                w = self._body.takeAt(0).widget()
+                if w is not None:
+                    w.deleteLater()
+            self._body.addWidget(table_from_rows(rows))
+            self._body.addWidget(tr(
+                QLabel(),
+                "时域数字请跑 examples/ex14（约 23 s）。",
+                "for the time-domain numbers run examples/ex14 (~23 s)."))
+        self.run_async(fn, done, self.btn)

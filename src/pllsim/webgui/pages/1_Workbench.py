@@ -25,13 +25,34 @@ from pllsim.plotting import plot_pn_breakdown
 st.title(L("架构工作台", "Architecture workbench"))
 
 names = list(presets.ALL_PRESETS)
+handoff = st.session_state.get("wb_handoff")
+if handoff is not None:
+    label = st.session_state.get("wb_handoff_label", "selector")
+    c1, c2 = st.columns([4, 1])
+    c1.info(L(f"正在编辑来自选型器的候选：{label}（不是 preset）",
+              f"editing a candidate handed over by the selector: {label} "
+              "(not a preset)"))
+    if c2.button(L("回到 preset", "back to presets")):
+        st.session_state.pop("wb_handoff", None)
+        st.rerun()
+
 default = st.session_state.get("workbench_preset", names[0])
 preset = st.selectbox(L("preset（每次运行取全新实例）",
                         "preset (fresh instance per run)"), names,
-                      index=names.index(default) if default in names else 0)
+                      index=names.index(default) if default in names else 0,
+                      disabled=handoff is not None)
 st.session_state["workbench_preset"] = preset
 
-base = presets.ALL_PRESETS[preset]()
+base = handoff if handoff is not None else presets.ALL_PRESETS[preset]()
+
+
+def build(overrides):
+    """A PLL for the current selection, whether preset or handed over."""
+    if handoff is None:
+        return make_pll(preset, overrides)
+    from pllsim.guiutil import apply_overrides
+    apply_overrides(handoff.cfg, overrides)
+    return handoff
 st.caption(f"{type(base).__name__}: "
            f"fref = {base.cfg.fref / 1e6:g} MHz -> "
            f"fout = {base.cfg.fout / 1e9:.6g} GHz")
@@ -48,7 +69,7 @@ if overrides:
 # coarse-band sizing, shown only once the varactor has a range: with an
 # unlimited control voltage one band reaches everything and the bank is inert
 try:
-    bank = osc_bank_report(make_pll(preset, overrides).cfg)
+    bank = osc_bank_report(build(overrides).cfg)
 except Exception:                      # a half-typed override; the run reports it
     bank = []
 if bank:
@@ -64,7 +85,7 @@ with col_a:
     st.subheader("analyze() — " + L("线性模型", "linear model"))
     if st.button("Run analyze", type="primary"):
         with st.spinner("analyze..."):
-            pll = make_pll(preset, overrides)
+            pll = build(overrides)
             st.session_state["wb_ar"] = pll.analyze()
     ar = st.session_state.get("wb_ar")
     if ar is not None:
@@ -100,7 +121,7 @@ with col_s:
                                     -0.5, 0.5, 0.0, 0.01))
     if st.button("Run simulate", type="primary"):
         with st.spinner(L("时域仿真中…", "simulating...")):
-            pll = make_pll(preset, overrides)
+            pll = build(overrides)
             kw = simulate_kwargs(pll, noise=noise, calibration=cal, seed=seed,
                                  f_start_offset=f_off,
                                  dtc_gain_init_error=dtc_err)

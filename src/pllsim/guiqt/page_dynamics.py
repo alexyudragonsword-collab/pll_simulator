@@ -10,6 +10,7 @@ from ..core.dtcspurs import dtc_spur_table
 from ..guiutil import frac_presets
 from ..modulation import evm, gmsk_trajectory, prbs, two_point_presets
 from ..settling import fll_stability, hop_settling, hop_statistics
+from .i18n import tr
 from .widgets import FigList, MetricRow, Page, float_edit
 
 FRAC_PRESETS = frac_presets()
@@ -17,6 +18,7 @@ FRAC_PRESETS = frac_presets()
 
 class ModulationPage(Page):
     title = "Two-point modulation"
+    title_zh = "两点调制"
 
     def __init__(self):
         super().__init__()
@@ -32,13 +34,16 @@ class ModulationPage(Page):
                        ("cycles", self.n_cyc)]:
             row.addWidget(QLabel(lab))
             row.addWidget(w)
-        self.btn = QPushButton("Run GMSK")
+        self.btn = tr(QPushButton(), "运行 GMSK", "Run GMSK")
         row.addWidget(self.btn)
         row.addStretch(1)
         lay.addLayout(row)
-        self.note = QLabel("engine grid: quote matched EVM at >= 8 "
-                           "samples/symbol (per-ref-cycle discretization "
-                           "floors the comparison below that)")
+        self.note = tr(QLabel(),
+                       "引擎网格：匹配 EVM 应在 >= 8 采样/符号下引用（低于此值，"
+                       "按参考周期的离散化会给比较设下地板）",
+                       "engine grid: quote matched EVM at >= 8 "
+                       "samples/symbol (per-ref-cycle discretization "
+                       "floors the comparison below that)")
         lay.addWidget(self.note)
         self.metrics = MetricRow()
         lay.addWidget(self.metrics)
@@ -95,6 +100,7 @@ class ModulationPage(Page):
 
 class HopSettlingPage(Page):
     title = "Hop settling"
+    title_zh = "跳频建立"
 
     def __init__(self):
         super().__init__()
@@ -111,10 +117,10 @@ class HopSettlingPage(Page):
                        ("cycles", self.n_cyc), ("seed", self.seed)]:
             row.addWidget(QLabel(lab))
             row.addWidget(w)
-        self.btn = QPushButton("Run hop")
-        self.btn_stats = QPushButton("Seed statistics")
+        self.btn = tr(QPushButton(), "运行跳频", "Run hop")
+        self.btn_stats = tr(QPushButton(), "多种子统计", "Seed statistics")
         row.addWidget(self.btn)
-        row.addWidget(QLabel("seeds"))
+        row.addWidget(tr(QLabel(), "种子数", "seeds"))
         row.addWidget(self.n_seeds)
         row.addWidget(self.btn_stats)
         row.addStretch(1)
@@ -211,6 +217,7 @@ class HopSettlingPage(Page):
 
 class DriftPage(Page):
     title = "Drift tracking"
+    title_zh = "温漂跟踪"
 
     def __init__(self):
         super().__init__()
@@ -227,7 +234,7 @@ class DriftPage(Page):
                        ("ramp start", self.start)]:
             row.addWidget(QLabel(lab))
             row.addWidget(w)
-        self.btn = QPushButton("Run ramp")
+        self.btn = tr(QPushButton(), "运行温度斜坡", "Run ramp")
         row.addWidget(self.btn)
         row.addStretch(1)
         lay.addLayout(row)
