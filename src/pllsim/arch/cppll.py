@@ -29,7 +29,16 @@ from ..core.noise import (
     output_psd,
 )
 from ..core.results import AnalysisResult, SimResult
-from .base import PLLBase, attach_fine, run_band_select, supply_ripple_v
+from .base import (
+    PLLBase,
+    add_pull_offset,
+    attach_fine,
+    pull_hz,
+    pull_notes,
+    pull_spur,
+    run_band_select,
+    supply_ripple_v,
+)
 
 TWOPI = 2.0 * np.pi
 
@@ -206,6 +215,8 @@ class CPPLL(PLLBase):
         jit = rms_jitter_fs(f, bd["total"], c.fout, *c.int_band)
         ref_spur = self._ref_spur_dbc(z)
         spurs = {} if ref_spur == float("-inf") else {"ref_spur": ref_spur}
+        spurs.update(pull_spur(c.osc, err))
+        notes.extend(pull_notes(c.osc))
         if c.frac is not None:
             fo = min(c.frac.frac, 1 - c.frac.frac) * c.fref
             spurs["frac_offset_hz"] = fo
@@ -307,6 +318,7 @@ class CPPLL(PLLBase):
         cp.prime_flicker(n_cycles)      # 1/f charge sequence for this run
 
         v_sup = supply_ripple_v(supply_ripple, n_cycles, tref)
+        f_pull = pull_hz(c.osc, n_cycles, tref)
 
         # pre-synthesized reference + divider phase-noise time jitter [s]
         if noise:
@@ -393,7 +405,8 @@ class CPPLL(PLLBase):
                 dq = cp.charge(dt_eff, lf.vctrl)
                 t_on = min(abs(dt_eff) + c.cp.t_reset, 0.9 * tref)
                 lf.update_pulse(dq / t_on, t_on)
-                fv = max(osc.freq(lf.vctrl, v_sup[n]), 0.05 * c.osc.f0)
+                fv = max(osc.freq(lf.vctrl, v_sup[n], f_pull[n]),
+                         0.05 * c.osc.f0)
             else:
                 # drive the filter with the actual CP current waveform instead
                 # of one net pulse: the up/down segments cancel in area but not
@@ -402,7 +415,7 @@ class CPPLL(PLLBase):
                                    i_bias=c.cp.leakage_at(lf.vctrl),
                                    dq_impulse=cp.noise_charge(dt_eff))
                 f_sub = np.maximum(
-                    np.array([osc.freq(v, v_sup[n]) for v in vs]),
+                    np.array([osc.freq(v, v_sup[n], f_pull[n]) for v in vs]),
                     0.05 * c.osc.f0)
                 fv = float(f_sub[-1])
 
@@ -475,6 +488,7 @@ class CPPLL(PLLBase):
                                              fmin=8.0 * c.fref / n_cycles)
         if supply_ripple is not None and supply_ripple[1] < 0.45 * c.fref:
             spur_offsets = (spur_offsets or []) + [supply_ripple[1]]
+        spur_offsets = add_pull_offset(spur_offsets, c.osc, c.fref)
         if c.ref_doubler_duty_err != 0.0:
             spur_offsets = (spur_offsets or []) + [c.fref / 2.0]
         sim = postprocess(sim, settle_frac=0.25, int_band=c.int_band,

@@ -36,7 +36,16 @@ from ..core.freqresp import FreqResponse, LoopMetrics, default_grid
 from ..core.jitter import ipn_dbc, rms_jitter_fs
 from ..core.noise import FlickerFloorPhase, NoisePath, NoiseSource, output_psd
 from ..core.results import AnalysisResult, SimResult
-from .base import PLLBase, attach_fine, no_fine_note, supply_ripple_v
+from .base import (
+    PLLBase,
+    add_pull_offset,
+    attach_fine,
+    no_fine_note,
+    pull_hz,
+    pull_notes,
+    pull_spur,
+    supply_ripple_v,
+)
 from .ilcm import injection_spur_dbc
 
 TWOPI = 2.0 * np.pi
@@ -104,8 +113,10 @@ class MDLL(PLLBase):
         # sawtooth out of; -600 dBc reads as "spurless by design"
         spurs = ({"ref_spur": injection_spur_dbc(dphi, 1.0)}
                  if f_free_error else {})
+        spurs.update(pull_spur(c.osc, ntf_osc))
         notes = [f"edge replacement: oscillator noise highpassed with corner "
-                 f"~fref/pi = {f_c / 1e6:.1f} MHz (beta=1 limit of the ILCM)"]
+                 f"~fref/pi = {f_c / 1e6:.1f} MHz (beta=1 limit of the ILCM)"] \
+            + pull_notes(c.osc)
         return AnalysisResult(f=f, f0=c.fout, pn_breakdown=bd, loop=m,
                               jitter_fs=jit,
                               ipn_dbc=ipn_dbc(f, bd["total"], *c.int_band),
@@ -122,6 +133,7 @@ class MDLL(PLLBase):
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
         v_sup = supply_ripple_v(supply_ripple, n_cycles, tref)
+        f_pull = pull_hz(c.osc, n_cycles, tref)
 
         osc = Oscillator(c.osc, c.fref, rng, noise=noise)
         jit_ref = (synth_from_psd(
@@ -143,7 +155,7 @@ class MDLL(PLLBase):
             d_osc = osc_noise[nn] - prev_on
             prev_on = osc_noise[nn]
             f_free = (c.osc.freq_law(tune_acc) + f_free_error
-                      + c.osc.pushing_hz_v * v_sup[nn])
+                      + c.osc.pushing_hz_v * v_sup[nn] + f_pull[nn])
             dphi_drift = TWOPI * (f_free - c.fout) * tref
             e_pre = e + dphi_drift + d_osc
             if fine is not None:
@@ -167,9 +179,11 @@ class MDLL(PLLBase):
         sim = SimResult(fs=c.fref, f0=c.fout, t=t, phase_err_out=phase_err,
                         freq_out=freq_out, ctrl=ctrl, lock_time_s=None)
         sim.cal_traces["tune_acc"] = ctrl.copy()
-        sim = postprocess(sim, int_band=c.int_band)
+        sim = postprocess(sim, int_band=c.int_band,
+                          spur_offsets=add_pull_offset(None, c.osc, c.fref))
         # edge replacement zeroes the error every Tref, so a ref-rate record
         # sees only the mux/ref term and misses the whole intra-period build-up
         if fine is not None:
-            return attach_fine(sim, fine, m_os, c.fref, c.int_band)
+            return attach_fine(sim, fine, m_os, c.fref, c.int_band,
+                               add_pull_offset(None, c.osc, c.fref))
         return no_fine_note(sim)

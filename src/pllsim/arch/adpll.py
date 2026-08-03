@@ -18,7 +18,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..blocks.oscillator import OscConfig, Oscillator
-from ..blocks.tdc import BBPD, TDC, TDCConfig
+from ..blocks.tdc import BBPD, TDC, TDCConfig, meta_gain_penalty
 from ..core.colored import synth_from_psd
 from ..core.engine import detect_lock, postprocess
 from ..core.freqresp import FreqResponse, default_grid, loop_metrics
@@ -32,7 +32,14 @@ from ..core.noise import (
     output_psd,
 )
 from ..core.results import AnalysisResult, SimResult
-from .base import PLLBase, supply_ripple_v
+from .base import (
+    PLLBase,
+    add_pull_offset,
+    pull_hz,
+    pull_notes,
+    pull_spur,
+    supply_ripple_v,
+)
 from .cppll import FracConfig, frac_spur_offsets
 
 TWOPI = 2.0 * np.pi
@@ -62,6 +69,10 @@ class ADPLLConfig:
     kdco_est_error: float = 0.0        # initial Kdco estimate error (fraction)
     frac: FracConfig | None = None     # dtc_bbpd mode: MASH + DTC config
     bb_jitter_rms_s: float = 100e-15   # BBPD input-referred jitter (dtc_bbpd)
+    # Sampling-flop resolution window: inside it the decision is a coin flip.
+    # Costs Kbb by exp(-W^2/2 sigma^2) and therefore widens the input-referred
+    # noise by the same factor -- a window equal to sigma_t is 4.34 dB.
+    bb_meta_window_s: float = 0.0
     int_band: tuple[float, float] = (1e3, 100e6)
 
     @property
@@ -163,19 +174,24 @@ class ADPLL(PLLBase):
         jit = rms_jitter_fs(f, bd["total"], c.fout, *c.int_band)
         if m.f_ugb > c.fref / 10:
             notes.append("UGB > fref/10: discrete loop peaking significant")
-        spurs = {}
+        spurs = dict(pull_spur(c.osc, err))
+        notes.extend(pull_notes(c.osc))
         if c.mode == "tdc" and c.fcw % 1.0 > 1e-9:
-            # no DTC to replay, so there is no deterministic code sequence to
-            # project: the beat is set by TDC nonlinearity, which analyze()
-            # does not model.  simulate() measures it -- say so rather than
-            # publish an empty table that reads as "no spurs".
-            offs = frac_spur_offsets(c.fcw % 1.0, c.fref)
-            where = (f"{min(offs) / 1e6:.3f} MHz and {len(offs) - 1} more"
-                     if offs else "fold(k*frac)*fref")
-            notes.append(
-                f"fractional FCW: beats at {where} are set by TDC "
-                "nonlinearity, which the linear budget does not model — read "
-                "spurs_fft from simulate()")
+            # The TDC input sweeps its range at the fractional beat rate, so a
+            # declared INL is a deterministic tone generator, not something
+            # only simulate() can see.
+            from ..core.tdcspurs import tdc_inl_spur_table
+            for off, dbc in tdc_inl_spur_table(
+                    c.tdc.inl_sin, c.fcw % 1.0, c.fref, c.fout, ntf=h).items():
+                spurs[f"frac_spur@{off:.0f}Hz"] = dbc
+            if not c.tdc.inl_sin:
+                offs = frac_spur_offsets(c.fcw % 1.0, c.fref)
+                where = (f"{min(offs) / 1e6:.3f} MHz and {len(offs) - 1} more"
+                         if offs else "fold(k*frac)*fref")
+                notes.append(
+                    f"fractional FCW with an ideal TDC: the beats at {where} "
+                    "come from quantization alone, which simulate() measures "
+                    "— declare tdc.inl_sin to get them predicted here")
         if c.mode == "dtc_bbpd" and c.frac.dtc is not None:
             from ..core.dtcspurs import dtc_spur_table
             eps = getattr(c.frac.dtc, "gain_error_residual", 0.01)
@@ -206,7 +222,10 @@ class ADPLL(PLLBase):
         sigma_t = max(c.bb_jitter_rms_s, 1e-15)
         gol = None
         for _ in range(8):
-            kbb = np.sqrt(2.0 / np.pi) / sigma_t                  # 1/s
+            # a metastability window costs gain, not output power: the flop
+            # still emits +/-1, just uncorrelated with dt inside the window
+            kbb = (np.sqrt(2.0 / np.pi) / sigma_t
+                   * meta_gain_penalty(c.bb_meta_window_s, sigma_t))
             # e = Kbb * dt_pd ; dt_pd = phi_out/(2π fout)
             det = kbb / (TWOPI * c.fout)
             gol = self._dlf_fr(f) * self._dco_phase_fr(f) * det
@@ -225,7 +244,8 @@ class ADPLL(PLLBase):
             if abs(sigma_new - sigma_t) < 1e-18:
                 break
             sigma_t = 0.5 * sigma_t + 0.5 * sigma_new
-        kbb = np.sqrt(2.0 / np.pi) / sigma_t
+        kbb = (np.sqrt(2.0 / np.pi) / sigma_t
+               * meta_gain_penalty(c.bb_meta_window_s, sigma_t))
         return gol, kbb, sigma_t
 
     # ------------------------------------------------------------ simulate
@@ -280,6 +300,7 @@ class ADPLL(PLLBase):
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
         v_sup = supply_ripple_v(supply_ripple, n_cycles, tref)
+        f_pull = pull_hz(c.osc, n_cycles, tref)
         fcw = c.fcw
         osc = Oscillator(c.osc, c.fref, rng, noise=noise, name="dco")
         tdc = TDC(c.tdc, rng, noise=noise)
@@ -351,7 +372,8 @@ class ADPLL(PLLBase):
                 qerr = otw + qerr - otw_q
             else:
                 otw_q = np.round(otw)
-            fv = c.osc.freq_law(otw_q) + c.osc.pushing_hz_v * v_sup[n]
+            fv = (c.osc.freq_law(otw_q) + c.osc.pushing_hz_v * v_sup[n]
+                  + f_pull[n])
 
             phase_err[n] = TWOPI * (phi_v - (n + 1) * fcw)
             freq_out[n] = fv
@@ -370,6 +392,7 @@ class ADPLL(PLLBase):
         # else -- tabulate it instead of leaving the user to find it by eye
         frac = c.fcw % 1.0
         offs = frac_spur_offsets(frac, c.fref) if frac > 1e-9 else None
+        offs = add_pull_offset(offs, c.osc, c.fref)
         if supply_ripple is not None and supply_ripple[1] < 0.45 * c.fref:
             offs = (offs or []) + [supply_ripple[1]]
         return postprocess(sim, int_band=c.int_band, spur_offsets=offs)
@@ -381,8 +404,10 @@ class ADPLL(PLLBase):
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
         v_sup = supply_ripple_v(supply_ripple, n_cycles, tref)
+        f_pull = pull_hz(c.osc, n_cycles, tref)
         osc = Oscillator(c.osc, c.fref, rng, noise=noise, name="dco")
-        bb = BBPD(c.bb_jitter_rms_s, rng, noise=noise)
+        bb = BBPD(c.bb_jitter_rms_s, rng, noise=noise,
+                  meta_window_s=c.bb_meta_window_s)
         mash = c.frac.make_mash()
         frac_word = c.frac.frac_word
         n_int = int(c.fout // c.fref)
@@ -432,7 +457,8 @@ class ADPLL(PLLBase):
                 qerr = otw + qerr - otw_q
             else:
                 otw_q = np.round(otw)
-            fv = c.osc.freq_law(otw_q) + c.osc.pushing_hz_v * v_sup[n]
+            fv = (c.osc.freq_law(otw_q) + c.osc.pushing_hz_v * v_sup[n]
+                  + f_pull[n])
 
             n_next = n_int + mash.step(frac_word)
             d_osc = osc_noise[n] - prev_phi_n
@@ -450,5 +476,14 @@ class ADPLL(PLLBase):
                         freq_out=freq_out, ctrl=otw_rec, lock_time_s=lock)
         if dtc_cal is not None:
             sim.cal_traces["dtc_gain"] = cal_trace
-        offs = frac_spur_offsets(c.frac.frac, c.fref, fmin=8.0 * c.fref / n_cycles)
+        if c.bb_meta_window_s > 0:
+            frac_meta = bb.n_meta / max(n_cycles, 1)
+            sim.extra["bbpd_metastable_frac"] = frac_meta
+            sim.notes.append(
+                f"BBPD decision was a coin flip on {frac_meta * 100:.1f}% of "
+                "cycles (metastability window): that is lost detector gain, "
+                "not added noise — the comparator still emits +/-1")
+        offs = add_pull_offset(
+            frac_spur_offsets(c.frac.frac, c.fref, fmin=8.0 * c.fref / n_cycles),
+            c.osc, c.fref)
         return postprocess(sim, int_band=c.int_band, spur_offsets=offs)
