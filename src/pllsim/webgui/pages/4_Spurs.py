@@ -90,7 +90,12 @@ if st.button("Sweep channels"):
     ax.set_ylabel("worst spur [dBc]")
     ax.legend()
     ax.grid(alpha=0.3, which="both")
+    ax.set_title(f"{preset}: worst fractional spur vs channel")
     show_fig(fig)
-    st.caption(L("近整数通道最差：差拍落在环路带宽内，|NTF| ~ 1。",
-                 "near-integer channels are worst: the beat lands inside "
-                 "the loop BW where |NTF| ~ 1."))
+    # naming the preset on the result, not just in the selector above: the
+    # sweep used to scan a fixed preset regardless of the selection, and a
+    # chart that does not say what it swept cannot show that it was wrong
+    st.caption(L(f"扫描对象：{preset}。近整数通道最差：差拍落在环路带宽内，"
+                 "|NTF| ~ 1。",
+                 f"swept: {preset}. Near-integer channels are worst: the "
+                 "beat lands inside the loop BW where |NTF| ~ 1."))
