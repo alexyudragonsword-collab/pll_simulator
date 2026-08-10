@@ -19,7 +19,14 @@ st.set_page_config(page_title="Workbench", layout="wide")
 sidebar_lang_toggle()
 
 from pllsim import presets
-from pllsim.guiutil import make_pll, osc_bank_report, simulate_kwargs
+from pllsim.guiutil import (
+    fine_oversample_note,
+    fine_record_mb,
+    make_pll,
+    osc_bank_report,
+    simulate_kwargs,
+    supports_fine,
+)
 from pllsim.plotting import plot_pn_breakdown
 
 st.title(L("架构工作台", "Architecture workbench"))
@@ -119,12 +126,33 @@ with col_s:
     cal = c5.checkbox(L("校准", "calibration"), True)
     dtc_err = float(c6.number_input(L("DTC 增益误差", "DTC gain error"),
                                     -0.5, 0.5, 0.0, 0.01))
+    m_os = 0
+    if supports_fine(build(overrides)):
+        m_os = int(st.number_input(
+            L("参考周期内细采样 M（0=引擎默认）",
+              "intra-period samples M (0 = engine default)"),
+            0, 4096, 0, 16,
+            help=L("大于 1 才能看到参考杂散：控制节点的纹波整个活在一个参考周期"
+                   "内，每周期取一个点看不到它。代价是记录量与运行时间都乘 M。",
+                   "M > 1 is what makes the reference spur visible: the ripple "
+                   "lives entirely inside one reference period, so one sample "
+                   "per edge sees none of it.  Record size and runtime both "
+                   "scale with M.")))
+        if m_os > 1:
+            note = fine_oversample_note(build(overrides), m_os)
+            mb = fine_record_mb(n_cycles, m_os)
+            st.caption(f"record ~{mb:.0f} MB" + (f" — {note}" if note else ""))
+            if mb > 500:
+                st.warning(L(f"细采样记录约 {mb:.0f} MB，先降周期数或 M。",
+                             f"the fine record is ~{mb:.0f} MB; lower the "
+                             "cycle count or M first."))
     if st.button("Run simulate", type="primary"):
         with st.spinner(L("时域仿真中…", "simulating...")):
             pll = build(overrides)
             kw = simulate_kwargs(pll, noise=noise, calibration=cal, seed=seed,
                                  f_start_offset=f_off,
-                                 dtc_gain_init_error=dtc_err)
+                                 dtc_gain_init_error=dtc_err,
+                                 fine_oversample=m_os)
             st.session_state["wb_sim"] = pll.simulate(n_cycles, **kw)
             st.session_state["wb_ar_overlay"] = make_pll(
                 preset, overrides).analyze()

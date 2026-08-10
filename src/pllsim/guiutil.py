@@ -13,6 +13,8 @@ import dataclasses
 import inspect
 from dataclasses import dataclass
 
+import numpy as np
+
 from . import presets
 from .arch.base import start_offset_kwarg
 
@@ -245,9 +247,44 @@ def make_pll(preset_name: str, overrides: dict[str, str] | None = None):
     return pll
 
 
+def supports_fine(pll) -> bool:
+    """Whether this engine records the control node inside a reference period."""
+    return "fine_oversample" in inspect.signature(type(pll).simulate).parameters
+
+
+def fine_oversample_note(pll, m: int) -> str:
+    """What a given M buys and what it costs, or "" if there is nothing to say.
+
+    Two separate traps, and a GUI that offers the knob without saying either
+    hands out wrong numbers that look fine.  Below the width of the charge
+    pump's reset pulse the sub-interval cannot resolve the doublet that makes
+    the reference spur, so the reading comes back optimistic; and the record
+    is M floats per reference cycle, which at 150k cycles and M = 512 is
+    600 MB of samples before anything is done with them.
+    """
+    if m <= 1 or not supports_fine(pll):
+        return ""
+    c = pll.cfg
+    sub = 1.0 / (c.fref * m)
+    bits = []
+    t_reset = getattr(getattr(c, "cp", None), "t_reset", 0.0)
+    if t_reset and sub > t_reset:
+        bits.append(f"sub-interval {sub * 1e12:.0f} ps is coarser than "
+                    f"t_reset {t_reset * 1e12:.0f} ps: the ripple doublet is "
+                    f"under-resolved and the spur will read low (M >= "
+                    f"{int(np.ceil(1.0 / (c.fref * t_reset)))} resolves it)")
+    return "; ".join(bits)
+
+
+def fine_record_mb(n_cycles: int, m: int) -> float:
+    """Megabytes the fine control-voltage record will occupy."""
+    return n_cycles * max(int(m), 1) * 8 / 1e6
+
+
 def simulate_kwargs(pll, *, noise: bool = True, calibration: bool = True,
                     seed: int = 0, f_start_offset: float = 0.0,
-                    dtc_gain_init_error: float = 0.0) -> dict:
+                    dtc_gain_init_error: float = 0.0,
+                    fine_oversample: int = 0) -> dict:
     """The simulate() kwargs this architecture actually accepts.
 
     The engines do not share one signature, and a GUI that assumes they do
@@ -266,6 +303,11 @@ def simulate_kwargs(pll, *, noise: bool = True, calibration: bool = True,
             getattr(pll.cfg, "frac", None) is not None
             or getattr(pll.cfg, "mode", "") == "dtc_bbpd"):
         kw["dtc_gain_init_error"] = dtc_gain_init_error
+    # 0 means "leave the engine's own default", which is not the same as 1:
+    # ILCM and MDLL default to 4 because their jitter figure is defined inside
+    # the period, and forcing 1 would silently redefine what they report
+    if fine_oversample > 0 and "fine_oversample" in params:
+        kw["fine_oversample"] = int(fine_oversample)
     return kw
 
 
