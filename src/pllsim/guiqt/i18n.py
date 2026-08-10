@@ -55,17 +55,6 @@ def tr(widget, zh: str, en: str, apply: Callable | None = None):
     return widget
 
 
-def tr_items(widget, pairs, apply: Callable | None = None):
-    """Register a widget whose label is built from several pairs at once.
-
-    `pairs` is a sequence of (zh, en); the two joined strings are what get
-    applied.  For the multi-line explanatory blocks that head most pages.
-    """
-    zh = "".join(p[0] for p in pairs)
-    en = "".join(p[1] for p in pairs)
-    return tr(widget, zh, en, apply=apply)
-
-
 def set_lang(code: str) -> None:
     """Switch language and re-apply every registered label."""
     global _LANG

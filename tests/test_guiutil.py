@@ -7,11 +7,14 @@ from pllsim import presets
 from pllsim.guiutil import (
     apply_overrides,
     enumerate_fields,
+    fine_oversample_note,
+    fine_record_mb,
     fmt_value,
     make_pll,
     osc_bank_report,
     parse_value,
     simulate_kwargs,
+    supports_fine,
 )
 
 
@@ -99,6 +102,41 @@ def test_simulate_kwargs_bind_to_every_engine():
                              dtc_gain_init_error=0.02)
         # raises TypeError on any stray keyword, without running the sim
         inspect.signature(type(pll).simulate).bind(pll, 1000, **kw)
+
+
+def test_fine_oversample_is_only_offered_where_it_exists():
+    """ADPLL has no analog control node to sample inside the period."""
+    assert supports_fine(presets.cppll_19p2m_4p8g())
+    assert supports_fine(presets.mdll_150m_2p4g())
+    assert not supports_fine(presets.adpll_100m_10g())
+    kw = simulate_kwargs(presets.adpll_100m_10g(), fine_oversample=64)
+    assert "fine_oversample" not in kw
+
+
+def test_zero_leaves_the_engine_default_alone():
+    """0 is not 1: ILCM/MDLL define their jitter figure inside the period.
+
+    Passing 1 would quietly change what those two report, so the GUI's
+    "unset" has to mean unset rather than "the lowest value on the spinbox".
+    """
+    assert "fine_oversample" not in simulate_kwargs(presets.mdll_150m_2p4g())
+    kw = simulate_kwargs(presets.mdll_150m_2p4g(), fine_oversample=1)
+    assert kw["fine_oversample"] == 1
+
+
+def test_the_gui_warns_when_m_cannot_resolve_the_reset_pulse():
+    """Under-resolving reads low, and reading low is the dangerous direction."""
+    pll = presets.cppll_19p2m_4p8g()
+    t_reset = pll.cfg.cp.t_reset
+    coarse = int(0.2 / (pll.cfg.fref * t_reset))     # sub-interval >> t_reset
+    fine = int(4.0 / (pll.cfg.fref * t_reset))
+    assert "under-resolved" in fine_oversample_note(pll, coarse)
+    assert fine_oversample_note(pll, fine) == ""
+    assert fine_oversample_note(pll, 1) == ""        # M=1 records nothing fine
+
+
+def test_record_size_is_reported_before_it_is_allocated():
+    assert fine_record_mb(150_000, 512) == pytest.approx(614.4)
 
 
 def test_free_running_archs_get_their_own_start_offset_name():

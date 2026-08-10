@@ -17,7 +17,14 @@ from PySide6.QtWidgets import (
 )
 
 from .. import presets
-from ..guiutil import make_pll, osc_bank_report, simulate_kwargs
+from ..guiutil import (
+    fine_oversample_note,
+    fine_record_mb,
+    make_pll,
+    osc_bank_report,
+    simulate_kwargs,
+    supports_fine,
+)
 from ..plotting import plot_pn_breakdown
 from .i18n import tr
 from .widgets import (
@@ -105,6 +112,27 @@ class WorkbenchPage(Page):
         self.dtc_err = float_edit("0")
         row.addWidget(self.dtc_err)
         row.addStretch(1)
+        slay.addLayout(row)
+        # intra-period sampling.  Kept next to the run button rather than in
+        # the parameter form because it is a measurement setting, not part of
+        # the design: it changes what the run can see, not what it simulates.
+        row = QHBoxLayout()
+        self.lab_fine = tr(QLabel(), "周期内细采样 M（0=引擎默认）",
+                           "intra-period samples M (0 = engine default)")
+        row.addWidget(self.lab_fine)
+        self.fine_os = QSpinBox()
+        self.fine_os.setRange(0, 4096)
+        self.fine_os.setSingleStep(16)
+        self.fine_os.setToolTip(
+            "M > 1 is what makes the reference spur visible: the control "
+            "node's ripple lives entirely inside one reference period, so one "
+            "sample per edge sees none of it.  Record size and runtime both "
+            "scale with M.")
+        self.fine_os.valueChanged.connect(self._fine_hint)
+        row.addWidget(self.fine_os)
+        self.fine_note = QLabel("")
+        self.fine_note.setWordWrap(True)
+        row.addWidget(self.fine_note, 1)
         slay.addLayout(row)
         self.btn_sim = tr(QPushButton(), "运行 simulate()", "Run simulate()")
         self.btn_sim.clicked.connect(self._go_sim)
@@ -206,13 +234,33 @@ class WorkbenchPage(Page):
                        self.btn_analyze)
 
     # ------------------------------------------------------------ simulate
+    def _fine_hint(self):
+        """Say what M costs and whether it is fine enough to see the ripple."""
+        m = int(self.fine_os.value())
+        if m <= 1:
+            self.fine_note.setText("")
+            return
+        try:
+            pll = self._pll()
+        except Exception:               # a half-typed override; the run reports it
+            self.fine_note.setText("")
+            return
+        if not supports_fine(pll):
+            self.fine_note.setText("this architecture has no intra-period record")
+            return
+        mb = fine_record_mb(int(self.n_cycles.value()), m)
+        note = fine_oversample_note(pll, m)
+        self.fine_note.setText(f"record ~{mb:.0f} MB"
+                               + (f" — {note}" if note else ""))
+
     def compute_sim(self):
         pll = self._pll()
         kw = simulate_kwargs(pll, noise=self.cb_noise.isChecked(),
                              calibration=self.cb_cal.isChecked(),
                              seed=int(self.seed.value()),
                              f_start_offset=float(self.f_off.text()),
-                             dtc_gain_init_error=float(self.dtc_err.text()))
+                             dtc_gain_init_error=float(self.dtc_err.text()),
+                             fine_oversample=int(self.fine_os.value()))
         sim = pll.simulate(int(self.n_cycles.value()), **kw)
         ar = self._pll().analyze()
         return ar, sim

@@ -70,8 +70,8 @@
 
 <h1>pllsim</h1>
 <p class="sub">
-  <span class="en">System-level / behavioral simulation models for five PLL architectures — design rationale, worked examples, cross-checked results, and pitfalls.</span>
-  <span class="zh">五种 PLL 架构的系统级/行为级仿真模型 —— 设计思路、实例分析、结果比较与注意事项。</span>
+  <span class="en">System-level / behavioral simulation models for six PLL architectures — design rationale, worked examples, cross-checked results, and pitfalls.</span>
+  <span class="zh">六种 PLL 架构的系统级/行为级仿真模型 —— 设计思路、实例分析、结果比较与注意事项。</span>
 </p>
 <p class="sub">
   <span class="en">Scope: f<sub>ref</sub> = 19.2–250 MHz, f<sub>out</sub> up to 12 GHz, integrated jitter targets 50–200 fs. Python (numpy/scipy/matplotlib), 49 unit/regression tests.</span>
@@ -448,7 +448,7 @@
 <!-- ================================================================ -->
 <h2 id="repro"><span class="num">10</span><span class="en">Reproducing everything</span><span class="zh">复现方法</span></h2>
 <pre><code>pip install -e .            # numpy, scipy, matplotlib
-pytest tests/               # 204 tests: closed-form math + architecture regressions
+pytest tests/               # 437 tests: closed-form math + architecture regressions
 python examples/ex01_cppll_intn_19p2m_4p8g.py     # each ex writes plots to examples/out/
 python examples/ex02_cppll_fracn_dtc_38p4m_6g.py
 python examples/ex03_sspll_19p2m_4p8g.py
@@ -743,6 +743,24 @@ plot_pn_breakdown(ar, sim, save="pn.png")</code></pre>
 <p>
   <span class="en">The two GUIs are meant to expose the same library, and nothing compared them, so nothing failed while they drifted &mdash; every gap ran one way, with the Qt side missing a language toggle, the Monte Carlo calibration yield, the benchmarks re-run button and zip export.  All four are now there, and both GUIs finally implement the selector&nbsp;&rarr;&nbsp;workbench handoff they had only ever described in a caption.  What crosses over is the candidate object the selector already built, sized for the stated requirement, not the nearest stock preset.  A test now compares the two page sets, which is the check that would have failed on every one of those gaps.</span>
   <span class="zh">两个 GUI 本应暴露同一套库，但从来没有东西去比较它们，所以它们分叉时也没有任何东西失败——而且差距全部朝一个方向：Qt 端缺语言切换、缺蒙特卡洛校准良率、缺基准重跑按钮、缺 zip 导出。四项现已补齐，并且两端终于实现了那个一直只写在说明文字里的选型器&nbsp;&rarr;&nbsp;工作台交接。交接过去的是选型器已经按需求尺寸构建好的候选对象，而不是最接近的现成预设。现在有一个测试直接比较两端的页面集合，那正是本该在上述每一处差距上失败的检查。</span>
+</p>
+
+<h3><span class="en">11.21 Decorative parameters, an unverified 4.3 dB, and documentation as code (v0.9.1)</span><span class="zh">11.21 装饰性参数、没验证过的 4.3 dB，以及把文档当代码（v0.9.1）</span></h3>
+<p>
+  <span class="en">Every standard corner names a supply &mdash; <code>SS_125C_0.9V</code> &mdash; and nothing in the model ever read it: sweeping <code>Corner.vdd</code> from 0.5 to 2.0 moved the jitter by exactly zero.  It now acts through the oscillator's own <code>pushing_hz_v</code>, which is the only honest route, since an oscillator states Hz/V and a corner states a relative supply, so the two need a nominal in volts to meet.  A preset that has not characterised pushing comes back untouched rather than having a sensitivity invented for it.  In the same file <code>apply_corner</code> was rebuilding only the sub-configs its corner happened to scale, so at TT &mdash; which scales nothing, and which <code>corner_report</code> runs <i>first</i> &mdash; the returned PLL shared its whole config with the nominal; anything downstream that edited it corrupted the baseline for every later corner.</span>
+  <span class="zh">每一个标准工艺角都写了电源电压——<code>SS_125C_0.9V</code>——而模型里从来没有任何地方读过它：把 <code>Corner.vdd</code> 从 0.5 扫到 2.0，抖动一点都不变。现在它经由振荡器自身的 <code>pushing_hz_v</code> 起作用，这是唯一诚实的路径：振荡器给的是 Hz/V，工艺角给的是相对电源，两者要相遇就需要一个以伏特为单位的标称值。没有标定过推频的 preset 会原样返回，而不是被凭空安上一个灵敏度。同一个文件里，<code>apply_corner</code> 只重建了该工艺角恰好缩放到的那些子配置，于是在 TT（它什么都不缩放，而且 <code>corner_report</code> <i>第一个</i>就跑它）返回的 PLL 与标称共享整份配置；下游任何对它的修改都会污染后面每一个工艺角的基线。</span>
+</p>
+<p>
+  <span class="en">The TDC-INL spur predictor read 4.3&nbsp;dB pessimistic against its own time domain, and nothing compared the two.  The cause was which variable the INL is a function of: <code>TDCConfig</code> declares the shape over the <i>code range</i>, but the loop only ever walks one oscillator period of it, and a TDC is built with range&nbsp;&gt;&nbsp;T<sub>osc</sub> on purpose &mdash; here 78% of the axis.  Three whole cycles across the range are therefore 2.34 cycles to the loop, which is discontinuous at the wrap, and the wrap is what radiates: the declared line drops and the energy reappears at every other k.  With the span correction the dominant spur lands within 0.3&nbsp;dB of the measurement and the harmonics the model previously did not predict at all show up where they are measured.</span>
+  <span class="zh">TDC INL 杂散预测比它自家的时域结果悲观 4.3&nbsp;dB，而从来没有东西去对比这两者。原因在于 INL 到底是谁的函数：<code>TDCConfig</code> 声明的形状是沿<i>码范围</i>的，而环路只走过其中一个振荡周期，且 TDC 本就是刻意做成量程&nbsp;&gt;&nbsp;T<sub>osc</sub> 的——这里只用到 78% 的轴。于是"整个范围上三个整周期"对环路而言是 2.34 个周期，在回绕处不连续，而辐射出来的正是这个回绕：声明的那根谱线掉下去，能量出现在其余每一个 k 上。加上 span 修正后，主杂散与实测相差 0.3&nbsp;dB，此前模型完全预测不出的各次谐波也出现在实测的位置上。</span>
+</p>
+<p>
+  <span class="en">Intra-period sampling is what makes the reference spur visible at all, and it was stepping the loop filter M times per reference cycle in Python &mdash; 73% of a spur run's time, which is why M was quietly kept small.  The system is LTI and diagonal in its eigenbasis, so every sample time has a closed form; it is now evaluated for all M at once and is 7.8&times; faster at M&nbsp;=&nbsp;512, bit-for-bit identical.  The one subtlety is that the exponents must be of <i>clipped elapsed</i> time: the algebraically equivalent e<sup>wt</sup>(e<sup>&minus;wa</sup>&nbsp;&minus;&nbsp;e<sup>&minus;wb</sup>)/w overflows for a fast pole, because e<sup>&minus;w&middot;t<sub>step</sub></sup> is the reciprocal of a number the stable dynamics have already made tiny.  Both GUIs now expose M, with the two things that go wrong printed next to it: a sub-interval coarser than the charge pump's reset pulse reads the spur <i>low</i>, and the record is M floats per reference cycle &mdash; 600&nbsp;MB at 150k cycles and M&nbsp;=&nbsp;512.</span>
+  <span class="zh">周期内细采样是参考杂散能被看见的唯一原因，而它此前是在 Python 里每个参考周期把环路滤波器推进 M 次——占一次杂散运行 73% 的时间，这也是 M 一直被悄悄压小的原因。这个系统是线性时不变的、在特征基下对角，所以每个采样时刻都有闭式解；现在一次性对全部 M 个时刻求值，M&nbsp;=&nbsp;512 时快 7.8&times;，逐位相同。唯一的微妙之处是指数必须是<i>钳位后的已过时间</i>：代数上等价的 e<sup>wt</sup>(e<sup>&minus;wa</sup>&nbsp;&minus;&nbsp;e<sup>&minus;wb</sup>)/w 对快极点会溢出，因为 e<sup>&minus;w&middot;t<sub>step</sub></sup> 正是稳定动力学已经压到极小的那个数的倒数。两个 GUI 现在都暴露了 M，并把两件会出错的事印在它旁边：子区间比电荷泵复位脉冲还粗时杂散会读<i>低</i>，而记录量是每参考周期 M 个浮点数——150k 周期、M&nbsp;=&nbsp;512 就是 600&nbsp;MB。</span>
+</p>
+<p>
+  <span class="en">Finally, the README's numbers had drifted twice (150 tests, then 204, against a suite well past both), it still listed a <code>blocks/divider</code> deleted two releases earlier, and it had never listed <code>corners.py</code>, <code>tdcspurs.py</code> or <code>lockdetect.py</code> at all.  It also carried a claim that had been false since v0.7.0 &mdash; that reference-rate simulation cannot show spurs at &ge;&nbsp;f<sub>ref</sub>/2.  Documentation that states a fact about the code is code, so it now has a test: the stated counts are checked against <code>ALL_PRESETS</code>, the <code>arch/</code> package, the example directory and a live collection, and the layout block is checked in both directions &mdash; nothing missing, nothing that no longer exists.  Mutation tests confirm each check fails when the README is wrong.</span>
+  <span class="zh">最后，README 里的数字已经漂了两次（先是 150 个测试、然后 204，而实际早已远超），它还列着两个版本前就删掉的 <code>blocks/divider</code>，也从来没有列过 <code>corners.py</code>、<code>tdcspurs.py</code> 和 <code>lockdetect.py</code>。它还带着一条自 v0.7.0 起就不成立的说法——参考速率仿真看不到 &ge;&nbsp;f<sub>ref</sub>/2 的杂散。凡是陈述代码事实的文档就是代码，所以它现在有了测试：所声明的各项计数分别对着 <code>ALL_PRESETS</code>、<code>arch/</code> 包、示例目录和一次实时收集来校验，仓库结构块则双向校验——没有遗漏，也没有已经不存在的条目。变异测试确认了每一项检查在 README 写错时确实会失败。</span>
 </p>
 
 </div>

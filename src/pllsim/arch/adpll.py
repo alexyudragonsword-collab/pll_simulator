@@ -180,10 +180,16 @@ class ADPLL(PLLBase):
             # The TDC input sweeps its range at the fractional beat rate, so a
             # declared INL is a deterministic tone generator, not something
             # only simulate() can see.
-            from ..core.tdcspurs import tdc_inl_spur_table
+            from ..core.tdcspurs import code_span, tdc_inl_spur_table
             for off, dbc in tdc_inl_spur_table(
-                    c.tdc.inl_sin, c.fcw % 1.0, c.fref, c.fout, ntf=h).items():
+                    c.tdc, c.fcw % 1.0, c.fref, c.fout, ntf=h).items():
                 spurs[f"frac_spur@{off:.0f}Hz"] = dbc
+            span = code_span(c.tdc, c.fout)
+            if span > 1.0:
+                notes.append(
+                    f"TDC range is {1 / span:.2f} of an output period: it "
+                    "saturates every cycle, so the loop loses phase "
+                    "information rather than merely quantizing it")
             if not c.tdc.inl_sin:
                 offs = frac_spur_offsets(c.fcw % 1.0, c.fref)
                 where = (f"{min(offs) / 1e6:.3f} MHz and {len(offs) - 1} more"

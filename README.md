@@ -37,7 +37,10 @@ architectures against a requirement with synthesized loops — ex18),
 settling instants, seed-population statistics and the FLL hand-off
 stability bound — ex19), **drift-tracking validation** (per-cycle DTC
 gain trajectories through the background LMS: tracking walls, spur
-penalty, mu selection rule — ex20), **Monte Carlo yield analysis**
+penalty, mu selection rule — ex20), **named PVT corners, lock detection and
+injection pulling** (`pllsim.corners` applies SS/FF/SF/FS without retuning
+the loop, `blocks.lockdetect` is the asymmetric up/down counter real silicon
+ships, `OscConfig.pull_*` is Adler — ex21), **Monte Carlo yield analysis**
 (`pllsim.montecarlo` — multiprocess mismatch/corner sweeps with calibration
 running per chip, ex11: 100 chips in ~77 s), and a **Verilog-AMS export
 bridge** (`pllsim.export`, ex13 — per config: bit-true synthesizable RTL for
@@ -52,7 +55,7 @@ Coverage targets: fref = 19.2–250 MHz, fout up to 12 GHz, integrated jitter
 
 ```bash
 pip install -e .          # numpy, scipy, matplotlib
-pytest tests/             # 204 tests: closed-form math + architecture behavior
+pytest tests/             # 437 tests: closed-form math + architecture behavior
 python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 ```
 
@@ -188,8 +191,14 @@ All calibrators record `.trace` for convergence plots
 
 ## Spur analysis
 
-* **Reference spurs** (≥ fref/2 offsets alias to DC at reference-rate
-  sampling): analytic ripple models per architecture.
+* **Reference spurs** (at fref and its harmonics): analytic ripple models per
+  architecture, and measurable in the time domain with `fine_oversample`.
+  In lock a type-II loop has already zeroed the *net* per-period charge, so
+  what remains is a doublet of opposite-sign pulses that cancels in area; the
+  fref component survives only through `2·sin(π·fref·Δt)`, which is 38 dB of
+  suppression for a 200 ps reset at 19.2 MHz.  Leakage is exempt — a constant
+  current has no fref component, so its whole fundamental comes from the
+  narrow correction pulse.
 * **Fractional spurs** (< fref/2): expected offsets from `frac_spur_offsets`
   (k·frac folded), measured by noise-floor-subtracted integration of the
   full-length periodogram (`core.spectrum.find_spurs`); NaN = below floor.
@@ -201,16 +210,18 @@ All calibrators record `.trace` for convergence plots
 
 ```
 src/pllsim/
-  core/        freqresp, noise, jitter, spectrum, colored, deltasigma, engine, results
-  blocks/      loopfilter, oscillator, chargepump, dtc, tdc, sampler, divider
+  core/        freqresp, noise, jitter, spectrum, colored, deltasigma, engine,
+               results, dtcspurs, tdcspurs
+  blocks/      loopfilter, oscillator, chargepump, dtc, tdc, sampler, lockdetect
   calibration/ lms, gain_cal, ftl
   arch/        base, cppll, sspll, spll, adpll, ilcm, mdll
   export/      RTL + RNM + electrical-VAMS emitters, golden engine, manifest
   guiqt/       PySide6 desktop GUI      webgui/  Streamlit web GUI
-  fit.py  modulation.py  montecarlo.py  selector.py  settling.py  synth.py
+  corners.py  fit.py  modulation.py  montecarlo.py  selector.py
+  settling.py  synth.py
   guiutil.py   GUI-support introspection (no GUI dependency)
   plotting.py  presets.py
-examples/      ex01..ex20 (plots into examples/out/)
+examples/      ex01..ex21 (plots into examples/out/)
 tests/         closed-form core math + architecture-level regressions
 ```
 
@@ -219,8 +230,15 @@ tests/         closed-form core math + architecture-level regressions
 * CPPLL/SPLL `analyze()` uses the continuous-time approximation (warned when
   UGB > fref/10); the SSPLL and ADPLL use exact discrete models.  Cross-domain
   tests bound the residual CT-vs-DT deviation.
-* Reference-rate time-domain simulation cannot show spurs at ≥ fref/2 — those
-  are reported analytically (ILCM additionally oversamples analytically).
+* A record taken once per reference edge cannot show spurs at ≥ fref/2 — the
+  control node's ripple lives inside one reference period, so one sample per
+  edge sees a single point on it.  Pass `fine_oversample=M` and the analog
+  loops record M control-voltage samples per period from the charge pump's
+  actual current waveform, which puts the reference spur in the FFT
+  (`simulate()` then reports it in `spurs_fft`; 0.02 dB against the analytic
+  model at M = 512).  M must resolve `cp.t_reset` or the reading comes back
+  low, and both GUIs say so next to the knob.  ILCM and MDLL oversample by
+  default because their jitter figure is defined inside the period.
 * TDC/DTC quantization in-band noise is treated as white in the linear model;
   the deterministic (tonal) component appears in the time domain only.
 * BBPD linearization is conservative when the loop is quantization-dominated;

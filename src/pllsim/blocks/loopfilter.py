@@ -133,6 +133,14 @@ class LoopFilter:
         record taken once per reference edge sees one point on it and reports no
         ripple at all.  The segments matter for the same reason -- see
         ChargePump.segments.
+
+        Evaluated in closed form at all m sample times at once rather than by
+        stepping.  The system is LTI and diagonal in the eigenbasis, so each
+        segment's contribution at time t is a difference of two exponentials
+        of *elapsed* time -- see _seg_integral.  Stepping made the cost O(m)
+        Python iterations, which put this on the critical path of every spur
+        run; m of a few hundred is routine because the sub-interval has to
+        resolve t_reset (~200 ps) inside a reference period (~50 ns).
         """
         m = max(int(m), 1)
         # clip the drive to one step and build sub-interval boundaries
@@ -145,38 +153,49 @@ class LoopFilter:
             used += dur
         if used < self.tstep:
             segs.append((i_bias, self.tstep - used))
-        dt = self.tstep / m
-        xe = self._vinv @ self.x + self._vinv_b * dq_impulse
-        out = np.empty(m)
-        si, s_left = 0, (segs[0][1] if segs else 0.0)
-        for k in range(m):
-            left = dt
-            while left > 1e-18 and si < len(segs):
-                take = min(left, s_left)
-                xe = self._prop(xe, take, segs[si][0])
-                left -= take
-                s_left -= take
-                if s_left <= 1e-18:
-                    si += 1
-                    s_left = segs[si][1] if si < len(segs) else 0.0
-            if left > 1e-18:
-                xe = self._prop(xe, left, 0.0)
-            out[k] = float(np.real(self._v @ xe)[-1])
-        self.x = np.real(self._v @ xe)
-        return out
 
-    def _prop(self, xe: np.ndarray, t: float, i_cp: float) -> np.ndarray:
-        """Advance eigen-coordinates by t with a constant input current."""
-        if t <= 0.0:
-            return xe
-        wt = self._w * t
-        ew = np.exp(wt)
-        if i_cp == 0.0:
-            return ew * xe
-        small = np.abs(wt) < 1e-8
-        g = np.where(small, t * (1.0 + wt / 2.0 + wt * wt / 6.0),
-                     (ew - 1.0) / np.where(small, 1.0, self._w))
-        return ew * xe + g * self._vinv_b * i_cp
+        # sample at the END of each sub-interval, so out[-1] is the state the
+        # step leaves behind
+        t = self.tstep * np.arange(1, m + 1) / m
+        xe0 = self._vinv @ self.x + self._vinv_b * dq_impulse
+        acc = np.zeros((m, self._w.size), dtype=complex)
+        start = 0.0
+        for amp, dur in segs:
+            if amp != 0.0:
+                acc += amp * self._seg_integral(t, start, start + dur)
+            start += dur
+        xe = np.exp(np.outer(t, self._w)) * xe0 + self._vinv_b * acc
+        vctrl = np.real(xe @ self._v.T)[:, -1]
+        self.x = np.real(self._v @ xe[-1])
+        return vctrl
+
+    def _seg_integral(self, t: np.ndarray, a: float, b: float) -> np.ndarray:
+        """(e^{w(t-a)+} - e^{w(t-b)+}) / w for every t, per eigenvalue.
+
+        The convolution of e^{At} with a unit current over [a, b], written so
+        that both exponents are of *clipped elapsed* time and therefore never
+        positive: the algebraically equivalent e^{wt}(e^{-wa} - e^{-wb})/w
+        overflows for a fast pole, since e^{-w*tstep} is the reciprocal of a
+        number the stable dynamics have already made tiny.  Clipping at zero
+        also makes the term vanish identically before the segment starts.
+
+        The type-II integrator sits exactly at w = 0, where the expression is
+        0/0; that branch is the elapsed duration itself, plus one correction
+        term for the case where |w*t| is merely small rather than zero.  One
+        term is enough and the next would be unreachable: at the 1e-8 switch
+        point the linear correction is already only ~6e-9 of the answer, so
+        the quadratic one lands at ~1e-17 -- under the double-precision floor,
+        where no test could tell it from nothing.
+        """
+        p = np.clip(t - a, 0.0, None)[:, None]
+        q = np.clip(t - b, 0.0, None)[:, None]
+        w = self._w[None, :]
+        small = np.abs(w) * self.tstep < 1e-8
+        # expm1 rather than exp: for a slow pole the two exponentials are both
+        # near 1 and their difference is all cancellation
+        big = (np.expm1(w * p) - np.expm1(w * q)) / np.where(small, 1.0, w)
+        ser = (p - q) + 0.5 * w * (p * p - q * q)
+        return np.where(small, ser, big)
 
     # ------------------------------------------------------------ freq domain
     def transimpedance(self, f: np.ndarray) -> np.ndarray:

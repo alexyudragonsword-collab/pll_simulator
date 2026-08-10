@@ -190,6 +190,91 @@ def test_drive_fine_resolves_a_segment_shorter_than_a_sub_interval():
     assert settled == pytest.approx(1e-12 / (1e-9 + 100e-12), rel=1e-2)
 
 
+@pytest.mark.parametrize("m", [1, 5, 64])
+def test_drive_fine_closed_form_matches_stepping(m):
+    """The vectorized solution must be the same solution, not a faster shape.
+
+    Two segments with opposite signs and a bias, which is the charge-pump
+    doublet: the tiny reset pulses are where a per-eigenvalue exponential
+    difference is most at risk of cancelling.
+    """
+    d = FilterDesign(c1=1e-9, r2=2e3, c2=100e-12, r3=1e3, c3=20e-12)
+    segs = [(3e-4, 0.2e-9), (-3e-4, 0.2e-9)]
+    a, b = LoopFilter(d, TREF), LoopFilter(d, TREF)
+    a.reset(0.7)
+    b.reset(0.7)
+    got = a.drive_fine(segs, m, i_bias=1e-9)
+    # step the same waveform with the already-trusted constant-current update
+    want = []
+    for k in range(1, m + 1):
+        t0, t1 = TREF * (k - 1) / m, TREF * k / m
+        for lo, hi, cur in _piecewise(segs, 1e-9, t0, t1):
+            b.tstep = hi - lo
+            b.update_pulse(cur, hi - lo)
+        want.append(b.vctrl)
+    assert got == pytest.approx(np.array(want), rel=1e-7, abs=1e-15)
+
+
+def _piecewise(segs, i_bias, t0, t1):
+    """[(lo, hi, current)] covering [t0, t1), split at every segment edge."""
+    edges = {t0, t1}
+    s = 0.0
+    for _, dur in segs:
+        edges |= {s, s + dur}
+        s += dur
+    pts = sorted(e for e in edges if t0 <= e <= t1)
+    out = []
+    for lo, hi in zip(pts[:-1], pts[1:]):
+        if hi <= lo:
+            continue
+        mid, cur, s = 0.5 * (lo + hi), i_bias, 0.0
+        for amp, dur in segs:
+            if s <= mid < s + dur:
+                cur += amp
+            s += dur
+        out.append((lo, hi, cur))
+    return out
+
+
+def test_seg_integral_branches_agree_where_they_meet():
+    """The w->0 series and the exponential form must be the same function.
+
+    Only the exact type-II pole at w = 0 takes the series in practice, so a
+    wrong expansion coefficient would never be exercised by a preset and would
+    sit there waiting for a filter whose slowest pole happens to be near the
+    threshold.  Straddle it explicitly.
+    """
+    lf = LoopFilter(FilterDesign(c1=1e-9, r2=2e3, c2=100e-12), TREF)
+    thresh = 1e-8 / TREF                       # |w| where the branch switches
+    a, b = 0.1 * TREF, 0.6 * TREF
+    t = TREF * np.array([0.25, 0.5, 1.0])
+    lf._w = np.array([thresh * 0.9, -thresh * 0.9], dtype=complex)
+    series = lf._seg_integral(t, a, b)
+
+    # the exponential form at the SAME w -- expm1 is still accurate at |wp| of
+    # 1e-8, so it is the reference the series has to reproduce
+    p = np.clip(t - a, 0.0, None)[:, None]
+    q = np.clip(t - b, 0.0, None)[:, None]
+    w = lf._w[None, :]
+    ref = (np.expm1(w * p) - np.expm1(w * q)) / w
+    assert np.max(np.abs(ref)) > 0.1 * TREF, "the fixture must do something"
+    assert np.max(np.abs(series - ref)) < 1e-13 * np.max(np.abs(ref))
+
+
+def test_drive_fine_survives_a_pole_far_faster_than_the_step():
+    """A 10 ps pole over a 52 ns step is exp(+5200) if written the naive way.
+
+    The closed form has to be in elapsed time for that reason; getting it
+    wrong shows up as inf/nan rather than as a small error.
+    """
+    lf = LoopFilter(FilterDesign(c1=1e-9, r2=1e3, c2=1e-12, r3=10.0, c3=1e-15),
+                    TREF)
+    lf.reset(0.4)
+    v = lf.drive_fine([(1e-3, 1e-9)], 32, i_bias=1e-9)
+    assert np.all(np.isfinite(v))
+    assert np.isfinite(lf.vctrl)
+
+
 def test_third_order_filter_adds_a_pole():
     f = np.logspace(5, 8, 200)
     z2 = np.abs(LoopFilter(FilterDesign(1e-9, 2e3, 100e-12), TREF).transimpedance(f))

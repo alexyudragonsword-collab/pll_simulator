@@ -56,6 +56,43 @@ def test_workbench_form_overrides_flow(app):
     page.deleteLater()
 
 
+def test_workbench_fine_oversample_reaches_the_engine(app):
+    """The spinbox has to change what the run measures, not just exist.
+
+    With M = 1 the record has one control-voltage sample per reference edge
+    and the reference spur is invisible; raising M is the whole reason the
+    knob is there, so the test is that the spur table appears.
+    """
+    from pllsim.guiqt.page_workbench import WorkbenchPage
+    page = WorkbenchPage()
+    page.preset.setCurrentText("cppll_19p2m_4p8g")
+    page.n_cycles.setValue(10_000)
+    page.cb_noise.setChecked(False)
+    page.form._edits["cp.mismatch_pct"].setText("5")
+
+    page.fine_os.setValue(1)
+    assert page.compute_sim()[1].spurs_fft == {}
+    page.fine_os.setValue(128)
+    assert page.compute_sim()[1].spurs_fft, "M > 1 must expose the ripple"
+    page.deleteLater()
+
+
+def test_workbench_says_what_a_coarse_m_costs_and_hides_what_it_misses(app):
+    from pllsim.guiqt.page_workbench import WorkbenchPage
+    page = WorkbenchPage()
+    page.preset.setCurrentText("cppll_19p2m_4p8g")
+    page.fine_os.setValue(0)
+    assert page.fine_note.text() == ""
+    page.fine_os.setValue(4)                  # far coarser than t_reset
+    assert "MB" in page.fine_note.text()
+    assert "under-resolved" in page.fine_note.text()
+    # and an architecture with no analog control node says so instead
+    page.preset.setCurrentText("adpll_100m_10g")
+    page.fine_os.setValue(64)
+    assert "no intra-period record" in page.fine_note.text()
+    page.deleteLater()
+
+
 def test_selector_page_flow(app):
     from pllsim.guiqt.page_design import SelectorPage
     page = SelectorPage()

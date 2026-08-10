@@ -17,6 +17,7 @@ to all six without a per-architecture table.
 """
 from __future__ import annotations
 
+from copy import deepcopy
 from dataclasses import dataclass, fields, replace
 
 T0_C = 27.0
@@ -44,7 +45,12 @@ class Corner:
     pn_db: float = 0.0
     ref_pn_db: float = 0.0     # reference/crystal floor, same convention
     temp_c: float = T0_C
-    vdd: float = 1.0           # supply, relative to nominal
+    # Supply relative to nominal, acting through OscConfig.pushing_hz_v.  It
+    # needs a nominal in volts to become a deviation in volts, and there is no
+    # supply voltage anywhere in the configs -- an oscillator only ever
+    # declares how many Hz it moves per volt.
+    vdd: float = 1.0
+    vdd_nominal_v: float = 1.0
 
     @property
     def temp_k(self) -> float:
@@ -105,8 +111,15 @@ def apply_corner(pll, corner: Corner):
     The loop is deliberately NOT retuned: a corner analysis asks what the
     nominal design does at that corner, and retuning would answer a different
     question (what a design centred there would do).
+
+    The copy is deep.  ``dataclasses.replace`` only rebuilds the level it is
+    handed, so a config whose sub-blocks this corner does not touch would keep
+    sharing them with the nominal -- and at TT, which scales nothing, the
+    returned PLL would share the whole config.  Since corner_report runs TT
+    first, anything downstream that edited a returned config would corrupt the
+    baseline for every later corner.
     """
-    cfg = pll.cfg
+    cfg = deepcopy(pll.cfg)
     changes = {}
     for owner, axes in _MAP.items():
         sub = getattr(cfg, owner, None)
@@ -114,6 +127,14 @@ def apply_corner(pll, corner: Corner):
             new = _scaled(sub, axes, corner, owner)
             if new is not sub:
                 changes[owner] = new
+    # Static supply deviation, through the oscillator's own pushing figure.
+    # Without this the vdd axis is a decoration: every standard corner names a
+    # supply (SS_125C_0.9V) that nothing in the model would ever read.
+    osc = changes.get("osc", getattr(cfg, "osc", None))
+    if osc is not None and corner.vdd != 1.0 \
+            and getattr(osc, "pushing_hz_v", 0.0):
+        dv = (corner.vdd - 1.0) * corner.vdd_nominal_v
+        changes["osc"] = replace(osc, f0=osc.f0 + osc.pushing_hz_v * dv)
     for name in ("ref_pn_dbchz",):
         if hasattr(cfg, name) and corner.ref_pn_db != 0.0:
             changes[name] = getattr(cfg, name) + corner.ref_pn_db
@@ -126,7 +147,7 @@ def apply_corner(pll, corner: Corner):
                 d_changes[name] = getattr(dtc, name) * corner.tdelay
         if d_changes:
             changes["frac"] = replace(frac, dtc=replace(dtc, **d_changes))
-    return type(pll)(replace(cfg, **changes)) if changes else type(pll)(cfg)
+    return type(pll)(replace(cfg, **changes) if changes else cfg)
 
 
 @dataclass
