@@ -69,6 +69,8 @@ jobs:
           test -f examples/out/ex01_pn_breakdown.png
           python examples/ex13_export_vams.py
           test -f examples/out/export/INDEX.md
+          python examples/ex21_corners_lock_pulling.py
+          test -f examples/out/ex21_corner_jitter.png
       - name: Run every example (main only)
         # the examples are the figures in docs/ and the only exercise several
         # code paths get, but the full sweep is ~20 min of runner time and

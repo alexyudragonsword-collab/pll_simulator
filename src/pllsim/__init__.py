@@ -1,10 +1,26 @@
 """pllsim — system-level / behavioral PLL simulation.
 
-Architectures: CPPLL (int/frac-N), SSPLL, SPLL, ADPLL (TDC / DTC+BBPD), ILCM.
-Each provides analyze() (linear phase-domain noise/stability/spur model) and
-simulate() (reference-edge-driven behavioral time domain with calibration).
+Architectures: CPPLL (int/frac-N), SSPLL, SPLL, ADPLL (TDC / DTC+BBPD), ILCM,
+MDLL.  Each provides analyze() (linear phase-domain noise/stability/spur model)
+and simulate() (reference-edge-driven behavioral time domain with calibration).
+
+The analysis modules are imported here rather than left to the caller.  Which
+submodule needs its own import statement is not something a name tells you, so
+`pllsim.corners` raising AttributeError while `pllsim.presets` worked was a
+difference with no reason a user could see.
 """
-from . import presets
+from . import (
+    corners,
+    fit,
+    guiutil,
+    modulation,
+    montecarlo,
+    plotting,
+    presets,
+    selector,
+    settling,
+    synth,
+)
 from .arch.adpll import ADPLL, ADPLLConfig, DLFConfig
 from .arch.cppll import CPPLL, CPPLLConfig, FracConfig
 from .arch.ilcm import ILCM, ILCMConfig
@@ -32,5 +48,7 @@ __all__ = [
     "SPLL", "SPLLConfig",
     "SSPLL", "SSPLLConfig",
     "CPConfig", "DTCConfig", "FilterDesign", "OscConfig", "SamplerConfig",
-    "TDCConfig", "presets",
+    "TDCConfig",
+    "corners", "fit", "guiutil", "modulation", "montecarlo", "plotting",
+    "presets", "selector", "settling", "synth",
 ]
