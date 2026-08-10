@@ -1,15 +1,26 @@
 """TDC INL, BBPD metastability, injection pulling and named corners."""
+import dataclasses
 from dataclasses import replace
 
 import numpy as np
 import pytest
 
 from pllsim import corners, presets
-from pllsim.blocks.tdc import BBPD, meta_gain_penalty
+from pllsim.blocks.tdc import BBPD, TDCConfig, meta_gain_penalty
 from pllsim.core.tdcspurs import inl_fourier_coeffs, tdc_inl_spur_table
 
 
 # ---------------------------------------------------------------- TDC INL
+def _tdc(inl, fout=10e9, n_bits=8):
+    """A TDC whose range is exactly one output period, so span = 1.
+
+    That is the only geometry in which the INL the loop walks is the INL as
+    declared, which is what the closed-form assertions below are written for.
+    """
+    code_max = (1 << n_bits) - 1
+    return TDCConfig(t_res=(1.0 / fout) / code_max, n_bits=n_bits, inl_sin=inl)
+
+
 def test_integer_cycle_inl_is_a_single_harmonic():
     """A whole number of INL cycles across the range is one Fourier term."""
     ck = inl_fourier_coeffs((2e-12, 3, 0.0), n_harm=8)
@@ -17,10 +28,34 @@ def test_integer_cycle_inl_is_a_single_harmonic():
     assert np.max(np.delete(ck, 2)) < 1e-15
 
 
+def test_a_partly_swept_range_spreads_one_cycle_over_every_harmonic():
+    """The loop walks one output period, not the whole code range.
+
+    A TDC is built with range > Tosc on purpose, so an INL declared as three
+    whole cycles across the range presents 3*span cycles to the loop.  That is
+    discontinuous at the wrap, and the wrap is what radiates: the line at k=3
+    drops and every other k comes up out of nothing.
+    """
+    full = inl_fourier_coeffs((2e-12, 3, 0.0), 1.0, n_harm=8)
+    part = inl_fourier_coeffs((2e-12, 3, 0.0), 0.78, n_harm=8)
+    assert part[2] < 0.6 * full[2], "the declared line must lose energy"
+    assert part[1] > 0.2 * full[2], "and the neighbours must gain it"
+    # nothing is created: the spread is a redistribution, not a gain
+    assert np.sum(part ** 2) < 1.2 * np.sum(full ** 2)
+
+
+def test_code_span_is_the_period_over_the_range():
+    from pllsim.core.tdcspurs import code_span
+    assert code_span(_tdc(()), 10e9) == pytest.approx(1.0)
+    # the preset's TDC deliberately overshoots one period
+    span = code_span(presets.adpll_100m_10g().cfg.tdc, 10e9)
+    assert 0.7 < span < 0.85
+
+
 def test_inl_spur_lands_on_the_beat_harmonic():
     """k cycles of INL put a tone at fold(k*frac)*fref, not at frac*fref."""
     frac, fref = 0.13, 100e6
-    tab = tdc_inl_spur_table((2e-12, 3, 0.0), frac, fref, 10e9)
+    tab = tdc_inl_spur_table(_tdc((2e-12, 3, 0.0)), frac, fref, 10e9)
     want = min((3 * frac) % 1.0, 1.0 - (3 * frac) % 1.0) * fref
     assert len(tab) == 1
     off, dbc = next(iter(tab.items()))
@@ -31,7 +66,24 @@ def test_inl_spur_lands_on_the_beat_harmonic():
 
 def test_no_inl_spur_on_an_integer_channel():
     """With frac = 0 the TDC sits on one code: its INL is an offset, not a tone."""
-    assert tdc_inl_spur_table((2e-12, 3, 0.0), 0.0, 100e6, 10e9) == {}
+    assert tdc_inl_spur_table(_tdc((2e-12, 3, 0.0)), 0.0, 100e6, 10e9) == {}
+
+
+@pytest.mark.parametrize("amp_ps", [2.0, 6.0])
+def test_predicted_inl_spur_matches_the_time_domain(amp_ps):
+    """The cross-domain check this mechanism never had.
+
+    Without it the span error above sat in the library reading like a plain
+    answer: analyze() said -24.2 dBc where simulate() measured -28.5, and
+    nothing compared the two.  A 2-cycle INL on the 0.503 channel folds to
+    600 kHz, well inside the loop, and the preset's own quantization sits at
+    -104 dBc there -- so what is left is the INL alone.
+    """
+    p = presets.adpll_100m_10g()
+    p.cfg.tdc.inl_sin = (amp_ps * 1e-12, 2, 0.0)
+    want = p.analyze().spurs_analytic["frac_spur@600000Hz"]
+    got = p.simulate(120000, noise=False, calibration=False, seed=1).spurs_fft
+    assert got[600e3] == pytest.approx(want, abs=1.5)
 
 
 def test_tdc_adpll_now_predicts_its_fractional_spurs():
@@ -180,6 +232,72 @@ def test_apply_corner_leaves_the_original_alone():
     before = p.cfg.osc.gain, p.cfg.cp.icp, p.cfg.filt.r2
     corners.apply_corner(p, corners.SS_HOT)
     assert (p.cfg.osc.gain, p.cfg.cp.icp, p.cfg.filt.r2) == before
+
+
+def test_the_supply_axis_moves_the_oscillator_through_its_pushing_figure():
+    """`vdd` is named by every standard corner; it has to read somewhere.
+
+    An oscillator states how many Hz it moves per volt, so the corner's
+    relative supply needs a nominal to become volts.  Without this the axis is
+    a label on `SS_125C_0.9V` that no equation ever touches.
+    """
+    p = presets.cppll_19p2m_4p8g()
+    p.cfg.osc.pushing_hz_v = 5e6            # 5 MHz/V, a plain LC number
+    f0 = p.cfg.osc.f0
+    low = corners.apply_corner(p, corners.Corner("lo", vdd=0.9)).cfg.osc.f0
+    high = corners.apply_corner(p, corners.Corner("hi", vdd=1.1)).cfg.osc.f0
+    assert low == pytest.approx(f0 - 0.5e6)
+    assert high == pytest.approx(f0 + 0.5e6)
+
+    # a 1.8 V part moves 1.8x further for the same relative sag
+    wide = corners.Corner("lo18", vdd=0.9, vdd_nominal_v=1.8)
+    assert corners.apply_corner(p, wide).cfg.osc.f0 == pytest.approx(f0 - 0.9e6)
+
+
+def test_the_supply_axis_does_nothing_without_a_pushing_figure():
+    """No pushing number means no claim about supply sensitivity.
+
+    Inventing one would be worse than the axis being inert, so a preset that
+    has not characterised it must come back untouched.
+    """
+    p = presets.cppll_19p2m_4p8g()
+    assert p.cfg.osc.pushing_hz_v == 0.0
+    got = corners.apply_corner(p, corners.Corner("lo", vdd=0.5)).cfg.osc.f0
+    assert got == p.cfg.osc.f0
+
+
+def _sub_configs(cfg):
+    """Every dataclass hanging off `cfg`, one level down and through frac."""
+    out = []
+    for f in dataclasses.fields(cfg):
+        v = getattr(cfg, f.name)
+        if dataclasses.is_dataclass(v):
+            out.append(v)
+            out.extend(x for x in (getattr(v, g.name)
+                                   for g in dataclasses.fields(v))
+                       if dataclasses.is_dataclass(x))
+    return out
+
+
+@pytest.mark.parametrize("corner", [corners.TT, corners.SS_HOT])
+def test_a_corner_copy_shares_no_sub_config_with_the_original(corner):
+    """Including TT, which scales nothing and so rebuilds nothing.
+
+    `dataclasses.replace` only rebuilds the level it is handed, so an untouched
+    sub-block would stay shared.  `corner_report` runs TT first, so a caller
+    that edited that row's config would silently corrupt every later corner.
+    """
+    p = presets.cppll_19p2m_4p8g()
+    q = corners.apply_corner(p, corner)
+    assert q.cfg is not p.cfg
+    shared = {id(s) for s in _sub_configs(p.cfg)} & \
+             {id(s) for s in _sub_configs(q.cfg)}
+    assert not shared, "a sub-config is still aliased to the nominal"
+
+    # and the aliasing that matters: editing the copy must not move the original
+    before = p.cfg.osc.f0
+    q.cfg.osc.f0 *= 2.0
+    assert p.cfg.osc.f0 == before
 
 
 def test_typical_corner_is_a_no_op():
