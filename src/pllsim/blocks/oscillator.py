@@ -108,10 +108,11 @@ class OscConfig:
         Unbounded when no range is set, which is the honest answer: with an
         unlimited varactor every band reaches every frequency.
         """
-        if not self.v_limited:
-            return (-np.inf, np.inf)
-        lo = self.freq_law(self.v_min, band)
-        hi = self.freq_law(self.v_max, band)
+        lo_v, hi_v = self.v_min, self.v_max
+        if lo_v is None or hi_v is None:      # same test as v_limited, but one
+            return (-np.inf, np.inf)          # a reader and a checker can follow
+        lo = self.freq_law(lo_v, band)
+        hi = self.freq_law(hi_v, band)
         return (min(lo, hi), max(lo, hi))
 
     def band_covers(self, f_target: float, band: int) -> bool:
@@ -213,14 +214,14 @@ class Oscillator:
 
     def noise_step(self) -> float:
         """Total oscillator phase-noise sample for this step [rad]."""
-        if not self.noise_on:
+        if not self.noise_on or self.gen is None:
             return 0.0
         d, add = self.gen.step()
         self.phi_acc_noise += d
         return self.phi_acc_noise + add
 
     def noise_steps(self, n: int) -> np.ndarray:
-        if not self.noise_on:
+        if not self.noise_on or self.gen is None:
             return np.zeros(n)
         d, add = self.gen.steps(n)
         walk = self.phi_acc_noise + np.cumsum(d)

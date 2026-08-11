@@ -55,9 +55,16 @@ jobs:
             libegl1 libgl1 libxkbcommon0 libdbus-1-3
           python -m pip install --upgrade pip
           pip install -e .[test,gui,guiqt]
-          pip install ruff pytest-cov
+          pip install ruff mypy pytest-cov
       - name: Lint
         run: ruff check src tests examples packaging
+      - name: Type check
+        # the file list is in pyproject [tool.mypy]: the physics core, the
+        # blocks, the calibrators and the analysis modules -- everything whose
+        # types carry a convention.  arch/ and webgui/ are named there as not
+        # yet covered rather than silenced, so this gate cannot be mistaken
+        # for whole-package checking.
+        run: mypy
       - name: Run tests
         env:
           QT_QPA_PLATFORM: offscreen

@@ -56,15 +56,19 @@ def _press(at: AppTest, label_part: str) -> AppTest:
                          f"have {[str(b.label) for b in at.button]}")
 
 
-def _press_nth(at: AppTest, i: int) -> AppTest:
-    """Press by position, for pages whose labels are localized.
+def _press_key(at: AppTest, key: str) -> AppTest:
+    """Press by widget key, for pages whose labels are localized.
 
     The Spurs page defaults to Chinese, so matching on English text there
-    would silently skip the very buttons this file exists to exercise.
+    would silently skip the very buttons this file exists to exercise -- but
+    pressing by *position* is worse: adding the reference-spur button shifted
+    every later index, and the channel-sweep test went on passing while
+    pressing something else entirely.  A key is stable against both.
     """
-    b = at.button[i]
-    out = b.click().run()
-    assert not out.exception, f"'{b.label}' raised: {out.exception}"
+    found = [b for b in at.button if b.key == key]
+    assert found, f"no button keyed {key!r}; have {[b.key for b in at.button]}"
+    out = found[0].click().run()
+    assert not out.exception, f"'{found[0].label}' raised: {out.exception}"
     return out
 
 
@@ -106,10 +110,32 @@ def test_synthesis_solves_every_family():
 
 def test_spurs_predicts_and_simulates():
     at = _run("4_Spurs.py")
-    a = _press_nth(at, 0)               # predict via the analyze() NTF
+    a = _press_key(at, "predict")       # via the analyze() NTF
     assert a.dataframe or a.table
-    b = _press_nth(a, 1)                # simulate and plot
+    b = _press_key(a, "measure")        # simulate and plot
     assert _produced_output(b)
+
+
+def test_spurs_page_compares_the_reference_spur():
+    """The reference spur needs an intra-period record, so this page could
+    not show it at all until the M control existed."""
+    at = _run("4_Spurs.py")
+    names = list(at.selectbox[0].options)
+    cp = next(n for n in names if n.startswith("cppll"))
+    at = at.selectbox[0].select(cp).run()
+    out = _press_key(at, "ref_spur")
+    rows = [r for df in out.dataframe for r in _rows_of(df)]
+    assert rows, "no comparison table"
+    hit = [r for r in rows if "analytic [dBc]" in r and r["analytic [dBc]"] != "-"]
+    assert hit, f"the charge-pump preset must have an analytic value: {rows}"
+
+
+def _rows_of(df):
+    v = df.value
+    try:
+        return v.to_dict("records")
+    except AttributeError:
+        return list(v)
 
 
 def test_spurs_channel_sweep_follows_the_selected_preset():
@@ -119,12 +145,14 @@ def test_spurs_channel_sweep_follows_the_selected_preset():
     names = list(at.selectbox[0].options)
     assert len(names) > 1
     at = at.selectbox[0].select(names[-1]).run()
-    out = _press_nth(at, 2)             # sweep channels
+    out = _press_key(at, "sweep")
     blob = " ".join(str(m.value) for m in out.markdown) \
         + " ".join(str(c.value) for c in out.caption) \
         + " ".join(str(h.value) for h in out.subheader)
-    assert names[-1] in blob or out.dataframe, \
-        "the sweep must report on the preset that is selected"
+    # naming the swept preset is the assertion; "or out.dataframe" used to be
+    # an escape hatch wide enough that pressing the wrong button still passed
+    assert names[-1] in blob, \
+        "the sweep must name the preset that is selected"
 
 
 def test_modulation_runs_and_reports_evm():

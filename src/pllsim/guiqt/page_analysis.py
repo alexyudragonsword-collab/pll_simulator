@@ -11,13 +11,20 @@ from PySide6.QtWidgets import (
     QHBoxLayout,
     QLabel,
     QPushButton,
+    QSpinBox,
     QVBoxLayout,
 )
 
 from .. import presets
 from ..core.jitter import ldbc_from_sphi
 from ..fit import attribute_budget, fit_closed_loop, fit_leeson, load_pn_csv
-from ..guiutil import frac_presets, make_pll
+from ..guiutil import (
+    fine_oversample_note,
+    fine_record_mb,
+    frac_presets,
+    make_pll,
+    ref_spur_comparison,
+)
 from ..plotting import plot_spur_spectrum
 from .i18n import tr
 from .widgets import FigList, Page, float_edit, table_from_rows
@@ -54,6 +61,27 @@ class SpursPage(Page):
         row.addWidget(self.btn_meas)
         row.addStretch(1)
         lay.addLayout(row)
+
+        # Reference spur.  This page could only ever show *fractional* spurs,
+        # because the reference one lives inside a single reference period and
+        # needs an intra-period record to be visible at all.
+        row2 = QHBoxLayout()
+        row2.addWidget(tr(QLabel(), "参考杂散 —— 周期内细采样 M",
+                          "Reference spur -- intra-period samples M"))
+        self.fine_os = QSpinBox()
+        self.fine_os.setRange(2, 4096)
+        self.fine_os.setSingleStep(32)
+        self.fine_os.setValue(128)
+        self.fine_os.valueChanged.connect(self._fine_hint)
+        row2.addWidget(self.fine_os)
+        self.btn_ref = tr(QPushButton(), "解析 vs 时域",
+                          "Analytic vs time domain")
+        self.btn_ref.clicked.connect(self._go_ref)
+        row2.addWidget(self.btn_ref)
+        self.fine_note = QLabel("")
+        self.fine_note.setWordWrap(True)
+        row2.addWidget(self.fine_note, 1)
+        lay.addLayout(row2)
         self._body = QVBoxLayout()
         lay.addLayout(self._body)
         self.figs = FigList()
@@ -67,12 +95,46 @@ class SpursPage(Page):
         the same config, which is the comparison ex15 is built on."""
         def fn():
             pll = self._cfg_pll()
-            return pll.simulate(150_000, seed=2), self._cfg_pll().analyze()
+            return (pll.simulate(150_000, seed=2,
+                                 fine_oversample=int(self.fine_os.value())),
+                    self._cfg_pll().analyze())
 
         def done(res):
             sim, ar = res
             self.figs.set_figs([plot_spur_spectrum(sim, ar=ar)])
         self.run_async(fn, done, self.btn_meas)
+
+    def _fine_hint(self):
+        try:
+            pll = self._cfg_pll()
+        except Exception:            # a half-typed field; the run reports it
+            self.fine_note.setText("")
+            return
+        m = int(self.fine_os.value())
+        note = fine_oversample_note(pll, m)
+        mb = fine_record_mb(40_000, m)
+        self.fine_note.setText(f"record ~{mb:.0f} MB"
+                               + (f" — {note}" if note else ""))
+
+    def compute_ref(self):
+        """The worker body, named so a test can call exactly what runs."""
+        return ref_spur_comparison(self._cfg_pll(), m=int(self.fine_os.value()))
+
+    def render_ref(self, res):
+        rows, notes = res
+        while self._body.count():
+            w = self._body.takeAt(0).widget()
+            if w is not None:
+                w.deleteLater()
+        if rows:
+            self._body.addWidget(table_from_rows(rows))
+        for n in notes:
+            lab = QLabel("note: " + n)
+            lab.setWordWrap(True)
+            self._body.addWidget(lab)
+
+    def _go_ref(self):
+        self.run_async(self.compute_ref, self.render_ref, self.btn_ref)
 
     def _cfg_pll(self, frac=None):
         pll = make_pll(self.preset.currentText())

@@ -132,7 +132,7 @@ def apply_corner(pll, corner: Corner):
     # supply (SS_125C_0.9V) that nothing in the model would ever read.
     osc = changes.get("osc", getattr(cfg, "osc", None))
     if osc is not None and corner.vdd != 1.0 \
-            and getattr(osc, "pushing_hz_v", 0.0):
+            and getattr(osc, "pushing_hz_v", 0.0) != 0.0:
         dv = (corner.vdd - 1.0) * corner.vdd_nominal_v
         changes["osc"] = replace(osc, f0=osc.f0 + osc.pushing_hz_v * dv)
     for name in ("ref_pn_dbchz",):

@@ -55,7 +55,7 @@ Coverage targets: fref = 19.2–250 MHz, fout up to 12 GHz, integrated jitter
 
 ```bash
 pip install -e .          # numpy, scipy, matplotlib
-pytest tests/             # 437 tests: closed-form math + architecture behavior
+pytest tests/             # 452 tests: closed-form math + architecture behavior
 python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 ```
 
@@ -224,6 +224,21 @@ src/pllsim/
 examples/      ex01..ex21 (plots into examples/out/)
 tests/         closed-form core math + architecture-level regressions
 ```
+
+## What CI enforces
+
+`ruff` on `src tests examples packaging`; `mypy` on the physics core, the
+blocks, the calibrators and the analysis modules (the file list is in
+`pyproject.toml` — `arch/` and `webgui/pages/` are named there as *not yet*
+checked rather than silenced, so the gate cannot be mistaken for whole-package
+coverage); the full test suite on Python 3.11 and 3.12 with a coverage floor.
+
+Two things the coverage number does not say.  The Streamlit pages are driven
+by 23 tests through `AppTest`, which execs each file rather than importing it,
+so coverage attributes none of it — `webgui/Home.py` reads 0% while its test
+passes.  And a covered line is a line that ran, not a line whose answer was
+checked; the physics is pinned by cross-domain comparison, not by that
+percentage.
 
 ## Known modeling limits
 

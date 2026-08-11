@@ -8,3 +8,9 @@ dist/
 .coverage.*
 htmlcov/
 .ruff_cache/
+
+# deck build: pptxgenjs is fetched on demand by docs/reports/README.md
+docs/reports/node_modules/
+docs/reports/package-lock.json
+docs/reports/package.json
+docs/reports/qa-*.png

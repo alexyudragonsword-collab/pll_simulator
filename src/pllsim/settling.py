@@ -126,12 +126,12 @@ def hop_statistics(make_pll, f_from: float, seeds=range(20),
     make_pll: factory returning a FRESH instance per run (calibrators
     carry state).  Returns arrays plus percentiles of t_phase.
     """
-    tf, tp = [], []
+    freq_s, phase_s = [], []
     for s in seeds:
         r = hop_settling(make_pll(), f_from, seed=s, **kwargs)
-        tf.append(r.t_freq_s)
-        tp.append(r.t_phase_s)
-    tf, tp = np.asarray(tf), np.asarray(tp)
+        freq_s.append(r.t_freq_s)
+        phase_s.append(r.t_phase_s)
+    tf, tp = np.asarray(freq_s), np.asarray(phase_s)
     ok = np.isfinite(tp)
     return {"t_freq_s": tf, "t_phase_s": tp,
             "p50_s": float(np.percentile(tp[ok], 50)) if ok.any() else

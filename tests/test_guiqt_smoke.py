@@ -93,6 +93,46 @@ def test_workbench_says_what_a_coarse_m_costs_and_hides_what_it_misses(app):
     page.deleteLater()
 
 
+def test_spurs_page_compares_the_reference_spur(app):
+    """The Spurs page could only ever show *fractional* spurs.
+
+    The reference one lives inside a single reference period, so it needs the
+    intra-period record that only the workbench could ask for.
+    """
+    from pllsim.guiqt.page_analysis import SpursPage
+    page = SpursPage()
+    page.preset.setCurrentText(
+        next(n for n in [page.preset.itemText(i)
+                         for i in range(page.preset.count())]
+             if n.startswith("cppll")))
+    page.fine_os.setValue(128)
+    table, notes = page.compute_ref()          # same fn the worker runs
+    assert table, "no comparison rows"
+    assert any(r["analytic [dBc]"] != "-" for r in table), table
+    assert any(r["measured [dBc]"] != "-" for r in table), table
+    page.render_ref((table, notes))            # renders without raising
+    assert page._body.count() > 0
+    page.deleteLater()
+
+
+def test_spurs_page_says_why_a_sampling_loop_has_no_reference_spur(app):
+    """"-" with a reason beside it is the answer, not a missing number."""
+    from pllsim.guiqt.page_analysis import SpursPage
+    page = SpursPage()
+    page.preset.setCurrentText(
+        next(n for n in [page.preset.itemText(i)
+                         for i in range(page.preset.count())]
+             if n.startswith("sspll")))
+    page.fine_os.setValue(64)
+    page._fine_hint()
+    assert "MB" in page.fine_note.text()
+    table, notes = page.compute_ref()
+    assert all(r["analytic [dBc]"] == "-" for r in table), table
+    assert any("pedestal" in n or "no charge" in n or "no analytic" in n
+               for n in notes), notes
+    page.deleteLater()
+
+
 def test_selector_page_flow(app):
     from pllsim.guiqt.page_design import SelectorPage
     page = SelectorPage()
@@ -120,3 +160,62 @@ def test_benchmarks_page_static(app):
     assert table is not None
     assert table.rowCount() == len(rows)
     page.deleteLater()
+
+
+# ---------------------------------------------------------------- dynamics
+# These three pages hid their whole computation in a closure inside _go, so a
+# test could reach the layout but never the code that runs when the button is
+# pressed -- which is the failure this GUI has actually had.  Each now has a
+# named compute()/render() pair, and these call exactly what the worker calls.
+def test_modulation_page_computes_an_evm(app):
+    from pllsim.guiqt.page_dynamics import ModulationPage
+    page = ModulationPage()
+    page.n_cyc.setText("60000")
+    res = page.compute()
+    e = res[0]
+    assert 0.0 < e["evm_pct"] < 100.0
+    page.render(res)
+    page.deleteLater()
+
+
+def test_hop_settling_page_computes_and_renders(app):
+    from pllsim.guiqt.page_dynamics import HopSettlingPage
+    page = HopSettlingPage()
+    page.n_cyc.setText("60000")
+    page.hop.setText("-40e6")
+    r = page.compute()
+    assert r.f_to != 0.0
+    page.render(r)
+    page.deleteLater()
+
+
+def test_hop_settling_page_computes_a_seed_population(app):
+    """Settling is a yield quantity, so the page has a second button."""
+    from pllsim.guiqt.page_dynamics import HopSettlingPage
+    page = HopSettlingPage()
+    page.n_cyc.setText("40000")
+    page.n_seeds.setText("3")
+    stats = page.compute_stats()
+    assert stats["t_phase_s"].size == 3
+    assert stats["p95_s"] >= stats["p50_s"]
+    page.render_stats(stats)
+    page.deleteLater()
+
+
+def test_drift_page_computes_a_tracking_lag(app):
+    from pllsim.guiqt.page_dynamics import DriftPage
+    page = DriftPage()
+    page.n_ramp.setText("20000")
+    page.start.setText("30000")
+    res = page.compute()
+    lag = res[2]
+    assert lag.size == 50_000
+    assert lag[-1] > 0.0, "a drifting gain must leave a tracking lag"
+    page.render(res)
+    page.deleteLater()
+
+
+def test_the_desktop_entry_point_is_importable(app):
+    """`pllsim-gui` and the exe both go through app.main."""
+    from pllsim.guiqt.app import main
+    assert callable(main)

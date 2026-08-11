@@ -12,6 +12,7 @@ from __future__ import annotations
 import dataclasses
 import inspect
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
@@ -248,7 +249,14 @@ def make_pll(preset_name: str, overrides: dict[str, str] | None = None):
 
 
 def supports_fine(pll) -> bool:
-    """Whether this engine records the control node inside a reference period."""
+    """Whether this engine records the control node inside a reference period.
+
+    False for both ADPLL modes, and that is the architecture rather than a
+    gap: the control word is a digital register that changes once per
+    reference edge and holds, so there is no intra-period waveform to sample.
+    The analog loops drive a filter with a continuous current, which is
+    exactly what makes their ripple -- and their reference spur -- exist.
+    """
     return "fine_oversample" in inspect.signature(type(pll).simulate).parameters
 
 
@@ -276,6 +284,52 @@ def fine_oversample_note(pll, m: int) -> str:
     return "; ".join(bits)
 
 
+def ref_spur_comparison(pll, m: int = 128, n_cycles: int = 40_000,
+                        n_harm: int = 2) -> tuple[list[dict], list[str]]:
+    """Analytic vs measured reference spur, as (rows, notes).
+
+    The one comparison neither spur page could make.  Both GUIs had a
+    fractional-spur page and no way to see the reference spur at all, because
+    it needs an intra-period record and the pages only ever ran the default
+    once-per-edge simulate().
+
+    An architecture with no analytic value is not a gap in the table -- the
+    sub-sampling loops genuinely have no ripple, since the gm converts the
+    held voltage over the same window the loop uses to cancel it, so in lock
+    it delivers no charge.  That is why the notes come back with the rows:
+    "-" with the reason beside it is the answer, not a missing number.
+    """
+    if not supports_fine(pll):
+        return [], ["this architecture has no analog control node to sample "
+                    "inside the reference period"]
+    ar = pll.analyze()
+    fref = pll.cfg.fref
+    kw = simulate_kwargs(pll, noise=False, calibration=False, seed=1,
+                         fine_oversample=max(int(m), 2))
+    sim = type(pll)(pll.cfg).simulate(n_cycles, **kw)
+    analytic = ar.spurs_analytic.get("ref_spur")
+    rows = []
+    for k in range(1, n_harm + 1):
+        meas = sim.spurs_fft.get(round(k * fref, 3))
+        rows.append({
+            "offset": f"{k * fref / 1e6:.3f} MHz",
+            "analytic [dBc]": "-" if (analytic is None or k > 1)
+                              else f"{analytic:.1f}",
+            "measured [dBc]": "-" if meas is None or meas != meas
+                              else f"{meas:.1f}",
+        })
+    notes = [n for n in ar.notes if "spur" in n.lower() or "ripple" in n.lower()]
+    notes += [n for n in sim.notes if "fine" in n.lower() or "spur" in n.lower()]
+    hint = fine_oversample_note(pll, m)
+    if hint:
+        notes.append(hint)
+    if analytic is None:
+        notes.append("no analytic reference spur for this architecture -- see "
+                     "the notes above; a sub-sampling loop delivers no charge "
+                     "in lock, so there is no ripple to convert")
+    return rows, notes
+
+
 def fine_record_mb(n_cycles: int, m: int) -> float:
     """Megabytes the fine control-voltage record will occupy."""
     return n_cycles * max(int(m), 1) * 8 / 1e6
@@ -295,7 +349,8 @@ def simulate_kwargs(pll, *, noise: bool = True, calibration: bool = True,
     also keeps a DTC-only knob away from an architecture that has no DTC.
     """
     params = inspect.signature(type(pll).simulate).parameters
-    kw = dict(noise=noise, calibration=calibration, seed=seed)
+    kw: dict[str, Any] = dict(noise=noise, calibration=calibration,
+                              seed=seed)
     start = start_offset_kwarg(pll)
     if start is not None:
         kw[start] = f_start_offset

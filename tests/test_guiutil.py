@@ -13,6 +13,7 @@ from pllsim.guiutil import (
     make_pll,
     osc_bank_report,
     parse_value,
+    ref_spur_comparison,
     simulate_kwargs,
     supports_fine,
 )
@@ -133,6 +134,37 @@ def test_the_gui_warns_when_m_cannot_resolve_the_reset_pulse():
     assert "under-resolved" in fine_oversample_note(pll, coarse)
     assert fine_oversample_note(pll, fine) == ""
     assert fine_oversample_note(pll, 1) == ""        # M=1 records nothing fine
+
+
+def test_ref_spur_comparison_matches_the_analytic_model():
+    """The comparison both spur pages now offer, checked at the library level.
+
+    A charge pump with mismatch has a real ripple, and the intra-period record
+    has to find it where analyze() predicts it -- otherwise the page shows two
+    numbers that disagree and the user cannot tell which to believe.
+    """
+    pll = presets.cppll_frac_38p4m_6g()
+    pll.cfg.cp.mismatch_pct = 3.0
+    rows, _ = ref_spur_comparison(pll, m=256, n_cycles=20_000)
+    fund = rows[0]
+    assert fund["offset"].startswith("38.4")
+    got, want = float(fund["measured [dBc]"]), float(fund["analytic [dBc]"])
+    assert got == pytest.approx(want, abs=1.0), rows
+
+
+def test_a_sub_sampling_loop_reports_no_ripple_and_says_why():
+    """Not a missing number: the gm converts the held voltage over the same
+    window the loop cancels it in, so in lock it delivers no charge."""
+    rows, notes = ref_spur_comparison(presets.sspll_frac_19p2m_4p806g(),
+                                      m=64, n_cycles=8_000)
+    assert rows and all(r["analytic [dBc]"] == "-" for r in rows)
+    assert any("no analytic" in n for n in notes), notes
+
+
+def test_a_digital_loop_says_it_has_no_intra_period_record():
+    rows, notes = ref_spur_comparison(presets.adpll_bb_100m_10g())
+    assert rows == []
+    assert any("no analog control node" in n for n in notes), notes
 
 
 def test_record_size_is_reported_before_it_is_allocated():

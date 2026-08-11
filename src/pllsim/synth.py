@@ -107,6 +107,8 @@ def design_cp_filter(kdet: float, kvco_hz_v: float, f_ugb: float, pm_deg: float,
     sol = least_squares(residuals, [np.log(ctot0), np.log(t2_0), np.log(0.05)],
                         xtol=1e-13, ftol=1e-13)
     filt = build(*sol.x)
+    if filt is None:
+        raise RuntimeError("CP filter synthesis produced no design")
     m = loop_metrics(_cp_gol(f, filt, kdet, kvco_hz_v, 1.0 / fref))
     if abs(np.log(m.f_ugb / f_ugb)) > 0.05 or abs(m.pm_deg - pm_deg) > 3.0:
         raise RuntimeError(
