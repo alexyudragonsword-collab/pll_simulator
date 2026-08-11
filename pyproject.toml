@@ -52,7 +52,10 @@ fail_under = 88
 skip_covered = true
 
 [tool.mypy]
-python_version = "3.11"
+# No python_version pin.  mypy parses the installed stubs against whatever
+# version it is told, so pinning 3.11 made the 3.12 CI job fail on numpy's
+# own .pyi ("type statement is only supported in Python 3.12 and greater").
+# Following the running interpreter is also what a matrix build is for.
 ignore_missing_imports = true
 # Checked today: the physics core, the blocks, the calibrators and the
 # top-level analysis modules -- everything whose types carry a convention
