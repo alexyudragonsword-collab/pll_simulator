@@ -12,6 +12,7 @@ adds a test, which trains people to edit the number without reading it.  A
 band still catches the drift that actually happened, which was 2x.
 """
 import ast
+import json
 import re
 import subprocess
 import sys
@@ -171,6 +172,77 @@ def test_no_public_module_is_unreachable_from_the_package():
     for mod in sorted(named & real):
         assert hasattr(pllsim, mod), \
             f"the docs reference pllsim.{mod}, which the package does not expose"
+
+
+# ------------------------------------------------------------- the deck
+# The management deck is a binary, so nothing in it can be diffed and every
+# number in it was once typed by hand -- which is how the v0.9.0 deck came to
+# claim 405 tests and 20 examples one release after both had moved.  The
+# numbers now come from collect_facts.py; these check that the shipped .pptx
+# was actually rebuilt from a current facts.json, since a generator nobody
+# runs is not better than a hardcoded number.
+DECKS = sorted((ROOT / "docs" / "reports").glob("*.pptx"))
+
+
+def _facts() -> dict:
+    p = ROOT / "docs" / "reports" / "facts.json"
+    if not p.exists():
+        pytest.skip("facts.json absent -- run docs/reports/collect_facts.py")
+    return json.loads(p.read_text())
+
+
+def test_exactly_one_deck_ships():
+    """Two decks means one of them is the stale one somebody will send."""
+    assert len(DECKS) == 1, f"expected one .pptx in docs/reports, found {DECKS}"
+
+
+def test_the_deck_facts_are_current():
+    f = _facts()
+    import pllsim
+    from pllsim.synth import sweepable_presets  # noqa: F401  (import parity)
+    assert f["version"] == pllsim.__version__
+    assert f["presets"] == len(presets.ALL_PRESETS)
+    assert f["examples"] == len(list((ROOT / "examples").glob("ex*.py")))
+    assert f["architectures"] == \
+        len(list((ROOT / "src" / "pllsim" / "arch").glob("*.py"))) - 2
+    actual = _collected_test_count()
+    assert 0.85 * actual <= f["tests"] <= 1.15 * actual, (
+        f"facts.json says {f['tests']} tests, the suite collects {actual} -- "
+        "re-run docs/reports/collect_facts.py and rebuild the deck")
+
+
+def test_the_shipped_deck_matches_those_facts():
+    """The .pptx has to have been rebuilt, not just facts.json regenerated."""
+    pptx = pytest.importorskip("pptx")
+    f = _facts()
+    prs = pptx.Presentation(str(DECKS[0]))
+    blob = []
+    for slide in prs.slides:
+        for shape in slide.shapes:
+            if shape.has_text_frame:
+                blob.append(shape.text_frame.text)
+            if shape.has_table:
+                for row in shape.table.rows:
+                    blob.append(" | ".join(c.text for c in row.cells))
+    text = "\n".join(blob)
+    assert f"v{f['version']}" in text, "the deck does not carry the current version"
+    assert f"{f['tests']} 项自动化测试" in text
+    assert f"{f['examples']} 个可运行示例" in text
+    assert f"{f['presets']} 个预设配置" in text
+    # and the filename says which release it is, so a stale one is self-labelling
+    assert f["version"] in DECKS[0].name, \
+        f"{DECKS[0].name} does not name version {f['version']}"
+
+
+def test_the_deck_benchmark_table_is_the_live_one():
+    """The deck's README promised these came from benchmark_table().  They
+    did not -- they were five hardcoded rows that happened to still be right."""
+    f = _facts()
+    live = presets.benchmark_table()
+    assert len(f["benchmarks"]) == len(live)
+    for got, want in zip(f["benchmarks"], live):
+        assert got["paper"] == want["paper"]
+        assert got["linear [fs]"] == pytest.approx(want["linear [fs]"], abs=0.1)
 
 
 def test_ast_and_collection_agree_that_the_suite_is_not_shrinking():

@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import inspect
 from abc import ABC, abstractmethod
+from typing import Any
 
 import numpy as np
 
@@ -11,7 +12,17 @@ from ..core.results import AnalysisResult, SimResult
 
 
 class PLLBase(ABC):
-    """analyze() = linear phase-domain model; simulate() = behavioral time domain."""
+    """analyze() = linear phase-domain model; simulate() = behavioral time domain.
+
+    Every engine is constructed from a config dataclass and keeps it on `cfg`,
+    and the whole library relies on that -- corners, Monte Carlo, the GUIs and
+    the selector all reach for `pll.cfg`.  Declaring it here makes the contract
+    part of the base class instead of a convention six subclasses happen to
+    share; the type is deliberately loose because each engine has its own
+    config type and they have no common base.
+    """
+
+    cfg: Any
 
     @abstractmethod
     def analyze(self, f: np.ndarray | None = None) -> AnalysisResult: ...

@@ -85,6 +85,7 @@ def evm(phase_actual: np.ndarray, phase_ideal: np.ndarray,
         rms, dd = _one(d[m:-m or None])
         if best is None or rms < best[0]:
             best = (rms, dd, lag)
+    assert best is not None      # `lags` is never empty, so the loop always ran
     rms, d, lag = best
     return {"evm_rms": rms, "evm_pct": 100.0 * rms,
             "evm_db": float(20.0 * np.log10(max(rms, 1e-12))),

@@ -1,5 +1,23 @@
-// 生成 docs/reports 下的管理层汇报幻灯片。数字须与代码同步 —— 见 README.md。
+// 生成 docs/reports 下的管理层汇报幻灯片。
+//
+// 凡是关于代码的数字 —— 版本、架构数、preset 数、示例数、测试数、对标表 ——
+// 一律来自 collect_facts.py 现算的 facts.json，不在本文件里写死。v0.9.0 的
+// 那一版就是写死的，一个版本之内就过期了（还写着 405 项测试、20 个示例）。
+// 详见 README.md。
+const fs = require("fs");
+const path = require("path");
 const pptxgen = require("pptxgenjs");
+
+const FACTS_PATH = path.join(__dirname, "facts.json");
+if (!fs.existsSync(FACTS_PATH)) {
+  console.error("facts.json 不存在 —— 先运行:  python collect_facts.py");
+  process.exit(1);
+}
+const F = JSON.parse(fs.readFileSync(FACTS_PATH, "utf8"));
+for (const k of ["version", "architectures", "presets", "examples", "tests",
+                 "releases", "benchmarks"]) {
+  if (F[k] === undefined) { console.error(`facts.json 缺少 ${k}`); process.exit(1); }
+}
 
 const pres = new pptxgen();
 pres.layout = "LAYOUT_WIDE";           // 13.3 x 7.5 in
@@ -82,7 +100,7 @@ function card(s, x, y, w, h, fill = CARD) {
   s.addShape(pres.ShapeType.rect, {
     x: M, y: 4.72, w: 3.1, h: 0.02, fill: { color: TEAL },
   });
-  s.addText("v0.9.0    ·    6 种架构    ·    405 项自动化测试", {
+  s.addText(`v${F.version}    ·    ${F.architectures} 种架构    ·    ${F.tests} 项自动化测试`, {
     x: M, y: 4.95, w: 9.0, h: 0.45,
     fontFace: BODY, fontSize: 14, color: "8FA3B5", margin: 0,
   });
@@ -131,9 +149,11 @@ function card(s, x, y, w, h, fill = CARD) {
 /* ========================= 3. 能力全景 ========================= */
 {
   const s = pres.addSlide(); lightBg(s);
-  title(s, "能力全景", "6 种架构 · 15 个预设配置 · 20 个可运行示例");
+  title(s, "能力全景",
+    `${F.architectures} 种架构 · ${F.presets} 个预设配置 · ${F.examples} 个可运行示例`);
 
-  const stats = [["6", "架构"], ["15", "预设"], ["20", "示例"], ["405", "测试"]];
+  const stats = [[`${F.architectures}`, "架构"], [`${F.presets}`, "预设"],
+                 [`${F.examples}`, "示例"], [`${F.tests}`, "测试"]];
   stats.forEach(([n, l], i) => {
     const x = M + i * 3.05;
     card(s, x, 1.85, 2.75, 1.15, SLATE);
@@ -189,13 +209,27 @@ function card(s, x, y, w, h, fill = CARD) {
     "五个通道，逐条比较发表值 / 线性模型 / 时域模型的积分抖动（fs）");
 
   const head = ["论文与通道", "发表值", "线性模型", "时域模型"];
-  const data = [
-    ["Gao'09  子采样 PLL  2.21 GHz  整数N", "150", "138.8", "139"],
-    ["Dartizio'23  DTC+BB 数字 PLL  9.25 GHz", "77", "58.9", "77"],
-    ["Markulic'16  子采样 PLL  10.24 GHz  整数N", "176", "164.7", "154"],
-    ["Markulic'16  子采样 PLL  10.24 GHz  小数N", "198", "199.0", "155"],
-    ["Wu'19  采样 PLL  6.25 GHz  小数N", "75", "80.9", "78"],
+  // only the row labels live here, because they are translations.  Every
+  // number comes from presets.benchmark_table() via facts.json, and the
+  // linear column of that is recomputed on each call rather than stored.
+  const LABELS = [
+    "Gao'09  子采样 PLL  2.21 GHz  整数N",
+    "Dartizio'23  DTC+BB 数字 PLL  9.25 GHz",
+    "Markulic'16  子采样 PLL  10.24 GHz  整数N",
+    "Markulic'16  子采样 PLL  10.24 GHz  小数N",
+    "Wu'19  采样 PLL  6.25 GHz  小数N",
   ];
+  if (F.benchmarks.length !== LABELS.length) {
+    console.error(`对标表有 ${F.benchmarks.length} 行，但这里只有 ` +
+                  `${LABELS.length} 个标签 —— 加了论文就要加标签`);
+    process.exit(1);
+  }
+  const data = F.benchmarks.map((b, i) => [
+    LABELS[i],
+    String(b["published [fs]"]).replace("(worst)", "（最差）"),
+    String(b["linear [fs]"]),
+    String(b["time-domain [fs]"]),
+  ]);
   const tRows = [head.map((h, i) => ({
     text: h,
     options: { bold: true, color: "FFFFFF", fill: { color: SLATE },
@@ -323,7 +357,8 @@ function card(s, x, y, w, h, fill = CARD) {
 /* ========================= 7. 质量体系 ========================= */
 {
   const s = pres.addSlide(); lightBg(s);
-  title(s, "质量体系", "405 项自动化测试，每次代码提交在两个 Python 版本上全量运行");
+  title(s, "质量体系",
+    `${F.tests} 项自动化测试，每次代码提交在两个 Python 版本上全量运行`);
 
   const blocks = [
     ["跨域一致性", "同一份配置，频域与时域各自独立算，结果必须吻合。任何物理建模错误都会表现为两边对不上。"],
@@ -342,7 +377,7 @@ function card(s, x, y, w, h, fill = CARD) {
       fontFace: BODY, fontSize: 12.5, color: MUTE, margin: 0 });
   });
 
-  s.addText("13 个版本全部带发布说明：每一个变动的数字都写明「哪个数变了、为什么」，不悄悄改基准。",
+  s.addText(`${F.releases} 个版本全部带发布说明：每一个变动的数字都写明「哪个数变了、为什么」，不悄悄改基准。`,
     { x: M, y: 6.3, w: W - 2 * M, h: 0.5,
       fontFace: HEAD, fontSize: 14.5, bold: true, italic: true, color: TEAL, margin: 0 });
   s.addNotes("单源主导测试是这次审计最重要的方法论产出：比总量的测试看起来覆盖率很高，实际上盲区正好在最要命的地方。");
@@ -354,7 +389,7 @@ function card(s, x, y, w, h, fill = CARD) {
   s.addText("现状与下一步", {
     x: M, y: 0.45, w: W - 2 * M, h: 0.75,
     fontFace: HEAD, fontSize: 32, bold: true, color: "FFFFFF", margin: 0 });
-  s.addText("v0.9.0 功能完整，可交付内部使用", {
+  s.addText(`v${F.version} 功能完整，可交付内部使用`, {
     x: M, y: 1.2, w: W - 2 * M, h: 0.4,
     fontFace: BODY, fontSize: 14, color: "8FA3B5", margin: 0 });
 

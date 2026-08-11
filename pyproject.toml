@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pllsim"
-version = "0.9.1"
+version = "0.9.2"
 description = "System-level / behavioral simulation models for PLLs: CPPLL, SSPLL, SPLL, ADPLL, ILCM, MDLL with noise, spur and calibration analysis"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -34,6 +34,47 @@ where = ["src"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-q"
+
+[tool.coverage.report]
+# Measured 91%.  The floor sits a few points below so routine churn does not
+# trip it, while a module that loses its tests does.
+#
+# Two things this number does NOT say.  The Streamlit pages under
+# webgui/pages/ are driven by 23 tests through streamlit's AppTest, which
+# execs each file rather than importing it, so coverage attributes none of it
+# -- the pages are absent from the report entirely and Home.py/_common.py read
+# 0% while their tests pass.  Do not "fix" those by writing a test that
+# imports them; the tests that matter already exist in test_gui_smoke.py and
+# test_gui_compute.py.  And a covered line is a line that ran, not a line
+# whose answer was checked -- which is why the physics is pinned by
+# cross-domain comparison rather than by this number.
+fail_under = 88
+skip_covered = true
+
+[tool.mypy]
+python_version = "3.11"
+ignore_missing_imports = true
+# Checked today: the physics core, the blocks, the calibrators and the
+# top-level analysis modules -- everything whose types carry a convention
+# (rad^2/Hz vs dBc/Hz, seconds vs UI, A vs C) rather than just plumbing.
+#
+# Not yet: arch/ (115 -> 100 errors, almost all Optional narrowing the engines
+# guard at runtime but a checker cannot see through), export/rnm_golden.py and
+# webgui/pages/.  Adding them means restructuring real code, so they are named
+# here rather than silenced with a blanket ignore -- an exclusion list that
+# says what is missing is honest; `ignore_errors = true` on the whole package
+# would read as "type-checked".
+files = [
+    "src/pllsim/core",
+    "src/pllsim/blocks",
+    "src/pllsim/calibration",
+    "src/pllsim/arch/base.py",
+    "src/pllsim/corners.py",
+    "src/pllsim/guiutil.py",
+    "src/pllsim/modulation.py",
+    "src/pllsim/settling.py",
+    "src/pllsim/synth.py",
+]
 
 [tool.ruff]
 line-length = 88

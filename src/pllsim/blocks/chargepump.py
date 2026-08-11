@@ -73,7 +73,8 @@ class ChargePump:
         self.noise_on = noise
         # ON-time noise charge std per cycle: integrates S_i over the on window
         self._i2 = cfg.default_noise()
-        self._flicker = None         # 1/f charge sequence, primed per run
+        # 1/f charge sequence, primed per run (None = not primed)
+        self._flicker: np.ndarray | None = None
         self._n = 0
 
     def charge(self, dt: float, vctrl: float | None = None) -> float:

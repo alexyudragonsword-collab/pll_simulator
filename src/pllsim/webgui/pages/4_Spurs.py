@@ -12,7 +12,13 @@ from _common import L, show_fig, sidebar_lang_toggle
 st.set_page_config(page_title="Spurs", layout="wide")
 sidebar_lang_toggle()
 
-from pllsim.guiutil import frac_presets, make_pll
+from pllsim.guiutil import (
+    fine_oversample_note,
+    fine_record_mb,
+    frac_presets,
+    make_pll,
+    ref_spur_comparison,
+)
 from pllsim.plotting import plot_spur_spectrum
 
 FRAC_PRESETS = frac_presets()
@@ -27,7 +33,8 @@ gain_eps = float(c[2].text_input(L("残余增益误差", "gain residual"), "0.00
 kmax = int(c[3].number_input("k max", 1, 12, 6))
 
 if st.button(L("预测（经 analyze 的环路 NTF）",
-               "Predict (through the loop NTF)"), type="primary"):
+               "Predict (through the loop NTF)"), type="primary",
+             key="predict"):
     pll = make_pll(preset)
     pll.cfg.frac.dtc.inl_sin = (inl_amp, inl_cyc, 0.3) if inl_amp else ()
     pll.cfg.frac.dtc.gain_error_residual = gain_eps
@@ -55,7 +62,7 @@ st.caption(L("解析表是预测，这里是同一配置跑出来的周期图，
              "config with the detected spurs marked — ex15 compares the two."))
 n_meas = int(st.number_input(L("参考周期数", "ref cycles"), 50_000, 500_000,
                              150_000, 50_000))
-if st.button(L("仿真并画谱", "Simulate and plot")):
+if st.button(L("仿真并画谱", "Simulate and plot"), key="measure"):
     pll = make_pll(preset)
     pll.cfg.frac.dtc.inl_sin = (inl_amp, inl_cyc, 0.3) if inl_amp else ()
     pll.cfg.frac.dtc.gain_error_residual = gain_eps
@@ -65,8 +72,33 @@ if st.button(L("仿真并画谱", "Simulate and plot")):
         st.warning(note)
     show_fig(plot_spur_spectrum(sim, ar=make_pll(preset).analyze()))
 
+st.subheader(L("参考杂散：解析 vs 时域", "Reference spur: analytic vs time domain"))
+st.caption(L("这页原来只能看小数杂散。参考杂散整个活在一个参考周期内，每个参考沿"
+             "取一个点看不到它 —— 必须用周期内细采样。",
+             "this page could only ever show fractional spurs.  The reference "
+             "spur lives entirely inside one reference period, so one sample "
+             "per reference edge sees none of it — it needs intra-period "
+             "sampling."))
+cr = st.columns([1, 1, 3])
+m_os = int(cr[0].number_input("M", 2, 4096, 128, 32))
+n_ref_cyc = int(cr[1].number_input(L("周期数", "cycles"), 5_000, 200_000,
+                                   40_000, 5_000))
+_p = make_pll(preset)
+_hint = fine_oversample_note(_p, m_os)
+cr[2].caption(f"record ~{fine_record_mb(n_ref_cyc, m_os):.0f} MB"
+              + (f" — {_hint}" if _hint else ""))
+if st.button(L("比较参考杂散", "Compare the reference spur"),
+             key="ref_spur"):
+    pll = make_pll(preset)
+    with st.spinner(L("时域仿真中…", "simulating...")):
+        rows, notes = ref_spur_comparison(pll, m=m_os, n_cycles=n_ref_cyc)
+    if rows:
+        st.dataframe(rows, use_container_width=True)
+    for n in notes:
+        st.info(n)
+
 st.subheader(L("最差通道扫描", "Worst-channel sweep"))
-if st.button("Sweep channels"):
+if st.button("Sweep channels", key="sweep"):
     pll0 = make_pll(preset)      # the preset picked above, not a fixed one
     fracs = [0.0013, 0.0053, 0.0161, 0.0503, 0.1253, 0.2503, 0.3753, 0.4703]
     worst = []

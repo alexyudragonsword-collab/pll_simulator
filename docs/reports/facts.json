@@ -1,0 +1,40 @@
+{
+  "version": "0.9.2",
+  "architectures": 6,
+  "presets": 15,
+  "examples": 21,
+  "tests": 452,
+  "releases": 13,
+  "benchmarks": [
+    {
+      "paper": "Gao'09 SSPLL 2.21G int-N (10k-100M)",
+      "published [fs]": "150",
+      "linear [fs]": 138.8,
+      "time-domain [fs]": "139"
+    },
+    {
+      "paper": "Dartizio'23 DTC-BB digital PLL 9.25G frac-N",
+      "published [fs]": "77",
+      "linear [fs]": 58.9,
+      "time-domain [fs]": "77"
+    },
+    {
+      "paper": "Markulic'16 SSPLL 10.24G int-N",
+      "published [fs]": "176",
+      "linear [fs]": 164.7,
+      "time-domain [fs]": "154"
+    },
+    {
+      "paper": "Markulic'16 SSPLL 10.24G frac-N",
+      "published [fs]": "198 (worst)",
+      "linear [fs]": 199.0,
+      "time-domain [fs]": "155"
+    },
+    {
+      "paper": "Wu'19 sampling PLL 6.25G frac-N (10k-10M)",
+      "published [fs]": "75",
+      "linear [fs]": 80.9,
+      "time-domain [fs]": "78"
+    }
+  ]
+}
