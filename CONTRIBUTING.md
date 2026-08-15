@@ -26,13 +26,15 @@ if you touch `guiqt/`, make sure those tests are actually running for you.
 | tests | `pytest tests/` on 3.11 and 3.12 |
 | coverage | floor of 88% (`[tool.coverage.report]`) |
 
-The mypy file list covers `core/`, `blocks/`, `calibration/`, `arch/base.py`
-and the analysis modules — everything whose types carry a *convention*.
-`arch/` and `webgui/pages/` are listed there as **not yet covered**, with
-about 100 remaining errors that are almost all `Optional` narrowing the
-engines guard at runtime.  Shrinking that list is welcome; silencing it with
-`ignore_errors` is not, because an exclusion list that says what is missing is
-honest and a blanket ignore reads as "type-checked".
+The mypy file list covers `core/`, `blocks/`, `calibration/`, `arch/`,
+`guiqt/` and the analysis modules — everything whose types carry a
+*convention* (rad²/Hz vs dBc/Hz, seconds vs UI, amps vs coulombs).  What is
+still outside, and what including it would cost, is **measured** in
+[`docs/roadmap.md`](docs/roadmap.md) rather than remembered here.
+
+Shrinking that list is welcome; silencing it with `ignore_errors` is not,
+because an exclusion list that says what is missing is honest and a blanket
+ignore reads as "type-checked".
 
 ## Conventions that will bite you
 
@@ -81,6 +83,7 @@ Two files there are generated, and the same test fails when they go stale:
 
 ```bash
 python docs/gen_config_reference.py     # after adding or renaming a config field
+python docs/gen_roadmap.py              # after changing the mypy gate
 python docs/reports/collect_facts.py    # then: cd docs/reports && node build_deck.js
 ```
 

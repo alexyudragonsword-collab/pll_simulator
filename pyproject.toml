@@ -57,26 +57,23 @@ skip_covered = true
 # own .pyi ("type statement is only supported in Python 3.12 and greater").
 # Following the running interpreter is also what a matrix build is for.
 ignore_missing_imports = true
-# Checked today: the physics core, the blocks, the calibrators and the
-# top-level analysis modules -- everything whose types carry a convention
-# (rad^2/Hz vs dBc/Hz, seconds vs UI, A vs C) rather than just plumbing.
-#
-# Not yet: arch/ (115 -> 100 errors, almost all Optional narrowing the engines
-# guard at runtime but a checker cannot see through), export/rnm_golden.py and
-# webgui/pages/.  Adding them means restructuring real code, so they are named
-# here rather than silenced with a blanket ignore -- an exclusion list that
-# says what is missing is honest; `ignore_errors = true` on the whole package
-# would read as "type-checked".
+# What is still out, and what it would cost, is in docs/roadmap.md -- kept
+# there rather than here so the number is measured rather than remembered.
 files = [
     "src/pllsim/core",
     "src/pllsim/blocks",
     "src/pllsim/calibration",
-    "src/pllsim/arch/base.py",
+    "src/pllsim/arch",
     "src/pllsim/corners.py",
     "src/pllsim/guiutil.py",
     "src/pllsim/modulation.py",
     "src/pllsim/settling.py",
     "src/pllsim/synth.py",
+    "src/pllsim/fit.py",
+    "src/pllsim/montecarlo.py",
+    "src/pllsim/plotting.py",
+    "src/pllsim/presets.py",
+    "src/pllsim/guiqt",
 ]
 
 [tool.ruff]

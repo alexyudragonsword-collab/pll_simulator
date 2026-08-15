@@ -419,7 +419,7 @@ class CPPLL(PLLBase):
                     0.05 * c.osc.f0)
                 fv = float(f_sub[-1])
 
-            if dtc_cal is not None:
+            if dtc_cal is not None and dtc is not None and cal_trace is not None:
                 # under-delayed reference (gain_corr low) makes dt correlate
                 # positively with the requested delay -> positive-sign update
                 dtc_cal.step(np.sign(dt), residual_ui)
@@ -457,7 +457,7 @@ class CPPLL(PLLBase):
         sim = SimResult(fs=c.fref, f0=c.fout, t=t,
                         phase_err_out=phase_err, freq_out=freq_out, ctrl=vctrl_rec,
                         lock_time_s=lock)
-        if dtc_cal is not None:
+        if dtc_cal is not None and cal_trace is not None:
             sim.cal_traces["dtc_gain"] = cal_trace
         if band_trace is not None:
             sim.cal_traces["band_select"] = band_trace

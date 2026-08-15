@@ -294,7 +294,7 @@ class SSPLL(PLLBase):
                 # fout leaks 2*pi*mod/fv per wrap, data-correlated
                 extra -= phi_w / (TWOPI * fv)
             residual_ui = 0.0
-            if mash is not None:
+            if mash is not None and dtc is not None:
                 if dtc_gain_drift is not None:
                     dtc.gain_error = dtc_gain_drift[nn]
                 residual_ui = mash.residual_ui()
@@ -319,7 +319,7 @@ class SSPLL(PLLBase):
                 vs = pd.sample(perr)
                 # inverting gm: VCO phase ahead (perr>0) must pull vctrl down
                 dq -= pd.charge(vs)
-                if dtc_cal is not None:
+                if dtc_cal is not None and dtc is not None:
                     # under-delayed DTC samples early -> vs anti-correlates
                     # with the residue; positive update needs err = -vs
                     dtc_cal.step(-vs, residual_ui)
@@ -338,9 +338,9 @@ class SSPLL(PLLBase):
             else:
                 # clock kickback and the gm pulse land at different instants;
                 # that separation is the whole reference-spur mechanism here
-                vs = lf.drive_fine(pd.segments(dq), m_os)
+                v_sub = lf.drive_fine(pd.segments(dq), m_os)
                 f_sub = np.maximum(
-                    np.array([osc.freq(v, v_sup[nn], f_pull[nn]) for v in vs]),
+                    np.array([osc.freq(v, v_sup[nn], f_pull[nn]) for v in v_sub]),
                     0.05 * c.osc.f0)
                 if mod_freq is not None:
                     f_sub = f_sub + mod_freq[nn] * mod_dp_gain
