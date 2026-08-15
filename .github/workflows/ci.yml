@@ -61,6 +61,16 @@ jobs:
             if ! git ls-remote --exit-code --tags origin "refs/tags/$V" >/dev/null 2>&1; then
               git tag -a "$V" -F "$f"
               git push origin "$V"
+            elif ! git merge-base --is-ancestor \
+                   "$(git rev-list -n1 "$V")" HEAD 2>/dev/null; then
+              # tag present but pointing off this branch.  Deleting a release
+              # and deleting its tag are separate actions, so a release cleaned
+              # up after a bad run leaves the tag behind -- and then this job
+              # would happily rebuild the release on top of the wrong commit.
+              echo "::error::$V is tagged at a commit not in main's history;" \
+                   "delete the tag (git push origin :refs/tags/$V) so it can" \
+                   "be recreated here"
+              exit 1
             fi
             if ! gh release view "$V" >/dev/null 2>&1; then
               gh release create "$V" --title "pllsim $V" \
