@@ -174,6 +174,108 @@ def test_no_public_module_is_unreachable_from_the_package():
             f"the docs reference pllsim.{mod}, which the package does not expose"
 
 
+# ------------------------------------------------- the config reference
+def test_the_config_reference_is_regenerated():
+    """A generated file checked in is a file that drifts unless something
+    compares it.  Regenerate into a temp location and diff."""
+    gen = ROOT / "docs" / "gen_config_reference.py"
+    out = ROOT / "docs" / "config-reference.md"
+    assert out.exists(), "run docs/gen_config_reference.py"
+    before = out.read_text()
+    r = subprocess.run([sys.executable, str(gen)], capture_output=True,
+                       text=True, cwd=ROOT)
+    assert r.returncode == 0, r.stdout + r.stderr
+    after = out.read_text()
+    if before != after:
+        out.write_text(before)          # leave the tree as we found it
+        raise AssertionError(
+            "docs/config-reference.md is stale -- run "
+            "python docs/gen_config_reference.py")
+
+
+def test_every_editable_field_has_a_unit_and_a_label():
+    """A form box labelled with its raw field name tells a user nothing.
+
+    22 fields were in that state -- the impairment knobs added over several
+    releases, each of which reached the forms without reaching the table that
+    labels them.
+    """
+    from pllsim.guiutil import FIELD_INFO, enumerate_fields
+    missing = set()
+    for name, factory in presets.ALL_PRESETS.items():
+        for s in enumerate_fields(factory().cfg):
+            leaf = s.path.split(".")[-1]
+            if leaf not in FIELD_INFO:
+                missing.add(f"{name}:{s.path}")
+    assert not missing, \
+        f"no FIELD_INFO entry (raw name shown in both GUIs): {sorted(missing)}"
+
+
+# ------------------------------------------------------- the release notes
+def _tags() -> list[str]:
+    r = subprocess.run(["git", "tag"], capture_output=True, text=True, cwd=ROOT)
+    if r.returncode != 0:
+        pytest.skip("not a git checkout")
+    return sorted(t for t in r.stdout.split() if t.startswith("v"))
+
+
+def test_every_release_has_notes():
+    """One file per tag, no exceptions.
+
+    The notes are where "which number changed and why" is recorded, so a
+    release without them is a release whose baseline moved silently.  v0.9.1
+    and v0.9.2 both shipped before this test existed and both were missing:
+    the work had been written up in docs/index.html and the PR body, neither
+    of which is where someone diffing two versions goes looking.
+    """
+    tags = _tags()
+    assert tags, "no version tags to check against"
+    have = {p.stem for p in (ROOT / "docs" / "release-notes").glob("v*.md")}
+    missing = [t for t in tags if t not in have]
+    assert not missing, f"no release notes for: {missing}"
+
+
+def test_the_version_being_shipped_has_notes():
+    """The check that would have caught v0.9.1 and v0.9.2 never shipping.
+
+    ci.yml's auto-release job walks docs/release-notes/v*.md and tags whatever
+    has no tag yet -- so a release-notes file is not documentation *about* a
+    release, it is what *causes* one.  Both versions bumped pyproject without
+    one, the job found nothing to do, and a no-op is a legitimate success: two
+    releases went green while shipping nothing.
+    """
+    import pllsim
+    want = ROOT / "docs" / "release-notes" / f"v{pllsim.__version__}.md"
+    assert want.exists(), (
+        f"{want.name} is missing, so auto-release will not tag "
+        f"v{pllsim.__version__} -- it walks that directory, not pyproject")
+
+
+def test_no_notes_for_a_version_that_was_never_bumped_to():
+    """A file ahead of pyproject would tag a version the code is not at."""
+    import pllsim
+    cur = tuple(int(x) for x in pllsim.__version__.split("."))
+    ahead = []
+    for p in (ROOT / "docs" / "release-notes").glob("v*.md"):
+        try:
+            v = tuple(int(x) for x in p.stem[1:].split("."))
+        except ValueError:
+            ahead.append(p.stem)
+            continue
+        if v > cur:
+            ahead.append(p.stem)
+    assert not ahead, f"release notes ahead of pyproject {cur}: {sorted(ahead)}"
+
+
+def test_the_notes_name_their_own_version():
+    """A file copied from the previous release and half-edited is the failure
+    mode here, and it always shows up in the first line."""
+    for p in sorted((ROOT / "docs" / "release-notes").glob("v*.md")):
+        first = p.read_text().splitlines()[0]
+        assert p.stem in first, \
+            f"{p.name} opens with {first!r}, which does not name {p.stem}"
+
+
 # ------------------------------------------------------------- the deck
 # The management deck is a binary, so nothing in it can be diffed and every
 # number in it was once typed by hand -- which is how the v0.9.0 deck came to

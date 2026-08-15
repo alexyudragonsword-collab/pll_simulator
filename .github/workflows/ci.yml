@@ -19,6 +19,22 @@ jobs:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+      - name: The version in pyproject must have notes
+        # v0.9.1 and v0.9.2 both merged to main and neither was ever released:
+        # this job walks docs/release-notes/, so a version bump with no notes
+        # file leaves it nothing to do -- and doing nothing is a legitimate
+        # success, so it went green twice while shipping nothing.  Fail loudly
+        # instead.  Only on main: a branch mid-development has not decided its
+        # version yet.
+        if: github.ref == 'refs/heads/main'
+        run: |
+          V=$(python -c "import tomllib,pathlib; \
+            print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
+          if [ ! -f "docs/release-notes/v$V.md" ]; then
+            echo "::error::pyproject is at $V but docs/release-notes/v$V.md" \
+                 "does not exist, so this release would never be tagged"
+            exit 1
+          fi
       - name: Tag and release pending versions
         env:
           GH_TOKEN: ${{ github.token }}
