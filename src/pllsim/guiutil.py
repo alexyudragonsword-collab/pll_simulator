@@ -89,6 +89,38 @@ FIELD_INFO = {
     "mu_final": ("", "换挡后步长", "post-gear-shift mu"),
     "gear_shift_n": ("cyc", "换挡时刻", "gear-shift cycle"),
     "mode": ("", "工作模式", "mode"),
+    # --- impairments and second-order knobs.  These were showing their raw
+    # field names in both GUIs, which is the same defect as a missing unit:
+    # a box labelled "kick_q_c" tells a user nothing about what to type.
+    "flicker_corner": ("Hz", "CP 闪烁拐角", "CP flicker corner"),
+    "mismatch_slope_pct_v": ("%/V", "失配随控制电压斜率",
+                             "mismatch vs control voltage"),
+    "leakage_slope_a_v": ("A/V", "泄漏随控制电压斜率",
+                          "leakage vs control voltage"),
+    "v_ref": ("V", "失配/泄漏的参考控制电压",
+              "control voltage where mismatch/leakage are quoted"),
+    "dead_zone_s": ("s", "PFD 死区", "PFD dead zone"),
+    "pfd_mode": ("", "PFD 越界行为（clamp/wrap）",
+                 "PFD out-of-range behaviour (clamp/wrap)"),
+    "gain_error": ("", "TDC 增益误差（环路不知情）",
+                   "TDC gain error (unknown to the loop)"),
+    "inl_sin": ("s,cyc,rad", "正弦 INL（幅度, 周期数, 相位）",
+                "sine INL (amplitude, cycles, phase)"),
+    "inl_poly": ("", "多项式 INL 系数", "polynomial INL coefficients"),
+    "pull_lock_range_hz": ("Hz", "注入锁定范围 f_L", "injection lock range f_L"),
+    "pull_offset_hz": ("Hz", "干扰源频偏", "aggressor offset"),
+    "kick_q_c": ("C", "采样时钟馈通电荷", "sampling-clock kickback charge"),
+    "kick_delay_s": ("s", "馈通相对采样时刻的延迟",
+                     "kickback delay from the sampling instant"),
+    "temp_k": ("K", "温度（kT/C 噪声用）", "temperature (for kT/C noise)"),
+    "bb_meta_window_s": ("s", "BBPD 亚稳态窗口", "BBPD metastability window"),
+    "ref_doubler_duty_err": ("", "参考倍频器占空比误差",
+                             "reference-doubler duty error"),
+    "retime_jitter_rms_s": ("s", "重定时抖动", "retiming jitter"),
+    "ftl_mu": ("", "FTL 步长", "FTL step size"),
+    "ftl_det_offset_s": ("s", "FTL 鉴频器失调", "FTL detector offset"),
+    "timing_cal_step_s": ("s", "注入时序校准步长", "injection timing cal step"),
+    "tune_ki_lsb": ("LSB", "MDLL 调谐积分增益", "MDLL tuning integral gain"),
 }
 
 

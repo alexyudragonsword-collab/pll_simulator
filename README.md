@@ -7,6 +7,12 @@ spurious analysis and built-in calibration algorithms.
 [`docs/index.html`](docs/index.html) in a browser — design rationale, worked
 examples with plots, cross-domain result comparisons and lessons learned.
 
+Also: [`CONTRIBUTING.md`](CONTRIBUTING.md) (setup, the conventions that bite,
+how to add a preset/example/architecture, how a release actually happens),
+[`docs/config-reference.md`](docs/config-reference.md) (every editable config
+field with its units), and [`docs/release-notes/`](docs/release-notes) (one
+file per version: which number changed and why).  MIT licensed.
+
 | Architecture | Frequency domain | Time domain | Example | Jitter class |
 |---|---|---|---|---|
 | Charge-pump PLL (int-N / frac-N + DTC) | s-domain linear phase model | ref-edge event-driven | ex01, ex02 | ~170–260 fs |
