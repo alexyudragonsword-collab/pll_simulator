@@ -213,10 +213,23 @@ def test_every_editable_field_has_a_unit_and_a_label():
 
 # ------------------------------------------------------- the release notes
 def _tags() -> list[str]:
+    """Version tags, or a skip when the checkout simply has none.
+
+    A tagless checkout is a legitimate environment -- `actions/checkout`
+    fetches no tags unless asked, and `git clone --no-tags` is a thing -- and
+    an empty `git tag` exits 0, so a return-code check is not enough.
+    Asserting against nothing there tests the checkout, not the repository.
+
+    The cost is that these checks skip wherever tags are absent, so CI fetches
+    them (`fetch-depth: 0`); shortening that back means losing this coverage
+    silently.
+    """
     r = subprocess.run(["git", "tag"], capture_output=True, text=True, cwd=ROOT)
-    if r.returncode != 0:
-        pytest.skip("not a git checkout")
-    return sorted(t for t in r.stdout.split() if t.startswith("v"))
+    tags = sorted(t for t in r.stdout.split() if t.startswith("v")) \
+        if r.returncode == 0 else []
+    if not tags:
+        pytest.skip("no version tags in this checkout (shallow or --no-tags)")
+    return tags
 
 
 def test_every_release_has_notes():
@@ -229,7 +242,6 @@ def test_every_release_has_notes():
     of which is where someone diffing two versions goes looking.
     """
     tags = _tags()
-    assert tags, "no version tags to check against"
     have = {p.stem for p in (ROOT / "docs" / "release-notes").glob("v*.md")}
     missing = [t for t in tags if t not in have]
     assert not missing, f"no release notes for: {missing}"

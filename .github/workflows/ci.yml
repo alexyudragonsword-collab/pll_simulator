@@ -85,6 +85,11 @@ jobs:
         python-version: ["3.11", "3.12"]
     steps:
       - uses: actions/checkout@v4
+        with:
+          # tags, so the release-notes checks in test_docs_consistency.py run
+          # for real -- without them they skip, which is indistinguishable
+          # from passing
+          fetch-depth: 0
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
