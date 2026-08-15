@@ -281,7 +281,7 @@ class SPLL(PLLBase):
                 engaged = fll.engaged
             residual_ui = 0.0
             d_dtc = 0.0
-            if mash is not None:
+            if mash is not None and dtc is not None:
                 if dtc_gain_drift is not None:
                     dtc.gain_error = dtc_gain_drift[nn]
                 # EFM1 residue in (-1, 0]: the divided edge is EARLY by
@@ -297,7 +297,7 @@ class SPLL(PLLBase):
                 perr_ref = ((perr_ref + np.pi) % TWOPI) - np.pi
                 vs = pd.sample(perr_ref)
                 dq += pd.charge(vs)     # divider late -> vs>0 -> speed up VCO
-                if dtc_cal is not None:
+                if dtc_cal is not None and dtc is not None:
                     # target delay ∝ -residual: under-delay correlates vs
                     # POSITIVELY with residual -> err = +vs
                     dtc_cal.step(vs, residual_ui)

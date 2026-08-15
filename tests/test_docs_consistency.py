@@ -193,6 +193,38 @@ def test_the_config_reference_is_regenerated():
             "python docs/gen_config_reference.py")
 
 
+def test_the_roadmap_is_regenerated():
+    """The gap register has to describe today's code, or it is a wish list.
+
+    It quotes how many type errors stand between each excluded package and the
+    gate; those move whenever the code does, and a stale count would make the
+    remaining work look larger or smaller than it is.
+    """
+    gen = ROOT / "docs" / "gen_roadmap.py"
+    out = ROOT / "docs" / "roadmap.md"
+    assert out.exists(), "run docs/gen_roadmap.py"
+    before = out.read_text()
+    r = subprocess.run([sys.executable, str(gen)], capture_output=True,
+                       text=True, cwd=ROOT)
+    assert r.returncode == 0, r.stdout + r.stderr
+    if before != out.read_text():
+        out.write_text(before)
+        raise AssertionError("docs/roadmap.md is stale -- run "
+                             "python docs/gen_roadmap.py")
+
+
+def test_the_roadmap_names_only_packages_that_are_really_excluded():
+    """An entry for a package already in the gate is finished work presented
+    as outstanding, which is the way this kind of page usually goes wrong."""
+    import tomllib as _t
+    gated = set(_t.loads((ROOT / "pyproject.toml").read_text())
+                ["tool"]["mypy"]["files"])
+    text = (ROOT / "docs" / "roadmap.md").read_text()
+    for path in sorted(gated):
+        assert f"`{path}` |" not in text, \
+            f"roadmap lists {path} as excluded, but it is in the mypy gate"
+
+
 def test_every_editable_field_has_a_unit_and_a_label():
     """A form box labelled with its raw field name tells a user nothing.
 

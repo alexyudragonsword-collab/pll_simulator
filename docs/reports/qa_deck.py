@@ -12,7 +12,6 @@ it -- but the overflow numbers come from measuring the same string with the
 same point size in the same box, which is the part that actually decides fit.
 """
 import sys
-from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 from pptx import Presentation

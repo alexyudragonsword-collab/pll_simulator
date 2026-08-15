@@ -10,8 +10,10 @@ examples with plots, cross-domain result comparisons and lessons learned.
 Also: [`CONTRIBUTING.md`](CONTRIBUTING.md) (setup, the conventions that bite,
 how to add a preset/example/architecture, how a release actually happens),
 [`docs/config-reference.md`](docs/config-reference.md) (every editable config
-field with its units), and [`docs/release-notes/`](docs/release-notes) (one
-file per version: which number changed and why).  MIT licensed.
+field with its units), [`docs/release-notes/`](docs/release-notes) (one file
+per version: which number changed and why) and
+[`docs/roadmap.md`](docs/roadmap.md) (known gaps, measured — plus the limits
+that are scope rather than backlog).  MIT licensed.
 
 | Architecture | Frequency domain | Time domain | Example | Jitter class |
 |---|---|---|---|---|
@@ -61,7 +63,7 @@ Coverage targets: fref = 19.2–250 MHz, fout up to 12 GHz, integrated jitter
 
 ```bash
 pip install -e .          # numpy, scipy, matplotlib
-pytest tests/             # 452 tests: closed-form math + architecture behavior
+pytest tests/             # 461 tests: closed-form math + architecture behavior
 python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 ```
 
