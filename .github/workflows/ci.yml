@@ -10,10 +10,13 @@ permissions:
 
 jobs:
   auto-release:
-    # the session git proxy cannot push tags and the MCP token cannot
-    # dispatch workflows, so releases ride on branch pushes: any
-    # docs/release-notes/v*.md without a matching tag gets tagged+released
-    if: github.event_name == 'push'
+    # Any docs/release-notes/v*.md without a matching tag gets tagged and
+    # released.  main only: the tag lands on $GITHUB_SHA, so running this on
+    # branch pushes tags a commit that squash-merging then removes from
+    # history -- which is how several older tags came to point at commits main
+    # does not contain, and which this job did to v0.9.2 before the guard
+    # existed.  A release must be reachable from the branch it shipped on.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -24,9 +27,7 @@ jobs:
         # this job walks docs/release-notes/, so a version bump with no notes
         # file leaves it nothing to do -- and doing nothing is a legitimate
         # success, so it went green twice while shipping nothing.  Fail loudly
-        # instead.  Only on main: a branch mid-development has not decided its
-        # version yet.
-        if: github.ref == 'refs/heads/main'
+        # instead.
         run: |
           V=$(python -c "import tomllib,pathlib; \
             print(tomllib.loads(pathlib.Path('pyproject.toml').read_text())['project']['version'])")
