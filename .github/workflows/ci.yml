@@ -41,16 +41,36 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
+          # tag each version at the last commit that actually carried it in
+          # pyproject, not at HEAD.  Two versions can be pending at once (they
+          # were, after v0.9.1 and v0.9.2 both shipped without notes), and
+          # tagging both at HEAD would make `git checkout v0.9.1` hand out
+          # v0.9.2's tree -- a tag pointing at the wrong code is worse than a
+          # missing one.  Walking HEAD also keeps tags on main: the older ones
+          # were placed at $GITHUB_SHA of a *branch* push, so several of them
+          # point at pre-squash commits that main's history does not contain.
+          # Those are published and left alone; this only fixes new ones.
+          target_for() {
+            git log --format=%H --reverse HEAD | while read -r c; do
+              v=$(git show "$c:pyproject.toml" 2>/dev/null \
+                  | grep -m1 '^version = ' | cut -d'"' -f2)
+              [ "v$v" = "$1" ] && echo "$c"
+            done | tail -1
+          }
           for f in docs/release-notes/v*.md; do
             [ -e "$f" ] || continue
             V=$(basename "$f" .md)
             if ! git ls-remote --exit-code --tags origin "refs/tags/$V" >/dev/null 2>&1; then
-              git tag -a "$V" -F "$f"
+              T=$(target_for "$V")
+              if [ -z "$T" ]; then
+                echo "::warning::no commit carries version ${V#v}; tagging at HEAD"
+                T="$GITHUB_SHA"
+              fi
+              git tag -a "$V" -F "$f" "$T"
               git push origin "$V"
             fi
             if ! gh release view "$V" >/dev/null 2>&1; then
-              gh release create "$V" --title "pllsim $V" \
-                --target "$GITHUB_SHA" --notes-file "$f"
+              gh release create "$V" --title "pllsim $V" --notes-file "$f"
             fi
           done
 
