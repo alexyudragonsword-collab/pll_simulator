@@ -127,6 +127,15 @@ ships silently and no tag is ever created — which happened to v0.9.1 and
 v0.9.2, because iterating over an unchanged directory is a legitimate success.
 CI now fails on `main` when `pyproject`'s version has no notes file.
 
+Write the notes **in the same change as the version bump**.  They cannot be
+backfilled: tagging an older commit is impossible from CI, because a ref whose
+`.github/workflows/ci.yml` differs from the current one is refused to
+`GITHUB_TOKEN` by `git push` ("without workflows permission" — a PAT scope no
+`permissions:` block can grant) and by the refs API alike.  A version that
+already shipped without notes therefore stays untagged: it carries a
+`<!-- no-tag: -->` marker explaining why, the job skips it, and its content
+goes out with the next release.  `v0.9.1` is the example in the tree.
+
 Write the notes for someone diffing two versions: **every number that changed,
 and why**.  If jitter figures move, say which presets and by how much.  A
 release that quietly re-baselines a number is worse than one that breaks.

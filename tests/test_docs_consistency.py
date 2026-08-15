@@ -251,6 +251,27 @@ def test_the_version_being_shipped_has_notes():
         f"v{pllsim.__version__} -- it walks that directory, not pyproject")
 
 
+def test_an_untagged_release_says_why_in_its_own_notes():
+    """A notes file with no tag would make auto-release retry forever.
+
+    It walks the directory on every push, so a version it can never tag is a
+    permanently red job rather than a one-off.  v0.9.1 is exactly that: CI
+    cannot create a tag pointing at its commit, because a ref whose
+    .github/workflows/ci.yml differs from the current one is refused to
+    GITHUB_TOKEN by git push and by the refs API alike.  The file carries a
+    `<!-- no-tag: ... -->` marker saying so, and the job skips it.
+    """
+    import pllsim
+    tags = set(_tags())
+    for p in sorted((ROOT / "docs" / "release-notes").glob("v*.md")):
+        if p.stem in tags or p.stem == "v" + pllsim.__version__:
+            continue
+        assert "<!-- no-tag:" in p.read_text(), (
+            f"{p.name} has no tag and is not the version being shipped, so "
+            "auto-release will retry it on every push -- either it is the "
+            "current version, or it needs a no-tag marker explaining why not")
+
+
 def test_no_notes_for_a_version_that_was_never_bumped_to():
     """A file ahead of pyproject would tag a version the code is not at."""
     import pllsim
