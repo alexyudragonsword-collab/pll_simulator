@@ -460,6 +460,77 @@ $("sw-run").addEventListener("click", () => runInto(
     return html + pngHtml(r.png);
   }, "带宽扫描中…", "sweeping…"));
 
+/* ------------------------------------------------- modulation tab */
+let presetMeta = [];        // list_presets rows, for fref lookups
+
+function updateSpsNote() {
+  const p = presetMeta.find(x => x.name === $("mod-preset").value);
+  if (!p) return;
+  const sps = p.fref_mhz * 1e6 / Number($("mod-rb").value);
+  $("mod-sps").textContent = sps >= 8
+    ? `${sps.toFixed(1)} samples/symbol`
+    : (lang === "zh"
+       ? `${sps.toFixed(1)} 采样/符号 < 8：离散化底会抬高读数，结论只看失配敏感度`
+       : `${sps.toFixed(1)} samples/symbol < 8: the per-ref-cycle grid floors the comparison — trust the mismatch trend`);
+}
+$("mod-preset").addEventListener("change", updateSpsNote);
+$("mod-rb").addEventListener("change", updateSpsNote);
+
+$("mod-run").addEventListener("click", () => runInto(
+  "mod-out", async () => {
+    const r = await call("modulate", {
+      preset: $("mod-preset").value,
+      bit_rate_hz: Number($("mod-rb").value),
+      dp_err: Number($("mod-dperr").value),
+      n_cycles: +$("mod-ncyc").value,
+    });
+    return metricsHtml([
+      ["EVM", r.evm_pct.toFixed(2) + " %"],
+      ["EVM", r.evm_db.toFixed(1) + " dB"],
+      [lang === "zh" ? "相位误差" : "phase err",
+       r.phase_err_rms_deg.toFixed(2) + " deg rms"],
+    ]) + pngHtml(r.png);
+  }, "调制仿真中…", "modulating…"));
+
+/* ------------------------------------------------- drift tab */
+async function updateDriftRate() {
+  try {
+    const r = await call("drift_info", {
+      preset: $("dr-preset").value,
+      eps_total: Number($("dr-eps").value),
+      ramp_cycles: +$("dr-ncyc").value,
+    });
+    $("dr-rate").textContent =
+      `rate = ${r.rate_per_cycle.toExponential(2)} /cycle = ` +
+      `${r.rate_over_mu.toFixed(2)} x mu_final ` +
+      `(${r.mu_final.toExponential(1)}) — ` +
+      (lang === "zh" ? "超过 1x 即符号-符号转换率墙"
+                     : "the sign-sign slew wall is 1x");
+  } catch (e) {
+    $("dr-rate").textContent = String(e.message || e);
+  }
+}
+$("dr-preset").addEventListener("change", updateDriftRate);
+$("dr-eps").addEventListener("change", updateDriftRate);
+$("dr-ncyc").addEventListener("change", updateDriftRate);
+
+$("dr-run").addEventListener("click", () => runInto(
+  "dr-out", async () => {
+    const r = await call("drift", {
+      preset: $("dr-preset").value,
+      eps_total: Number($("dr-eps").value),
+      ramp_cycles: +$("dr-ncyc").value,
+      ramp_start: +$("dr-start").value,
+    });
+    return metricsHtml([
+      [lang === "zh" ? "峰值滞后" : "peak lag",
+       r.peak_lag_pct.toFixed(2) + " %"],
+      ["jitter", r.jitter_fs === null ? "-" : r.jitter_fs.toFixed(0) + " fs"],
+      [lang === "zh" ? "滞后杂散" : "lag spur",
+       r.lag_spur_dbc === null ? "-" : r.lag_spur_dbc.toFixed(1) + " dBc"],
+    ]) + notesHtml(r.notes) + pngHtml(r.png);
+  }, "斜坡仿真中…", "ramping…"));
+
 /* ------------------------------------------------- benchmarks tab */
 let benchLoaded = false;
 async function loadBench() {
@@ -492,6 +563,13 @@ async function boot() {
     $("hop-preset").innerHTML = presets.map(opt).join("");
     $("sw-preset").innerHTML =
       presets.filter(p => p.sweepable).map(opt).join("");
+    presetMeta = presets;
+    $("mod-preset").innerHTML =
+      presets.filter(p => p.two_point).map(opt).join("");
+    $("dr-preset").innerHTML =
+      presets.filter(p => p.frac).map(opt).join("");
+    updateSpsNote();
+    updateDriftRate();
     $("boot").hidden = true;
     $("app").hidden = false;
     await loadPreset(presets[0].name);

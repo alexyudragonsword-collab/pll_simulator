@@ -35,6 +35,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 
 from . import presets
+from .core.dtcspurs import dtc_spur_table
 from .guiutil import (
     GROUP_LABELS,
     apply_overrides,
@@ -50,6 +51,7 @@ from .guiutil import (
     simulate_kwargs,
     supports_fine,
 )
+from .modulation import evm, gmsk_trajectory, prbs, two_point_presets
 from .plotting import plot_pn_breakdown, plot_spur_spectrum
 from .selector import Requirement, select
 from .settling import fll_stability, hop_settling, hop_statistics
@@ -115,12 +117,14 @@ def _build(preset: str = "", overrides: dict[str, str] | None = None,
 def _list_presets() -> list[dict]:
     frac = set(frac_presets())
     sweep = set(sweepable_presets())
+    two_pt = set(two_point_presets())
     out = []
     for name, factory in presets.ALL_PRESETS.items():
         cfg = factory().cfg
         out.append({"name": name, "arch": arch_kind(presets.ALL_PRESETS[name]()),
                     "fref_mhz": cfg.fref / 1e6, "fout_ghz": cfg.fout / 1e9,
-                    "frac": name in frac, "sweepable": name in sweep})
+                    "frac": name in frac, "sweepable": name in sweep,
+                    "two_point": name in two_pt})
     return out
 
 
@@ -453,6 +457,113 @@ def _bw_sweep(preset: str, lo_hz: float = 2e5, hi_hz: float = 3e6,
             "png": _png(fig)}
 
 
+def _modulate(preset: str, bit_rate_hz: float = 2.5e6, dp_err: float = 0.0,
+              n_cycles: int = 100_000, seed: int = 2) -> dict:
+    """Two-point GMSK modulation and EVM, mirroring the web GUI's page."""
+    pll = make_pll(preset, {})
+    fref = pll.cfg.fref
+    sps = fref / bit_rate_hz
+    n_cyc = int(n_cycles)
+    settle = max(50_000, n_cyc // 3)
+    if n_cyc - settle < 8_000:
+        raise ValueError(f"{n_cyc} cycles leaves only {n_cyc - settle} after "
+                         f"the {settle}-cycle settling window; raise cycles")
+    bits = prbs(max(64, int((n_cyc - settle) * bit_rate_hz / fref) - 20),
+                seed=7)
+    fdev, _ = gmsk_trajectory(bits, fref, bit_rate_hz)
+    mod = np.zeros(n_cyc)
+    mod[settle:settle + min(fdev.size, n_cyc - settle)] = \
+        fdev[: n_cyc - settle]
+    ideal = 2 * np.pi * np.cumsum(mod) / fref
+    mod_kw: dict[str, Any] = {"mod_freq": mod, "mod_dp_gain": 1.0 + dp_err}
+    sim = pll.simulate(n_cyc, seed=int(seed), **mod_kw)
+    e = evm(sim.phase_err_out[settle + 4000:], ideal[settle + 4000:])
+
+    fig, (a1, a2) = plt.subplots(2, 1, figsize=(8, 6))
+    sl = slice(settle + 4000, settle + 4000 + int(40 * sps))
+    a1.plot(sim.t[sl] * 1e6, mod[sl] / 1e6)
+    a1.set_xlabel("t [us]")
+    a1.set_ylabel("dev [MHz]")
+    a1.grid(alpha=0.3)
+    d = sim.phase_err_out[settle + 4000:] - ideal[settle + 4000:]
+    x = np.arange(d.size)
+    d = d - np.polyval(np.polyfit(x, d, 1), x)
+    a2.plot(sim.t[settle + 4000:] * 1e3, np.degrees(d), lw=0.5)
+    a2.set_xlabel("t [ms]")
+    a2.set_ylabel("phase error [deg]")
+    a2.grid(alpha=0.3)
+    fig.tight_layout()
+    return {
+        "evm_pct": e["evm_pct"],
+        "evm_db": e["evm_db"],
+        "phase_err_rms_deg": e["phase_err_rms_deg"],
+        "sps": sps,
+        # < 8 samples/symbol: the per-ref-cycle grid floors the comparison
+        # against the continuous ideal; only the mismatch trend is real then
+        "sps_ok": bool(sps >= 8),
+        "png": _png(fig),
+    }
+
+
+def _drift_info(preset: str, eps_total: float = 0.03,
+                ramp_cycles: int = 60_000) -> dict:
+    """The rate-vs-mu precheck the page shows before anything runs."""
+    frac = getattr(make_pll(preset, {}).cfg, "frac", None)
+    if frac is None or frac.dtc_cal is None:
+        raise TypeError(f"{preset} has no DTC gain calibrator to drift")
+    mu_final = frac.dtc_cal.mu_final or frac.dtc_cal.mu
+    rate = eps_total / int(ramp_cycles)
+    return {"rate_per_cycle": rate, "mu_final": mu_final,
+            # the sign-sign slew wall is rate == mu_final
+            "rate_over_mu": rate / mu_final}
+
+
+def _drift(preset: str, eps_total: float = 0.03, ramp_cycles: int = 60_000,
+           ramp_start: int = 80_000, seed: int = 3) -> dict:
+    """Background-calibration tracking under an accelerated gain ramp."""
+    info = _drift_info(preset, eps_total, ramp_cycles)
+    n_ramp, start = int(ramp_cycles), int(ramp_start)
+    n = start + n_ramp
+    pll = make_pll(preset, {})
+    cal = pll.cfg.frac.dtc_cal
+    cal.gear_shift_n = min(cal.gear_shift_n or 40_000, start // 2)
+    drift = np.zeros(n)
+    drift[start:] = eps_total * np.arange(n_ramp) / n_ramp
+    drift_kw: dict[str, Any] = {"dtc_gain_drift": drift}
+    sim = pll.simulate(n, seed=int(seed), **drift_kw)
+    g = sim.cal_traces["dtc_gain"]
+    lag = np.abs(g * (1.0 + drift) - 1.0)
+    c = pll.cfg
+    if type(pll).__name__ == "SPLL":
+        def tof(r: float) -> float:
+            return -r / c.fout - c.frac.dtc.range_s / 2.0
+    elif type(pll).__name__ == "SSPLL":
+        def tof(r: float) -> float:
+            return (1.0 + r) / c.fout - c.frac.dtc.range_s / 2.0
+    else:
+        def tof(r: float) -> float:
+            return r / c.fout
+    tab = dtc_spur_table(c.frac, tof, c.fref, c.fout,
+                         gain_eps=float(lag[-1]))
+
+    fig, ax = plt.subplots(figsize=(9, 4))
+    t_ms = (np.arange(n) - start) / c.fref * 1e3
+    ax.plot(t_ms, lag * 100, lw=0.9, label="tracking lag")
+    ax.plot(t_ms, drift * 100, "--", lw=0.9, label="true drift")
+    ax.set_xlabel("time from ramp start [ms]")
+    ax.set_ylabel("[%]")
+    ax.legend()
+    ax.grid(alpha=0.3)
+    return {
+        **info,
+        "peak_lag_pct": float(lag[-1]) * 100.0,
+        "jitter_fs": sim.jitter_fs,
+        "lag_spur_dbc": max(tab.values()) if tab else None,
+        "notes": list(sim.notes),
+        "png": _png(fig),
+    }
+
+
 _METHODS: dict[str, Callable[..., Any]] = {
     "list_presets": _list_presets,
     "fields": _fields,
@@ -471,6 +582,9 @@ _METHODS: dict[str, Callable[..., Any]] = {
     "synth_spll": _synth_spll,
     "synth_dlf": _synth_dlf,
     "bw_sweep": _bw_sweep,
+    "modulate": _modulate,
+    "drift_info": _drift_info,
+    "drift": _drift,
     "hop_check": _hop_check,
     "hop": _hop,
     "hop_stats": _hop_stats,

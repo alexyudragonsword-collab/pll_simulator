@@ -212,6 +212,42 @@ def test_bw_sweep_says_when_points_were_dropped():
     assert reply["ok"] is False and "no loop" in reply["error"]
 
 
+def test_modulate_mismatch_drives_the_evm():
+    """The page's one conclusion: direct-path mismatch is what EVM buys.
+    5% mismatch must cost at least 2x over the noise-only baseline."""
+    kw = dict(preset="sspll_19p2m_4p8g", n_cycles=80_000)
+    base = call("modulate", **kw)
+    worse = call("modulate", dp_err=0.05, **kw)
+    assert worse["evm_pct"] > 2.0 * base["evm_pct"], (base, worse)
+    assert base["sps"] == pytest.approx(19.2e6 / 2.5e6)
+    assert base64.b64decode(base["png"])[:8] == b"\x89PNG\r\n\x1a\n"
+    reply = json.loads(appbridge.call(
+        "modulate", json.dumps({"preset": "ilcm_250m_12g",
+                                "n_cycles": 80_000})))
+    assert reply["ok"] is False   # no two-point injection on this engine
+
+
+def test_drift_lag_tracks_the_ramp_rate():
+    """Slower ramp -> smaller tracking lag; a drift knob that does not move
+    the lag is the decorative-parameter bug wearing a thermometer."""
+    kw = dict(preset="cppll_frac_38p4m_6g", ramp_cycles=40_000,
+              ramp_start=50_000)
+    fast = call("drift", eps_total=0.03, **kw)
+    slow = call("drift", eps_total=0.003, **kw)
+    assert 0.0 < slow["peak_lag_pct"] < fast["peak_lag_pct"], (slow, fast)
+    # the calibrator must actually TRACK: peak lag strictly below the total
+    # drift.  A run where the ramp was never injected has lag == drift
+    # exactly (the lag formula carries the drift array), which slipped past
+    # the monotonicity assertion above when this was first mutation-tested.
+    assert fast["peak_lag_pct"] < 0.95 * 3.0, fast["peak_lag_pct"]
+    assert fast["rate_over_mu"] == pytest.approx(10 * slow["rate_over_mu"])
+    assert fast["lag_spur_dbc"] is None or fast["lag_spur_dbc"] < 0
+    assert base64.b64decode(fast["png"])[:8] == b"\x89PNG\r\n\x1a\n"
+    reply = json.loads(appbridge.call(
+        "drift_info", json.dumps({"preset": "cppll_19p2m_4p8g"})))
+    assert reply["ok"] is False and "calibrator" in reply["error"]
+
+
 def test_non_finite_floats_become_null():
     # ILCM/MDLL analyze with default f_free_error leaves f_ugb/pm undefined
     # in some architectures; whatever the source, the serializer must never

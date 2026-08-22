@@ -97,8 +97,9 @@ release assets.  Expect large files (Python + numpy/scipy/matplotlib
 bundled; the web exes also carry streamlit).
 
 **Android app** (fully offline; workbench, spur prediction, hop settling,
-architecture selector with candidate handoff, loop synthesis and literature
-benchmarks): `android/` is a Gradle project embedding CPython via Chaquopy —
+architecture selector with candidate handoff, loop synthesis, two-point
+modulation, drift tracking and literature benchmarks): `android/` is a
+Gradle project embedding CPython via Chaquopy —
 a WebView front end over `pllsim.appbridge`, with the parameter form
 generated from the same `guiutil.FIELD_INFO` as both desktop GUIs.  Build a sideload APK from
 Actions -> Android APK -> Run workflow (manual only; it is not a release

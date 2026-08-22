@@ -26,6 +26,8 @@
   <button data-tab="hop" data-zh="跳频" data-en="Hop">Hop</button>
   <button data-tab="selector" data-zh="选型" data-en="Select">选型</button>
   <button data-tab="synth" data-zh="综合" data-en="Synth">综合</button>
+  <button data-tab="mod" data-zh="调制" data-en="Mod">调制</button>
+  <button data-tab="drift" data-zh="温漂" data-en="Drift">温漂</button>
   <button data-tab="bench" data-zh="对标" data-en="Papers">对标</button>
 </nav>
 
@@ -250,6 +252,50 @@
     <button id="sw-run" class="primary"
             data-zh="扫描" data-en="Sweep">扫描</button>
     <div id="sw-out"></div>
+  </section>
+</div>
+
+<div id="tab-mod" class="tab" hidden>
+  <section class="card">
+    <h2 data-zh="两点 GMSK 调制与 EVM" data-en="Two-point GMSK modulation and EVM">两点 GMSK 调制与 EVM</h2>
+    <label><span data-zh="架构（引擎已接注入点）" data-en="architecture (injection wired)">架构（引擎已接注入点）</span>
+      <select id="mod-preset"></select></label>
+    <div class="grid3">
+      <label>bit rate [b/s] <input id="mod-rb" type="text" value="2.5e6"></label>
+      <label><span data-zh="直通路增益误差" data-en="direct-path error">直通路增益误差</span>
+        <input id="mod-dperr" type="number" value="0" step="0.01" min="-0.2" max="0.2"></label>
+      <label><span data-zh="周期数" data-en="cycles">周期数</span>
+        <input id="mod-ncyc" type="number" value="100000" min="60000" step="20000"></label>
+    </div>
+    <p id="mod-sps" class="muted"></p>
+    <button id="mod-run" class="primary"
+            data-zh="运行" data-en="Run">运行</button>
+    <div id="mod-out"></div>
+    <p class="muted"
+       data-zh="失配 1% 即 EVM 三倍类（ex17）——两点校准的量化依据。"
+       data-en="1% mismatch triples the EVM class (ex17) — the spec for two-point calibration.">失配 1% 即 EVM 三倍类（ex17）——两点校准的量化依据。</p>
+  </section>
+</div>
+
+<div id="tab-drift" class="tab" hidden>
+  <section class="card">
+    <h2 data-zh="温漂下的后台校准" data-en="Background calibration under drift">温漂下的后台校准</h2>
+    <label>preset<select id="dr-preset"></select></label>
+    <div class="grid3">
+      <label><span data-zh="总增益漂移" data-en="total gain drift">总增益漂移</span>
+        <input id="dr-eps" type="text" value="0.03"></label>
+      <label><span data-zh="斜坡周期数" data-en="ramp cycles">斜坡周期数</span>
+        <input id="dr-ncyc" type="number" value="60000" min="20000" step="10000"></label>
+      <label><span data-zh="斜坡起点" data-en="ramp start">斜坡起点</span>
+        <input id="dr-start" type="number" value="80000" min="40000" step="10000"></label>
+    </div>
+    <p id="dr-rate" class="muted"></p>
+    <button id="dr-run" class="primary"
+            data-zh="跑斜坡" data-en="Run ramp">跑斜坡</button>
+    <div id="dr-out"></div>
+    <p class="muted"
+       data-zh="两个机制叠加：EMA 误差去直流在斜坡中使相关器部分失明（即使远低于转换率墙也 ~1%），rate>mu 后转换率极限叠加；每 1% 滞后 = 带内杂散 20log10(lag)。真实温度斜坡比墙低约 5 个数量级（ex20）。"
+       data-en="two stacked mechanisms: EMA error-centering blinds the correlator during ramps (~1% even below the wall); the slew limit adds beyond rate ~ mu. Real thermal ramps sit ~5 orders below the wall (ex20).">两个机制叠加：EMA 误差去直流在斜坡中使相关器部分失明（即使远低于转换率墙也 ~1%），rate>mu 后转换率极限叠加；每 1% 滞后 = 带内杂散 20log10(lag)。真实温度斜坡比墙低约 5 个数量级（ex20）。</p>
   </section>
 </div>
 

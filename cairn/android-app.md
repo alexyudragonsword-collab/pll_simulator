@@ -25,9 +25,12 @@ statistics); v3 added Selector (requirement → 7 ranked architectures →
 **candidate handoff into the workbench**, carried through module-level
 bridge state that every consumer deep-copies), Synthesis (four filter
 designers + jitter-vs-UGB sweep with a dropped-points caption) and
-Benchmarks. Still not in the app: Fit (needs Android file-picker plumbing
-in Kotlin), Modulation, Drift, MonteCarlo (simulation-heavy), Export (no
-phone-side consumer for an EDA file tree).
+Benchmarks; v4 added Modulation (two-point GMSK + EVM, with the
+samples-per-symbol caveat computed client-side from `list_presets` frefs)
+and Drift (ramp tracking with the rate-vs-mu precheck as a live caption).
+Still not in the app: Fit (needs Android file-picker plumbing in Kotlin),
+MonteCarlo (simulation-heavy), Export (no phone-side consumer for an EDA
+file tree) — 8 of the Qt GUI's 11 pages now have app equivalents.
 
 ## Current Conclusions
 

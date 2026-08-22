@@ -2,6 +2,17 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-22 · Android app v4: Modulation and Drift tabs (8/11 Qt pages)
+
+- appbridge grew modulate / drift / drift_info; EVM 0.98%→2.90% under 5%
+  direct-path error (the ex17 sensitivity), drift lag 2.60% at the slew
+  wall with the −71.4 dBc lag spur.
+- Mutation lesson worth keeping: "lag(slow) < lag(fast)" survived a bridge
+  that never injected the ramp — the lag *formula* carries the drift array,
+  so monotonicity holds with zero simulation coupling. The discriminating
+  assertion is "the calibrator tracked": peak lag strictly below total
+  drift. Recorded in the test docstring.
+
 ## 2026-08-22 · Android app v3: Selector, Synthesis, Benchmarks tabs
 
 - appbridge grew 7 methods + a selector→workbench candidate handoff: the
