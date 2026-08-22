@@ -1,0 +1,30 @@
+version: 0.1
+project:
+  name: "pllsim"
+  summary: "A behavioural / system-level PLL simulator: six architectures, each carrying a linear phase-noise model and a time-domain engine that are required to agree."
+cairn:
+  knowledge_dir: "cairn"
+  # Date of the skill spec this instance was initialized against, or last
+  # upgraded to. Stamped automatically by init from references/upgrade.md's
+  # "Current spec date" (not a user decision); re-stamped after each instance
+  # upgrade. Audit/upgrade drift checks compare it against the upgrade.md
+  # changelog.
+  skill_spec_date: "2026-08-07"
+  # git_policy: track | ignore | private_sync
+  # Chosen per-project: this is a private repository whose knowledge is worth
+  # the same review as the code, so cairn/ is committed and no .gitignore rule
+  # is written for it.
+  git_policy: "track"
+  # language: en | zh | ... — language used when writing
+  # AGENTS.md/LOG.md/ROADMAP.md/topic notes for this project. Chosen to match
+  # the rest of the tree (README, CONTRIBUTING, release notes, docs/) which is
+  # English throughout.
+  language: "en"
+graduation:
+  # (c) Deferred — no knowledge base connected yet. The provider decisions are
+  # collected at the first graduation instead (references/graduation.md →
+  # Deferred provider).
+  provider: none
+history:
+  # migration_mode: start_fresh | inventory_only | selective_migrate
+  migration_mode: "start_fresh"
