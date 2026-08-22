@@ -25,6 +25,14 @@ jobs:
           # android/app/build.gradle.kts -- 3.10, the newest Python for
           # which its repository has a scipy wheel (chaquo/chaquopy#1237)
           python-version: "3.10"
+      - name: Build the pllsim sdist the app embeds
+        # not install("../..") in the Gradle config: a directory install
+        # makes the whole repo -- including the Gradle project's own build
+        # outputs -- an input of the pip task, which Gradle 8's validation
+        # rejects as an undeclared dependency on every AGP task
+        run: |
+          pip install build
+          python -m build --sdist --outdir android/app/pysrc .
       - uses: gradle/actions/setup-gradle@v3
         with:
           gradle-version: "8.2"

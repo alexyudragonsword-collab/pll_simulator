@@ -55,6 +55,13 @@ the Qt form and the config reference. Scope of v1: the workbench only.
 - A browser test that waits for a selector the *previous* run already
   satisfied reads stale DOM and passes on nothing — clear the output region
   (or wait on a state that cannot pre-exist) before clicking run.
+- **Never `pip install` the repo root from a Gradle project that lives
+  inside it.** `install("../..")` made the whole repository an input of
+  Chaquopy's pip task; every AGP task's outputs then sat inside that input,
+  and Gradle 8's validation failed the first CI run with five "uses this
+  output without declaring a dependency" errors. The app embeds an sdist
+  instead (`python -m build --sdist --outdir android/app/pysrc .`), which
+  the fresh-venv check also proved installable with the old stack.
 
 ## Open Questions
 

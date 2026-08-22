@@ -101,7 +101,10 @@ project embedding CPython via Chaquopy — a WebView front end over
 `pllsim.appbridge`, with the parameter form generated from the same
 `guiutil.FIELD_INFO` as both desktop GUIs.  Build a sideload APK from
 Actions -> Android APK -> Run workflow (manual only; it is not a release
-gate), or locally with Android Studio opened on `android/`.  The app pins
+gate), or locally with Android Studio opened on `android/` — after first
+running `python -m build --sdist --outdir android/app/pysrc .` from the
+repo root, which produces the pllsim archive the app embeds (the Gradle
+config refuses to guess and says exactly this if it is missing).  The app pins
 Python 3.10 because Chaquopy's package repository has no scipy wheel for
 anything newer — the pyproject dependency floors are verified against that
 stack, and `cairn/android-app.md` records the constraints before you change

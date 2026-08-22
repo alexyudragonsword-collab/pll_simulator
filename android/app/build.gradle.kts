@@ -44,8 +44,22 @@ chaquopy {
             install("numpy")
             install("scipy")
             install("matplotlib")
-            // pllsim itself, from the repository root (pure Python)
-            install("../..")
+            // pllsim as an sdist, not as install("../.."): a directory
+            // install makes the whole repository an input of the pip task,
+            // and this Gradle project lives inside that repository -- so
+            // every AGP task's outputs land inside the pip task's input and
+            // Gradle 8's validation fails the build (seen on the first CI
+            // run).  The sdist is produced by, from the repo root:
+            //     python -m build --sdist --outdir android/app/pysrc .
+            val sdists = file("pysrc")
+                .listFiles { f -> f.name.matches(Regex("pllsim-.*\\.tar\\.gz")) }
+                ?.toList() ?: emptyList()
+            require(sdists.size == 1) {
+                "expected exactly one pllsim sdist in android/app/pysrc/ " +
+                    "(found ${sdists.size}); from the repo root run: " +
+                    "python -m build --sdist --outdir android/app/pysrc ."
+            }
+            install(sdists[0].absolutePath)
         }
     }
 }
