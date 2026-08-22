@@ -25,12 +25,14 @@ FRAC_PRESETS = frac_presets()
 
 st.title(L("DTC 小数杂散预测", "DTC fractional-spur prediction"))
 preset = st.selectbox("preset", FRAC_PRESETS)
-c = st.columns(4)
+# no "k max" box: it was read and passed to nothing for four releases --
+# exactly this repo's decorative-parameter bug, in the GUI layer.  The
+# analytic table always carries the model's kmax=6 harmonics.
+c = st.columns(3)
 inl_amp = float(c[0].text_input(L("正弦 INL 幅度 [s]", "sine INL amp [s]"),
                                 "50e-15"))
 inl_cyc = float(c[1].text_input(L("INL 周期数", "INL cycles"), "1.0"))
 gain_eps = float(c[2].text_input(L("残余增益误差", "gain residual"), "0.002"))
-kmax = int(c[3].number_input("k max", 1, 12, 6))
 
 if st.button(L("预测（经 analyze 的环路 NTF）",
                "Predict (through the loop NTF)"), type="primary",
@@ -40,11 +42,11 @@ if st.button(L("预测（经 analyze 的环路 NTF）",
     pll.cfg.frac.dtc.gain_error_residual = gain_eps
     with st.spinner("analyze..."):
         ar = pll.analyze()
-    tab = {k: float(v) for k, v in ar.spurs_analytic.items()
-           if k.startswith("frac_spur")}
-    st.session_state["spur_tab"] = tab
+    st.session_state["spur_tab"] = {
+        k: float(v) for k, v in ar.spurs_analytic.items()
+        if k.startswith("frac_spur")}
 
-tab = st.session_state.get("spur_tab")
+tab: dict | None = st.session_state.get("spur_tab")
 if tab:
     rows = [{"offset": k.split("@")[1], "spur [dBc]": round(v, 1)}
             for k, v in sorted(tab.items(), key=lambda kv: -kv[1])]

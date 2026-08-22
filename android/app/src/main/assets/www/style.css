@@ -11,6 +11,17 @@ header { display: flex; align-items: baseline; gap: .6em;
 header h1 { font-size: 1.15em; margin: 0; flex: 1; }
 header #version { color: var(--muted); font-weight: normal; font-size: .8em; }
 main, #boot { padding: .7em; max-width: 720px; margin: 0 auto; }
+#tabs { display: flex; gap: .4em; margin-bottom: .7em; }
+#tabs button { flex: 1; padding: .5em 0; }
+#tabs button.active { background: var(--accent); border-color: var(--accent);
+                      color: #fff; }
+.tab[hidden] { display: none; }
+table.rows { border-collapse: collapse; width: 100%; margin: .5em 0;
+             font-size: .85em; }
+table.rows th, table.rows td { border: 1px solid var(--line);
+                               padding: .3em .5em; text-align: left; }
+.banner-ok { color: #0a6c2e; font-size: .85em; margin: .4em 0; }
+.banner-bad { color: var(--err); font-size: .85em; margin: .4em 0; }
 .card { background: var(--card); border: 1px solid var(--line);
         border-radius: 10px; padding: .9em; margin-bottom: .8em; }
 h2 { font-size: 1em; margin: 0 0 .5em; }

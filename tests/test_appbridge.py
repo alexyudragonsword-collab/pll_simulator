@@ -97,6 +97,67 @@ def test_errors_come_back_in_band_never_raised():
     assert reply["ok"] is False and "traceback" in reply
 
 
+def test_spur_predict_inl_drives_the_spur():
+    """0 vs 100x INL must move the top spur by >15 dB; at small amplitudes
+    the DTC quantization floor dominates, so the sweep spans past it."""
+    quiet = call("spur_predict", preset="cppll_frac_38p4m_6g",
+                 inl_amp_s=0.0)["rows"]
+    loud = call("spur_predict", preset="cppll_frac_38p4m_6g",
+                inl_amp_s=5e-12)["rows"]
+    assert quiet and loud
+    assert loud[0]["dbc"] > quiet[0]["dbc"] + 15, (quiet[0], loud[0])
+    reply = json.loads(appbridge.call(
+        "spur_predict", json.dumps({"preset": "cppll_19p2m_4p8g"})))
+    assert reply["ok"] is False and "integer-N" in reply["error"]
+
+
+def test_ref_spur_answers_per_architecture():
+    got = call("ref_spur", preset="sspll_19p2m_4p8g", m=8, n_cycles=4_000)
+    assert got["rows"] and set(got["rows"][0]) == {
+        "offset", "analytic [dBc]", "measured [dBc]"}
+    got = call("ref_spur", preset="adpll_100m_10g")
+    assert got["rows"] == [] and "no analog control node" in got["notes"][0]
+
+
+def test_spur_sweep_is_worst_near_integer():
+    """The physics the plot exists to show: in-band beats (near-integer
+    channels) sit on the |NTF| ~ 1 plateau -- within a dB of each other, so
+    "index 0 is strictly worst" over-specifies -- while far-out beats roll
+    off by tens of dB.  A sweep that forgets to move the channel flattens
+    the whole curve and fails the rolloff assertion."""
+    got = call("spur_sweep", preset="cppll_frac_38p4m_6g", inl_amp_s=5e-12)
+    vals = got["worst_dbc"]
+    assert len(vals) == len(got["beats_hz"]) == 8
+    worst_at = max(range(8), key=lambda i: vals[i] if vals[i] is not None
+                   else -1e9)
+    assert worst_at < 4, (worst_at, vals)
+    assert vals[0] > vals[5] + 10, vals
+    assert base64.b64decode(got["png"])[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_hop_check_knows_which_loops_have_an_fll():
+    st = call("hop_check", preset="sspll_19p2m_4p8g")
+    assert st is not None and st["margin"] > 0 and isinstance(st["ok"], bool)
+    assert call("hop_check", preset="cppll_19p2m_4p8g") is None
+
+
+def test_hop_round_trip_short():
+    got = call("hop", preset="cppll_19p2m_4p8g", hop_hz=-50e6,
+               n_cycles=25_000)
+    assert got["t_phase_us"] is not None and got["t_phase_us"] > 0
+    assert base64.b64decode(got["png"])[:8] == b"\x89PNG\r\n\x1a\n"
+
+
+def test_hop_stats_short():
+    got = call("hop_stats", preset="cppll_19p2m_4p8g", hop_hz=-50e6,
+               n_cycles=25_000, n_seeds=2)
+    # bounded both ways so a dropped us conversion (1e-6x or 1e6x) fails,
+    # not just a zero: this hop settles in tens of us
+    assert 1.0 < got["p50_us"] < 1e6 and got["p95_us"] >= got["p50_us"]
+    assert 0.0 <= got["fail_pct"] <= 100.0
+    assert base64.b64decode(got["png"])[:8] == b"\x89PNG\r\n\x1a\n"
+
+
 def test_non_finite_floats_become_null():
     # ILCM/MDLL analyze with default f_free_error leaves f_ugb/pm undefined
     # in some architectures; whatever the source, the serializer must never

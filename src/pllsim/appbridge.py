@@ -41,12 +41,15 @@ from .guiutil import (
     fine_oversample_note,
     fine_record_mb,
     fmt_value,
+    frac_presets,
     make_pll,
     osc_bank_report,
+    ref_spur_comparison,
     simulate_kwargs,
     supports_fine,
 )
-from .plotting import plot_pn_breakdown
+from .plotting import plot_pn_breakdown, plot_spur_spectrum
+from .settling import fll_stability, hop_settling, hop_statistics
 
 
 def _clean(x: Any) -> Any:
@@ -70,11 +73,13 @@ def _png(fig: Any) -> str:
 
 
 def _list_presets() -> list[dict]:
+    frac = set(frac_presets())
     out = []
     for name, factory in presets.ALL_PRESETS.items():
         cfg = factory().cfg
         out.append({"name": name, "arch": arch_kind(presets.ALL_PRESETS[name]()),
-                    "fref_mhz": cfg.fref / 1e6, "fout_ghz": cfg.fout / 1e9})
+                    "fref_mhz": cfg.fref / 1e6, "fout_ghz": cfg.fout / 1e9,
+                    "frac": name in frac})
     return out
 
 
@@ -177,6 +182,142 @@ def _simulate(preset: str, overrides: dict[str, str] | None = None,
     }
 
 
+def _frac_pll(preset: str, inl_amp_s: float, inl_cycles: float,
+              gain_residual: float) -> Any:
+    """A fresh fractional preset with the spur-page knobs applied.
+
+    The knobs mirror webgui's Spurs page: they poke cfg.frac.dtc directly
+    rather than going through overrides, because inl_sin is a tuple field
+    with a fixed third element (0.3 rad phase) the page never exposed.
+    """
+    pll = make_pll(preset, {})
+    if getattr(pll.cfg, "frac", None) is None:
+        raise TypeError(f"{preset} is integer-N: no DTC, no fractional spurs")
+    pll.cfg.frac.dtc.inl_sin = (inl_amp_s, inl_cycles, 0.3) if inl_amp_s else ()
+    pll.cfg.frac.dtc.gain_error_residual = gain_residual
+    return pll
+
+
+def _spur_predict(preset: str, inl_amp_s: float = 50e-15,
+                  inl_cycles: float = 1.0,
+                  gain_residual: float = 0.002) -> dict:
+    ar = _frac_pll(preset, inl_amp_s, inl_cycles, gain_residual).analyze()
+    tab = sorted(((k.split("@")[1], float(v))
+                  for k, v in ar.spurs_analytic.items()
+                  if k.startswith("frac_spur")), key=lambda kv: -kv[1])
+    return {"rows": [{"offset": o, "dbc": round(v, 1)} for o, v in tab],
+            "notes": list(ar.notes)}
+
+
+def _spur_spectrum(preset: str, inl_amp_s: float = 50e-15,
+                   inl_cycles: float = 1.0, gain_residual: float = 0.002,
+                   n_cycles: int = 150_000, seed: int = 2) -> dict:
+    pll = _frac_pll(preset, inl_amp_s, inl_cycles, gain_residual)
+    sim = pll.simulate(int(n_cycles), seed=seed)
+    fig = plot_spur_spectrum(sim, ar=make_pll(preset, {}).analyze())
+    return {"notes": list(sim.notes), "png": _png(fig)}
+
+
+def _ref_spur(preset: str, m: int = 128, n_cycles: int = 40_000) -> dict:
+    rows, notes = ref_spur_comparison(make_pll(preset, {}), m=int(m),
+                                      n_cycles=int(n_cycles))
+    return {"rows": rows, "notes": notes}
+
+
+def _spur_sweep(preset: str, inl_amp_s: float = 50e-15,
+                inl_cycles: float = 1.0,
+                gain_residual: float = 0.002) -> dict:
+    """Worst fractional spur vs channel: near-integer channels are worst,
+    because the beat lands inside the loop bandwidth where |NTF| ~ 1."""
+    fracs = [0.0013, 0.0053, 0.0161, 0.0503, 0.1253, 0.2503, 0.3753, 0.4703]
+    fref = make_pll(preset, {}).cfg.fref
+    worst = []
+    for fr in fracs:
+        pll = _frac_pll(preset, inl_amp_s, inl_cycles, gain_residual)
+        pll.cfg.fout = (int(pll.cfg.fout / fref) + fr) * fref
+        pll.cfg.frac.frac = fr
+        t = [float(v) for k, v in pll.analyze().spurs_analytic.items()
+             if k.startswith("frac_spur")]
+        worst.append(max(t) if t else None)
+    f_ugb = make_pll(preset, {}).analyze().loop.f_ugb
+    beats = [fr * fref for fr in fracs]
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.semilogx(beats, [w if w is not None else float("nan") for w in worst],
+                "o-")
+    if math.isfinite(f_ugb):
+        ax.axvline(f_ugb, color="gray", ls=":", label="UGB")
+        ax.legend()
+    ax.set_xlabel("fractional beat frac*fref [Hz]")
+    ax.set_ylabel("worst spur [dBc]")
+    ax.grid(alpha=0.3, which="both")
+    ax.set_title(f"{preset}: worst fractional spur vs channel")
+    return {"beats_hz": beats, "worst_dbc": worst, "f_ugb_hz": f_ugb,
+            "png": _png(fig)}
+
+
+def _hop_check(preset: str) -> dict | None:
+    """FLL hand-off bound, or None for loops that have no FLL."""
+    pll = make_pll(preset, {})
+    if not hasattr(pll.cfg, "fll_i"):
+        return None
+    st = fll_stability(pll)
+    return {"slew_khz_per_window": st["slew_per_window_hz"] / 1e3,
+            "i_fll_max_ua": st["i_fll_max_a"] * 1e6,
+            "margin": st["margin"], "ok": bool(st["margin"] > 1.0)}
+
+
+def _hop_fig(r: Any) -> str:
+    sim = r.sim
+    fig, ax = plt.subplots(figsize=(9, 4))
+    ax.plot(sim.t * 1e6, (sim.freq_out - r.f_to) / 1e6, lw=0.7)
+    if "fll_engaged" in sim.cal_traces:
+        eng = sim.cal_traces["fll_engaged"] > 0.5
+        ax.fill_between(sim.t * 1e6, *ax.get_ylim(), where=eng, alpha=0.15,
+                        color="C1", label="FLL engaged")
+    if math.isfinite(r.t_phase_s):
+        ax.axvline(r.t_phase_s * 1e6, color="r", ls="--", lw=1,
+                   label=f"phase settled {r.t_phase_s * 1e6:.0f} us")
+    ax.set_xlabel("t [us]")
+    ax.set_ylabel("freq error [MHz]")
+    ax.legend(fontsize=8)
+    ax.grid(alpha=0.3)
+    return _png(fig)
+
+
+def _hop(preset: str, hop_hz: float = -100e6, n_cycles: int = 100_000,
+         seed: int = 1) -> dict:
+    pll = make_pll(preset, {})
+    r = hop_settling(pll, pll.cfg.fout + hop_hz, n_cycles=int(n_cycles),
+                     seed=int(seed))
+    return {
+        "t_freq_us": r.t_freq_s * 1e6,          # non-finite -> null (_clean)
+        "t_phase_us": r.t_phase_s * 1e6,
+        "fll_us": None if r.fll_engaged_s is None else r.fll_engaged_s * 1e6,
+        "jitter_fs": r.jitter_fs,
+        "png": _hop_fig(r),
+    }
+
+
+def _hop_stats(preset: str, hop_hz: float = -100e6, n_cycles: int = 100_000,
+               n_seeds: int = 8) -> dict:
+    stats = hop_statistics(lambda: make_pll(preset, {}),
+                           make_pll(preset, {}).cfg.fout + hop_hz,
+                           seeds=range(int(n_seeds)), n_cycles=int(n_cycles))
+    tp = stats["t_phase_s"]
+    fig, ax = plt.subplots(figsize=(7, 3.5))
+    ax.hist(tp[np.isfinite(tp)] * 1e6, bins=12, alpha=0.8)
+    ax.set_xlabel("t_phase [us]")
+    ax.set_ylabel("hops")
+    ax.grid(alpha=0.3)
+    return {
+        "p50_us": stats["p50_s"] * 1e6,
+        "p95_us": stats["p95_s"] * 1e6,
+        "worst_us": stats["worst_s"] * 1e6,
+        "fail_pct": stats["fail_frac"] * 100.0,
+        "png": _png(fig),
+    }
+
+
 _METHODS: dict[str, Callable[..., Any]] = {
     "list_presets": _list_presets,
     "fields": _fields,
@@ -184,6 +325,13 @@ _METHODS: dict[str, Callable[..., Any]] = {
     "bank": _bank,
     "fine_info": _fine_info,
     "simulate": _simulate,
+    "spur_predict": _spur_predict,
+    "spur_spectrum": _spur_spectrum,
+    "spur_sweep": _spur_sweep,
+    "ref_spur": _ref_spur,
+    "hop_check": _hop_check,
+    "hop": _hop,
+    "hop_stats": _hop_stats,
 }
 
 

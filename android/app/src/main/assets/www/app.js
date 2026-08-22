@@ -221,17 +221,137 @@ async function runSimulate() {
   }
 }
 
+/* ---------------------------------------------------------- tabs */
+function showTab(name) {
+  document.querySelectorAll("#tabs button").forEach(b =>
+    b.classList.toggle("active", b.dataset.tab === name));
+  document.querySelectorAll(".tab").forEach(t =>
+    t.hidden = t.id !== "tab-" + name);
+}
+document.querySelectorAll("#tabs button").forEach(b =>
+  b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+function tableHtml(rows) {
+  if (!rows.length) return "";
+  const cols = Object.keys(rows[0]);
+  return '<table class="rows"><tr>' +
+    cols.map(c => `<th>${esc(c)}</th>`).join("") + "</tr>" +
+    rows.map(r => "<tr>" + cols.map(c => `<td>${esc(r[c])}</td>`).join("") +
+             "</tr>").join("") + "</table>";
+}
+
+/* ---------------------------------------------------------- spurs tab */
+function spurArgs() {
+  return {
+    preset: $("sp-preset").value,
+    inl_amp_s: Number($("sp-inl").value),
+    inl_cycles: Number($("sp-cyc").value),
+    gain_residual: Number($("sp-gain").value),
+  };
+}
+
+async function runInto(outId, fn, busyZh, busyEn) {
+  busy(busyZh, busyEn, true);
+  const out = $(outId);
+  try { out.innerHTML = await fn(); }
+  catch (e) { out.innerHTML = errHtml(e); }
+  finally { busy("", "", false); }
+}
+
+$("sp-predict").addEventListener("click", () => runInto(
+  "sp-predict-out", async () => {
+    const r = await call("spur_predict", spurArgs());
+    return tableHtml(r.rows.map(x =>
+      ({ offset: x.offset, "spur [dBc]": x.dbc }))) + notesHtml(r.notes);
+  }, "analyze…", "analyze…"));
+
+$("sp-measure").addEventListener("click", () => runInto(
+  "sp-measure-out", async () => {
+    const r = await call("spur_spectrum",
+      { ...spurArgs(), n_cycles: +$("sp-ncyc").value });
+    return notesHtml(r.notes) + pngHtml(r.png);
+  }, "时域仿真中…", "simulating…"));
+
+$("sp-ref").addEventListener("click", () => runInto(
+  "sp-ref-out", async () => {
+    const r = await call("ref_spur", {
+      preset: $("sp-preset").value,
+      m: +$("sp-m").value, n_cycles: +$("sp-refcyc").value,
+    });
+    return tableHtml(r.rows) +
+      r.notes.map(n => `<p class="muted">${esc(n)}</p>`).join("");
+  }, "时域仿真中…", "simulating…"));
+
+$("sp-sweep").addEventListener("click", () => runInto(
+  "sp-sweep-out", async () => {
+    const r = await call("spur_sweep", spurArgs());
+    return pngHtml(r.png);
+  }, "扫描 8 个通道中…", "sweeping 8 channels…"));
+
+/* ---------------------------------------------------------- hop tab */
+async function updateFllBanner() {
+  const el = $("hop-fll");
+  el.innerHTML = "";
+  try {
+    const st = await call("hop_check", { preset: $("hop-preset").value });
+    if (st === null) return;
+    const txt = `FLL: slew ${st.slew_khz_per_window.toFixed(0)} kHz/window, ` +
+      `i_fll_max ${st.i_fll_max_ua.toFixed(2)} uA, ` +
+      `margin ${st.margin.toFixed(2)}x` +
+      (st.ok ? "" : (lang === "zh" ? " —— 超界：FLL 将极限环振荡、永不交接！"
+                                   : " — OVER the bound: limit cycle, never hands off!"));
+    el.innerHTML = `<p class="${st.ok ? "banner-ok" : "banner-bad"}">${esc(txt)}</p>`;
+  } catch (e) {
+    el.innerHTML = errHtml(e);
+  }
+}
+
+$("hop-preset").addEventListener("change", updateFllBanner);
+
+$("hop-run").addEventListener("click", () => runInto(
+  "hop-out", async () => {
+    const r = await call("hop", {
+      preset: $("hop-preset").value, hop_hz: Number($("hop-hz").value),
+      n_cycles: +$("hop-ncyc").value, seed: +$("hop-seed").value,
+    });
+    const ns = lang === "zh" ? "未建立" : "not settled";
+    return metricsHtml([
+      ["t_freq", r.t_freq_us === null ? ns : r.t_freq_us.toFixed(1) + " us"],
+      ["t_phase", r.t_phase_us === null ? ns : r.t_phase_us.toFixed(1) + " us"],
+      ["FLL", r.fll_us === null ? "-" : r.fll_us.toFixed(1) + " us"],
+      ["jitter", r.jitter_fs === null ? "-" : r.jitter_fs.toFixed(0) + " fs"],
+    ]) + pngHtml(r.png);
+  }, "跳频仿真中…", "hopping…"));
+
+$("hop-stats").addEventListener("click", () => runInto(
+  "hop-stats-out", async () => {
+    const r = await call("hop_stats", {
+      preset: $("hop-preset").value, hop_hz: Number($("hop-hz").value),
+      n_cycles: +$("hop-ncyc").value, n_seeds: +$("hop-seeds").value,
+    });
+    return metricsHtml([
+      ["p50", r.p50_us === null ? "-" : r.p50_us.toFixed(0) + " us"],
+      ["p95", r.p95_us === null ? "-" : r.p95_us.toFixed(0) + " us"],
+      [lang === "zh" ? "最差" : "worst",
+       r.worst_us === null ? "-" : r.worst_us.toFixed(0) + " us"],
+      [lang === "zh" ? "未建立" : "failed", r.fail_pct.toFixed(0) + " %"],
+    ]) + pngHtml(r.png);
+  }, "多种子跳频中…", "hopping (all seeds)…"));
+
 /* ---------------------------------------------------------- boot */
 async function boot() {
   applyLang();
   try {
     const presets = await call("list_presets");
-    $("preset").innerHTML = presets.map(p =>
-      `<option value="${esc(p.name)}">${esc(p.name)} (${esc(p.arch)})</option>`
-    ).join("");
+    const opt = p =>
+      `<option value="${esc(p.name)}">${esc(p.name)} (${esc(p.arch)})</option>`;
+    $("preset").innerHTML = presets.map(opt).join("");
+    $("sp-preset").innerHTML = presets.filter(p => p.frac).map(opt).join("");
+    $("hop-preset").innerHTML = presets.map(opt).join("");
     $("boot").hidden = true;
     $("app").hidden = false;
     await loadPreset(presets[0].name);
+    await updateFllBanner();
   } catch (e) {
     $("boot").innerHTML = errHtml(e);
   }
