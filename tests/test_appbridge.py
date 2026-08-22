@@ -158,6 +158,60 @@ def test_hop_stats_short():
     assert base64.b64decode(got["png"])[:8] == b"\x89PNG\r\n\x1a\n"
 
 
+def test_benchmarks_are_the_same_table_both_guis_render():
+    from pllsim.presets import benchmark_table
+    got = call("benchmarks")["rows"]
+    want = benchmark_table()
+    assert [r["paper"] for r in got] == [r["paper"] for r in want]
+    for g, w in zip(got, want):
+        assert g["linear [fs]"] == pytest.approx(w["linear [fs]"])
+
+
+def test_select_ranks_and_hands_candidates_to_the_workbench():
+    """The selector's whole point on a phone: requirement in, ranked table
+    out, and the winner editable in the workbench without retyping."""
+    sel = call("select", fref_hz=100e6, fout_hz=8e9, jitter_fs_max=120)
+    assert len(sel["rows"]) == 7
+    assert sel["best"] is not None and sel["best"] in sel["handoff"]
+    base = call("analyze", candidate=sel["best"])["jitter_fs"]
+    assert base == pytest.approx(sel["best_jitter_fs"], rel=1e-6)
+    worse = call("analyze", candidate=sel["best"],
+                 overrides={"osc.pn_dbchz": "-90"})["jitter_fs"]
+    assert worse > base * 1.5, (base, worse)
+    fields = call("fields", candidate=sel["best"])
+    assert fields["arch"].lower().startswith(sel["best"][:4])
+    reply = json.loads(appbridge.call(
+        "analyze", json.dumps({"candidate": "no_such_arch"})))
+    assert reply["ok"] is False and "select first" in reply["error"]
+
+
+def test_synth_hands_back_the_library_numbers_unchanged():
+    from pllsim.synth import cppll_kdet, design_adpll_dlf, design_cp_filter
+    got = call("synth_cp", icp_a=1.5e-3, n=250, kvco_hz_v=60e6,
+               ugb_hz=1e6, pm_deg=58, fref_hz=19.2e6)
+    want = design_cp_filter(cppll_kdet(1.5e-3, 250), 60e6, 1e6, 58, 19.2e6)
+    for k, w in [("c1_f", want.c1), ("r2_ohm", want.r2), ("c2_f", want.c2),
+                 ("r3_ohm", want.r3), ("c3_f", want.c3)]:
+        assert got[k] == pytest.approx(w, rel=1e-12), k
+    a, r = design_adpll_dlf(100e6, 1e6, 55)
+    got = call("synth_dlf", fref_hz=100e6, ugb_hz=1e6, pm_deg=55)
+    assert got["alpha"] == pytest.approx(a) and got["rho"] == pytest.approx(r)
+
+
+def test_bw_sweep_says_when_points_were_dropped():
+    """sweep_bandwidth silently skips infeasible UGB targets; the bridge has
+    to report requested-vs-returned or 5-asked-3-answered reads as a full
+    sweep."""
+    got = call("bw_sweep", preset="sspll_19p2m_4p8g", n_points=5)
+    assert got["n_requested"] == 5
+    assert 1 <= len(got["jitter_fs"]) <= 5
+    assert len(got["f_ugb_hz"]) == len(got["jitter_fs"])
+    assert base64.b64decode(got["png"])[:8] == b"\x89PNG\r\n\x1a\n"
+    reply = json.loads(appbridge.call(
+        "bw_sweep", json.dumps({"preset": "ilcm_250m_12g"})))
+    assert reply["ok"] is False and "no loop" in reply["error"]
+
+
 def test_non_finite_floats_become_null():
     # ILCM/MDLL analyze with default f_free_error leaves f_ugb/pm undefined
     # in some architectures; whatever the source, the serializer must never

@@ -21,7 +21,13 @@ generated from `guiutil.FIELD_INFO` — the same source as the Streamlit form,
 the Qt form and the config reference. v1 shipped the workbench; v2 added
 Spurs (analytic prediction, measured spectrum, reference-spur comparison,
 worst-channel sweep) and Hop settling (FLL bound banner, hop anatomy, seed
-statistics) as tabs over six new bridge methods.
+statistics); v3 added Selector (requirement → 7 ranked architectures →
+**candidate handoff into the workbench**, carried through module-level
+bridge state that every consumer deep-copies), Synthesis (four filter
+designers + jitter-vs-UGB sweep with a dropped-points caption) and
+Benchmarks. Still not in the app: Fit (needs Android file-picker plumbing
+in Kotlin), Modulation, Drift, MonteCarlo (simulation-heavy), Export (no
+phone-side consumer for an EDA file tree).
 
 ## Current Conclusions
 

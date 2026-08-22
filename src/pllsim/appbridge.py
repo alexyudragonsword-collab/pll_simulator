@@ -24,6 +24,7 @@ Two conventions the host side relies on:
 from __future__ import annotations
 
 import base64
+import copy
 import io
 import json
 import math
@@ -36,6 +37,7 @@ import numpy as np
 from . import presets
 from .guiutil import (
     GROUP_LABELS,
+    apply_overrides,
     arch_kind,
     enumerate_fields,
     fine_oversample_note,
@@ -49,7 +51,18 @@ from .guiutil import (
     supports_fine,
 )
 from .plotting import plot_pn_breakdown, plot_spur_spectrum
+from .selector import Requirement, select
 from .settling import fll_stability, hop_settling, hop_statistics
+from .synth import (
+    cppll_kdet,
+    design_adpll_dlf,
+    design_cp_filter,
+    design_spll_filter,
+    design_sspll_filter,
+    retune_loop,
+    sweep_bandwidth,
+    sweepable_presets,
+)
 
 
 def _clean(x: Any) -> Any:
@@ -72,19 +85,48 @@ def _png(fig: Any) -> str:
     return base64.b64encode(buf.getvalue()).decode("ascii")
 
 
+# Feasible candidates from the last select() call, keyed by architecture
+# name.  Module state is the handoff channel: the app process is long-lived,
+# and every consumer deep-copies before touching the stored instance.
+_CANDIDATES: dict[str, Any] = {}
+
+
+def _build(preset: str = "", overrides: dict[str, str] | None = None,
+           candidate: str = "") -> Any:
+    """A fresh PLL: from a preset, or from a stored selector candidate.
+
+    The candidate path mirrors the web GUI's selector -> workbench handoff:
+    the instance is already sized for the stated requirement, so it crosses
+    as-is instead of sending the user to retype fref/fout into the nearest
+    preset.
+    """
+    if candidate:
+        base = _CANDIDATES.get(candidate)
+        if base is None:
+            raise KeyError(f"no stored selector candidate {candidate!r}; "
+                           "run select first")
+        pll = copy.deepcopy(base)
+        if overrides:
+            apply_overrides(pll.cfg, overrides)
+        return pll
+    return make_pll(preset, overrides or {})
+
+
 def _list_presets() -> list[dict]:
     frac = set(frac_presets())
+    sweep = set(sweepable_presets())
     out = []
     for name, factory in presets.ALL_PRESETS.items():
         cfg = factory().cfg
         out.append({"name": name, "arch": arch_kind(presets.ALL_PRESETS[name]()),
                     "fref_mhz": cfg.fref / 1e6, "fout_ghz": cfg.fout / 1e9,
-                    "frac": name in frac})
+                    "frac": name in frac, "sweepable": name in sweep})
     return out
 
 
-def _fields(preset: str, overrides: dict[str, str] | None = None) -> dict:
-    pll = make_pll(preset, overrides or {})
+def _fields(preset: str = "", overrides: dict[str, str] | None = None,
+            candidate: str = "") -> dict:
+    pll = _build(preset, overrides, candidate)
     fields = [{
         "path": s.path,
         "value": "" if s.value is None else fmt_value(s.value),
@@ -106,8 +148,9 @@ def _fields(preset: str, overrides: dict[str, str] | None = None) -> dict:
     }
 
 
-def _analyze(preset: str, overrides: dict[str, str] | None = None) -> dict:
-    pll = make_pll(preset, overrides or {})
+def _analyze(preset: str = "", overrides: dict[str, str] | None = None,
+             candidate: str = "") -> dict:
+    pll = _build(preset, overrides, candidate)
     ar = pll.analyze()
     return {
         "jitter_fs": ar.jitter_fs,
@@ -121,15 +164,17 @@ def _analyze(preset: str, overrides: dict[str, str] | None = None) -> dict:
     }
 
 
-def _bank(preset: str, overrides: dict[str, str] | None = None) -> list[dict]:
-    rows = osc_bank_report(make_pll(preset, overrides or {}).cfg)
+def _bank(preset: str = "", overrides: dict[str, str] | None = None,
+          candidate: str = "") -> list[dict]:
+    rows = osc_bank_report(_build(preset, overrides, candidate).cfg)
     return [{"label_en": en, "label_zh": zh, "value": val}
             for en, zh, val in rows]
 
 
-def _fine_info(preset: str, overrides: dict[str, str] | None = None,
-               n_cycles: int = 150_000, m: int = 0) -> dict:
-    pll = make_pll(preset, overrides or {})
+def _fine_info(preset: str = "", overrides: dict[str, str] | None = None,
+               n_cycles: int = 150_000, m: int = 0,
+               candidate: str = "") -> dict:
+    pll = _build(preset, overrides, candidate)
     return {
         "supported": supports_fine(pll),
         "note": fine_oversample_note(pll, m),
@@ -137,12 +182,12 @@ def _fine_info(preset: str, overrides: dict[str, str] | None = None,
     }
 
 
-def _simulate(preset: str, overrides: dict[str, str] | None = None,
+def _simulate(preset: str = "", overrides: dict[str, str] | None = None,
               n_cycles: int = 50_000, seed: int = 1, noise: bool = True,
               calibration: bool = True, f_start_offset_mhz: float = 0.0,
               dtc_gain_init_error: float = 0.0,
-              fine_oversample: int = 0) -> dict:
-    pll = make_pll(preset, overrides or {})
+              fine_oversample: int = 0, candidate: str = "") -> dict:
+    pll = _build(preset, overrides, candidate)
     kw = simulate_kwargs(pll, noise=noise, calibration=calibration, seed=seed,
                          f_start_offset=f_start_offset_mhz * 1e6,
                          dtc_gain_init_error=dtc_gain_init_error,
@@ -150,7 +195,7 @@ def _simulate(preset: str, overrides: dict[str, str] | None = None,
     sim = pll.simulate(int(n_cycles), **kw)
     # overlay against a fresh analyze() of the same config, as the workbench
     # pages do -- the sim object holds no linear model to plot against
-    ar = make_pll(preset, overrides or {}).analyze()
+    ar = _build(preset, overrides, candidate).analyze()
 
     pngs = [{"title": "phase noise", "png": _png(plot_pn_breakdown(ar, sim))}]
     fig, (a1, a2) = plt.subplots(2, 1, figsize=(8, 5), sharex=True)
@@ -318,6 +363,96 @@ def _hop_stats(preset: str, hop_hz: float = -100e6, n_cycles: int = 100_000,
     }
 
 
+def _benchmarks() -> dict:
+    """The literature anchor, linear column computed live (same table both
+    desktop GUIs render)."""
+    return {"rows": presets.benchmark_table()}
+
+
+def _select(fref_hz: float, fout_hz: float, jitter_fs_max: float,
+            band_lo_hz: float = 10e3, band_hi_hz: float = 40e6,
+            modulation: bool = False) -> dict:
+    rep = select(Requirement(fref=fref_hz, fout=fout_hz,
+                             jitter_fs_max=jitter_fs_max,
+                             int_band=(band_lo_hz, band_hi_hz),
+                             modulation=modulation))
+    _CANDIDATES.clear()
+    rows = []
+    for cand in sorted(rep.candidates, key=lambda c: c.key):
+        rows.append({
+            "arch": cand.arch,
+            "jitter_fs": cand.jitter_fs,
+            "verdict": ("PASS" if cand.feasible
+                        and cand.jitter_fs <= rep.req.jitter_fs_max
+                        else ("fail" if cand.feasible else "excluded")),
+            "f_ugb_khz": cand.f_ugb / 1e3,
+            "pm_deg": cand.pm_deg,
+            "notes": "; ".join(cand.notes),
+        })
+        if cand.feasible and cand.pll is not None:
+            _CANDIDATES[cand.arch] = cand.pll
+    return {
+        "rows": rows,
+        "best": None if rep.best is None else rep.best.arch,
+        "best_jitter_fs": None if rep.best is None else rep.best.jitter_fs,
+        "target_fs": rep.req.jitter_fs_max,
+        "handoff": sorted(_CANDIDATES),
+    }
+
+
+def _filt_dict(filt: Any) -> dict:
+    return {"c1_f": filt.c1, "r2_ohm": filt.r2, "c2_f": filt.c2,
+            "r3_ohm": filt.r3, "c3_f": filt.c3}
+
+
+def _synth_cp(icp_a: float, n: float, kvco_hz_v: float, ugb_hz: float,
+              pm_deg: float, fref_hz: float) -> dict:
+    return _filt_dict(design_cp_filter(cppll_kdet(icp_a, n), kvco_hz_v,
+                                       ugb_hz, pm_deg, fref_hz))
+
+
+def _synth_sspll(amp_v: float, gm_s: float, pulse_s: float,
+                 kvco_hz_v: float, ugb_hz: float, pm_deg: float,
+                 fref_hz: float) -> dict:
+    return _filt_dict(design_sspll_filter(amp_v * gm_s * pulse_s, kvco_hz_v,
+                                          ugb_hz, pm_deg, fref_hz))
+
+
+def _synth_spll(amp_v: float, gm_s: float, pulse_s: float, n: float,
+                kvco_hz_v: float, ugb_hz: float, pm_deg: float,
+                fref_hz: float) -> dict:
+    return _filt_dict(design_spll_filter(amp_v, gm_s, pulse_s, n,
+                                         kvco_hz_v, ugb_hz, pm_deg, fref_hz))
+
+
+def _synth_dlf(fref_hz: float, ugb_hz: float, pm_deg: float) -> dict:
+    alpha, rho = design_adpll_dlf(fref_hz, ugb_hz, pm_deg)
+    return {"alpha": alpha, "rho": rho}
+
+
+def _bw_sweep(preset: str, lo_hz: float = 2e5, hi_hz: float = 3e6,
+              n_points: int = 8, pm_deg: float | None = None) -> dict:
+    if preset not in sweepable_presets():
+        raise TypeError(f"{preset} has no loop retune_loop() can "
+                        "re-synthesize (ILCM/MDLL have no loop filter)")
+    ugbs = np.geomspace(lo_hz, hi_hz, int(n_points))
+    res = sweep_bandwidth(
+        lambda bw: retune_loop(presets.ALL_PRESETS[preset](), bw, pm_deg),
+        ugbs)
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.semilogx(res["f_ugb"], res["jitter_fs"], "o-")
+    ax.set_xlabel("UGB [Hz]")
+    ax.set_ylabel("jitter [fs]")
+    ax.grid(alpha=0.3, which="both")
+    ax.set_title(f"{preset}: jitter vs loop bandwidth")
+    # sweep_bandwidth silently skips UGB targets the synthesizer cannot
+    # reach; the caller must be able to see that 5-asked-3-answered happened
+    return {"f_ugb_hz": list(res["f_ugb"]),
+            "jitter_fs": list(res["jitter_fs"]),
+            "n_requested": int(n_points),
+            "png": _png(fig)}
+
+
 _METHODS: dict[str, Callable[..., Any]] = {
     "list_presets": _list_presets,
     "fields": _fields,
@@ -329,6 +464,13 @@ _METHODS: dict[str, Callable[..., Any]] = {
     "spur_spectrum": _spur_spectrum,
     "spur_sweep": _spur_sweep,
     "ref_spur": _ref_spur,
+    "benchmarks": _benchmarks,
+    "select": _select,
+    "synth_cp": _synth_cp,
+    "synth_sspll": _synth_sspll,
+    "synth_spll": _synth_spll,
+    "synth_dlf": _synth_dlf,
+    "bw_sweep": _bw_sweep,
     "hop_check": _hop_check,
     "hop": _hop,
     "hop_stats": _hop_stats,
