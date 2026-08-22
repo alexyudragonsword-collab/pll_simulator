@@ -4,6 +4,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from typing import Any
+
 import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
@@ -45,8 +47,11 @@ if st.button("Run", type="primary"):
     ideal = 2 * np.pi * np.cumsum(mod) / fref
     with st.spinner(L("调制仿真中…", "modulating...")):
         pll = presets.ALL_PRESETS[nm]()
-        sim = pll.simulate(n_cyc, seed=2, mod_freq=mod,
-                           mod_dp_gain=1.0 + dp_err)
+        # two-point-modulation kwargs only exist on the engines that
+        # can inject them; the dict keeps the call site honest to mypy
+        mod_kw: dict[str, Any] = {"mod_freq": mod,
+                                  "mod_dp_gain": 1.0 + dp_err}
+        sim = pll.simulate(n_cyc, seed=2, **mod_kw)
     e = evm(sim.phase_err_out[settle + 4000:], ideal[settle + 4000:])
     metric_row([("EVM", f"{e['evm_pct']:.2f} %"),
                 ("EVM", f"{e['evm_db']:.1f} dB"),

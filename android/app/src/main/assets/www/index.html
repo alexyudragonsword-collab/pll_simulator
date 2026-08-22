@@ -19,6 +19,14 @@
 </div>
 
 <main id="app" hidden>
+<nav id="tabs">
+  <button data-tab="workbench" class="active"
+          data-zh="工作台" data-en="Workbench">工作台</button>
+  <button data-tab="spurs" data-zh="杂散" data-en="Spurs">杂散</button>
+  <button data-tab="hop" data-zh="跳频" data-en="Hop">跳频</button>
+</nav>
+
+<div id="tab-workbench" class="tab">
   <section class="card">
     <label data-zh="preset（每次运行取全新实例）"
            data-en="preset (fresh instance per run)">preset（每次运行取全新实例）</label>
@@ -61,6 +69,88 @@
             data-zh="运行 simulate" data-en="Run simulate">运行 simulate</button>
     <div id="simulate-out"></div>
   </section>
+</div>
+
+<div id="tab-spurs" class="tab" hidden>
+  <section class="card">
+    <label data-zh="preset（仅小数N）" data-en="preset (fractional-N only)">preset（仅小数N）</label>
+    <select id="sp-preset"></select>
+    <div class="grid3">
+      <label><span data-zh="正弦 INL 幅度 [s]" data-en="sine INL amp [s]">正弦 INL 幅度 [s]</span>
+        <input id="sp-inl" type="text" value="50e-15" inputmode="text"></label>
+      <label><span data-zh="INL 周期数" data-en="INL cycles">INL 周期数</span>
+        <input id="sp-cyc" type="text" value="1.0"></label>
+      <label><span data-zh="残余增益误差" data-en="gain residual">残余增益误差</span>
+        <input id="sp-gain" type="text" value="0.002"></label>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2 data-zh="解析预测（经环路 NTF）" data-en="Analytic prediction (through the loop NTF)">解析预测（经环路 NTF）</h2>
+    <button id="sp-predict" class="primary"
+            data-zh="预测" data-en="Predict">预测</button>
+    <div id="sp-predict-out"></div>
+  </section>
+
+  <section class="card">
+    <h2 data-zh="时域实测谱（与上表对照）" data-en="Measured spectrum (against the table)">时域实测谱（与上表对照）</h2>
+    <label><span data-zh="参考周期数" data-en="ref cycles">参考周期数</span>
+      <input id="sp-ncyc" type="number" value="60000" min="20000" step="20000"></label>
+    <button id="sp-measure" class="primary"
+            data-zh="仿真并画谱" data-en="Simulate and plot">仿真并画谱</button>
+    <div id="sp-measure-out"></div>
+  </section>
+
+  <section class="card">
+    <h2 data-zh="参考杂散：解析 vs 时域" data-en="Reference spur: analytic vs time domain">参考杂散：解析 vs 时域</h2>
+    <p class="muted" data-zh="参考杂散整个活在一个参考周期内，需要周期内细采样（记录量 ∝ M）。"
+       data-en="the reference spur lives inside one reference period; it needs intra-period sampling (record scales with M).">参考杂散整个活在一个参考周期内，需要周期内细采样（记录量 ∝ M）。</p>
+    <div class="grid3">
+      <label>M <input id="sp-m" type="number" value="64" min="2" max="4096" step="16"></label>
+      <label><span data-zh="周期数" data-en="cycles">周期数</span>
+        <input id="sp-refcyc" type="number" value="20000" min="5000" step="5000"></label>
+    </div>
+    <button id="sp-ref" class="primary"
+            data-zh="比较参考杂散" data-en="Compare">比较参考杂散</button>
+    <div id="sp-ref-out"></div>
+  </section>
+
+  <section class="card">
+    <h2 data-zh="最差通道扫描" data-en="Worst-channel sweep">最差通道扫描</h2>
+    <p class="muted" data-zh="8 个通道各跑一次 analyze，手机上约几十秒。"
+       data-en="8 channels x analyze; tens of seconds on a phone.">8 个通道各跑一次 analyze，手机上约几十秒。</p>
+    <button id="sp-sweep" class="primary"
+            data-zh="扫描" data-en="Sweep">扫描</button>
+    <div id="sp-sweep-out"></div>
+  </section>
+</div>
+
+<div id="tab-hop" class="tab" hidden>
+  <section class="card">
+    <label>preset</label>
+    <select id="hop-preset"></select>
+    <div id="hop-fll"></div>
+    <div class="grid3">
+      <label><span data-zh="跳频量 [Hz]（负=向下）" data-en="hop [Hz] (negative = down)">跳频量 [Hz]（负=向下）</span>
+        <input id="hop-hz" type="text" value="-100e6"></label>
+      <label><span data-zh="周期数" data-en="cycles">周期数</span>
+        <input id="hop-ncyc" type="number" value="100000" min="20000" step="20000"></label>
+      <label>seed
+        <input id="hop-seed" type="number" value="1" min="0"></label>
+    </div>
+    <button id="hop-run" class="primary"
+            data-zh="跳频仿真" data-en="Run hop">跳频仿真</button>
+    <div id="hop-out"></div>
+  </section>
+
+  <section class="card">
+    <h2 data-zh="种子分布（建立时间是良率量）" data-en="Seed distribution (settling is a yield quantity)">种子分布（建立时间是良率量）</h2>
+    <label>seeds <input id="hop-seeds" type="number" value="8" min="2" max="50"></label>
+    <button id="hop-stats" class="primary"
+            data-zh="统计" data-en="Run statistics">统计</button>
+    <div id="hop-stats-out"></div>
+  </section>
+</div>
 </main>
 
 <div id="busy" hidden><div class="spinner"></div><p id="busy-text"></p></div>

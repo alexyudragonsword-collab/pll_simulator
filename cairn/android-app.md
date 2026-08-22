@@ -18,7 +18,10 @@ deployment and Streamlit is a server process. Chaquopy is the only Android
 path with prebuilt numpy/scipy/matplotlib wheels (MIT, free), so the app is
 a single-Activity WebView over `src/pllsim/appbridge.py`, with the form
 generated from `guiutil.FIELD_INFO` — the same source as the Streamlit form,
-the Qt form and the config reference. Scope of v1: the workbench only.
+the Qt form and the config reference. v1 shipped the workbench; v2 added
+Spurs (analytic prediction, measured spectrum, reference-spur comparison,
+worst-channel sweep) and Hop settling (FLL bound banner, hop anatomy, seed
+statistics) as tabs over six new bridge methods.
 
 ## Current Conclusions
 

@@ -23,6 +23,7 @@ from dataclasses import dataclass, field
 import numpy as np
 
 from .arch.base import start_offset_kwarg
+from .core.results import SimResult
 
 
 @dataclass
@@ -34,7 +35,7 @@ class HopResult:
     fll_engaged_s: float | None      # time spent with the FLL engaged
     jitter_fs: float | None          # post-settling jitter (settled tail)
     f_tol_eff: float = 0.0           # tolerance actually used (noise floor)
-    sim: object = field(repr=False, default=None)
+    sim: SimResult | None = field(repr=False, default=None)
 
 
 def _last_excursion(t: np.ndarray, x: np.ndarray, tol: float) -> float:

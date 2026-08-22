@@ -62,25 +62,10 @@ skip_covered = true
 # own .pyi ("type statement is only supported in Python 3.12 and greater").
 # Following the running interpreter is also what a matrix build is for.
 ignore_missing_imports = true
-# What is still out, and what it would cost, is in docs/roadmap.md -- kept
-# there rather than here so the number is measured rather than remembered.
-files = [
-    "src/pllsim/core",
-    "src/pllsim/blocks",
-    "src/pllsim/calibration",
-    "src/pllsim/arch",
-    "src/pllsim/appbridge.py",
-    "src/pllsim/corners.py",
-    "src/pllsim/guiutil.py",
-    "src/pllsim/modulation.py",
-    "src/pllsim/settling.py",
-    "src/pllsim/synth.py",
-    "src/pllsim/fit.py",
-    "src/pllsim/montecarlo.py",
-    "src/pllsim/plotting.py",
-    "src/pllsim/presets.py",
-    "src/pllsim/guiqt",
-]
+# The whole package: export/ and webgui/ were the last two paths out (24 and
+# 15 errors), fixed rather than silenced.  If something must leave the gate,
+# it goes in docs/gen_roadmap.py's TYPE_CANDIDATES so the cost stays measured.
+files = ["src/pllsim"]
 
 [tool.ruff]
 line-length = 88

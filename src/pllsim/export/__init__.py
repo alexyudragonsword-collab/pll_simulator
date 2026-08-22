@@ -11,6 +11,7 @@ ams/ (electrical blocks + top + scalar testbench), README.md.
 """
 from __future__ import annotations
 
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from pathlib import Path
 
@@ -171,12 +172,16 @@ def _export_rnm(pll, kind: str, name: str, outdir: Path, rep: ExportReport,
     write_file(rnm_dir / f"{name}_top_rnm.vams", top_txt)
     files.append(f"{name}_top_rnm.vams")
 
-    engine = {"cppll_int": rg.golden_cppll, "cppll_frac": rg.golden_cppll,
-              "sspll_int": rg.golden_sspll, "sspll_frac": rg.golden_sspll,
-              "spll": rg.golden_spll, "spll_frac": rg.golden_spll,
-              "adpll_tdc": rg.golden_adpll_tdc,
-              "adpll_bbpd": rg.golden_adpll_bbpd, "ilcm": rg.golden_ilcm,
-              "mdll": rg.golden_mdll}[kind]
+    # the engines deliberately differ in signature (ilcm/mdll take
+    # f_free_error), so the table's common type is by-keyword callable
+    engines: dict[str, Callable[..., dict]] = {
+        "cppll_int": rg.golden_cppll, "cppll_frac": rg.golden_cppll,
+        "sspll_int": rg.golden_sspll, "sspll_frac": rg.golden_sspll,
+        "spll": rg.golden_spll, "spll_frac": rg.golden_spll,
+        "adpll_tdc": rg.golden_adpll_tdc,
+        "adpll_bbpd": rg.golden_adpll_bbpd, "ilcm": rg.golden_ilcm,
+        "mdll": rg.golden_mdll}
+    engine = engines[kind]
     if kind in ("ilcm", "mdll"):
         cols_data = engine(pll.cfg, n_golden, f_free_error=0.0)
     else:

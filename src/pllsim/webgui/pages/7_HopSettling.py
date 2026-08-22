@@ -13,7 +13,12 @@ st.set_page_config(page_title="Hop settling", layout="wide")
 sidebar_lang_toggle()
 
 from pllsim import presets
-from pllsim.settling import fll_stability, hop_settling, hop_statistics
+from pllsim.settling import (
+    HopResult,
+    fll_stability,
+    hop_settling,
+    hop_statistics,
+)
 
 st.title(L("跳频建立时间", "Channel-hop settling"))
 c = st.columns(4)
@@ -37,10 +42,10 @@ if hasattr(pll0.cfg, "fll_i"):
 if st.button("Run hop", type="primary"):
     with st.spinner(L("跳频仿真中…", "hopping...")):
         pll = presets.ALL_PRESETS[nm]()
-        r = hop_settling(pll, pll.cfg.fout + hop, n_cycles=n_cyc, seed=seed)
-    st.session_state["hop_r"] = r
+        st.session_state["hop_r"] = hop_settling(
+            pll, pll.cfg.fout + hop, n_cycles=n_cyc, seed=seed)
 
-r = st.session_state.get("hop_r")
+r: HopResult | None = st.session_state.get("hop_r")
 if r is not None:
     metric_row([
         ("t_freq", f"{r.t_freq_s * 1e6:.1f} us"
@@ -52,6 +57,7 @@ if r is not None:
         ("jitter", f"{r.jitter_fs:.0f} fs" if r.jitter_fs else "-"),
     ])
     sim = r.sim
+    assert sim is not None            # hop_settling always records it
     fig, ax = plt.subplots(figsize=(9, 4))
     ax.plot(sim.t * 1e6, (sim.freq_out - r.f_to) / 1e6, lw=0.7)
     if "fll_engaged" in sim.cal_traces:

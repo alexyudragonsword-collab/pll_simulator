@@ -96,10 +96,10 @@ the run's artifacts, or pass an existing release tag to attach them as
 release assets.  Expect large files (Python + numpy/scipy/matplotlib
 bundled; the web exes also carry streamlit).
 
-**Android app** (workbench only, fully offline): `android/` is a Gradle
-project embedding CPython via Chaquopy — a WebView front end over
-`pllsim.appbridge`, with the parameter form generated from the same
-`guiutil.FIELD_INFO` as both desktop GUIs.  Build a sideload APK from
+**Android app** (fully offline; workbench, spur prediction and hop
+settling): `android/` is a Gradle project embedding CPython via Chaquopy —
+a WebView front end over `pllsim.appbridge`, with the parameter form
+generated from the same `guiutil.FIELD_INFO` as both desktop GUIs.  Build a sideload APK from
 Actions -> Android APK -> Run workflow (manual only; it is not a release
 gate), or locally with Android Studio opened on `android/` — after first
 running `python -m build --sdist --outdir android/app/pysrc .` from the
@@ -250,11 +250,10 @@ tests/         closed-form core math + architecture-level regressions
 
 ## What CI enforces
 
-`ruff` on `src tests examples packaging`; `mypy` on the physics core, the
-blocks, the calibrators and the analysis modules (the file list is in
-`pyproject.toml` — `arch/` and `webgui/pages/` are named there as *not yet*
-checked rather than silenced, so the gate cannot be mistaken for whole-package
-coverage); the full test suite on Python 3.11 and 3.12 with a coverage floor.
+`ruff` on `src tests examples packaging`; `mypy` on the whole package
+(`files = ["src/pllsim"]` in `pyproject.toml` — `export/` and `webgui/` were
+the last two paths outside, fixed rather than silenced); the full test suite
+on Python 3.11 and 3.12 with a coverage floor.
 
 Two things the coverage number does not say.  The Streamlit pages are driven
 by 23 tests through `AppTest`, which execs each file rather than importing it,

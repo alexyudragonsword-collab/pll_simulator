@@ -40,6 +40,7 @@ from .base import (
     run_band_select,
     supply_ripple_v,
 )
+from .cppll import FracConfig
 
 TWOPI = 2.0 * np.pi
 
@@ -59,7 +60,7 @@ class SPLLConfig:
     fll_window: int = 64
     fll_engage: float = 3e6
     fll_release: float = 500e3
-    frac: "object | None" = None    # FracConfig: EFM1 + DTC on the divided edge
+    frac: FracConfig | None = None  # EFM1 + DTC on the divided edge
     int_band: tuple[float, float] = (1e3, 100e6)
 
     @property

@@ -2,6 +2,35 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-22 · mypy gate closed: files = ["src/pllsim"], 85/85, 0 errors
+
+- export/ (24 errors) fixed at the *source*: FracConfig.dtc and
+  SSPLL/SPLL.frac were annotated `"object | None"` since their creation —
+  the type information died there, and every consumer error was fallout.
+  Real types + a `_need()` narrowing helper in rnm_golden (restating what
+  arch `__post_init__` validation already guarantees). `_DsmBase` gained the
+  `step` contract its three subclasses always had.
+- webgui/ (15) fixed: `HopResult.sim` object→`SimResult | None`;
+  session_state round-trips annotated; arch-specific simulate kwargs go
+  through a typed dict; 5_Fit's guard checked only one of two arrays.
+- The files list collapsed to `["src/pllsim"]` — nothing is outside, so the
+  roadmap's exclusion table is empty and gen_roadmap says so explicitly.
+- Measurement trap logged: `cmd | tail; echo $?` reports tail's exit, not
+  the command's — several earlier "exit=0" full-suite reads were unverified.
+  pipefail from now on.
+
+## 2026-08-22 · Android app v2: Spurs and Hop tabs
+
+- appbridge grew 7 methods (spur_predict/spur_spectrum/spur_sweep/ref_spur,
+  hop_check/hop/hop_stats); 6 new tests, each mutation-proven able to fail —
+  including one whose first assertion over-specified the physics (in-band
+  channels are a |NTF|~1 plateau, not a strict maximum at the smallest beat)
+  and one that couldn't catch a dropped µs conversion until bounded both ways.
+- Found en route: webgui Spurs page's "k max" input was read and passed to
+  nothing for four releases — the decorative-parameter bug in the GUI layer.
+  Removed.
+- Both tabs driven end to end in Chromium against the real bridge.
+
 ## 2026-08-22 · Android app builds green; APK artifact produced
 
 - `android.yml` run 2 on `7c7c5a6`: success in 2m45s after the sdist fix

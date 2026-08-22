@@ -11,6 +11,8 @@ full simulate().
 """
 from __future__ import annotations
 
+from typing import TypeVar
+
 import numpy as np
 
 from ..arch.adpll import ADPLLConfig
@@ -28,6 +30,23 @@ TWOPI = 2.0 * np.pi
 
 def _mash(order: int, bits: int):
     return {1: Efm1, 2: Mash11, 3: Mash111}[order](bits)
+
+
+_T = TypeVar("_T")
+
+
+def _need(x: _T | None) -> _T:
+    """Narrow a field the architecture's own config validation guarantees.
+
+    The fractional engines are only reachable with a DTC/TDC configured --
+    the arch __post_init__ raises long before a golden runs -- but the field
+    types stay Optional, so the guarantee is restated here where mypy can
+    see it instead of being scattered as per-line ignores.
+    """
+    if x is None:
+        raise TypeError("this golden engine needs a config field that the "
+                        "architecture validation normally guarantees")
+    return x
 
 
 def golden_cppll(cfg: CPPLLConfig, n: int) -> dict[str, np.ndarray]:
@@ -73,19 +92,21 @@ def golden_sspll(cfg: SSPLLConfig, n: int) -> dict[str, np.ndarray]:
     lf = LoopFilter(cfg.filt, tref)
     lf.reset(cfg.osc.v_for(cfg.fout))
     s = cfg.sampler
-    mash = _mash(1, cfg.frac.bits) if cfg.frac else None
-    frac_word = cfg.frac.frac_word if cfg.frac else 0
-    dtc = DTC(cfg.frac.dtc, np.random.default_rng(0), noise=False) \
-        if cfg.frac else None
+    frac = cfg.frac
+    mash = _mash(1, frac.bits) if frac is not None else None
+    frac_word = frac.frac_word if frac is not None else 0
+    dtc = DTC(_need(frac.dtc), np.random.default_rng(0), noise=False) \
+        if frac is not None else None
+    dtc_half_range = _need(frac.dtc).range_s / 2.0 if frac is not None else 0.0
     phi_frac = 0.0
     prev_extra = 0.0
     fv = cfg.osc.freq_law(lf.vctrl)
     cols = {k: np.zeros(n) for k in ("perr", "vs", "dq", "vctrl", "fv")}
     for i in range(n):
         extra = 0.0
-        if mash is not None:
+        if mash is not None and dtc is not None:
             residual = mash.residual_ui()
-            t_target = (1.0 + residual) / cfg.fout - cfg.frac.dtc.range_s / 2.0
+            t_target = (1.0 + residual) / cfg.fout - dtc_half_range
             extra += dtc.delay(t_target)
         dt_period = tref + extra - prev_extra
         prev_extra = extra
@@ -110,20 +131,22 @@ def golden_spll(cfg: SPLLConfig, n: int) -> dict[str, np.ndarray]:
     lf = LoopFilter(cfg.filt, tref)
     lf.reset(cfg.osc.v_for(cfg.fout))
     s = cfg.sampler
-    frac = cfg.frac is not None
-    mash = _mash(1, cfg.frac.bits) if frac else None
-    frac_word = cfg.frac.frac_word if frac else 0
-    dtc = DTC(cfg.frac.dtc, np.random.default_rng(0), noise=False) \
-        if frac else None
-    n_int = int(cfg.fout // cfg.fref) if frac else int(round(cfg.n_div))
+    frac = cfg.frac
+    mash = _mash(1, frac.bits) if frac is not None else None
+    frac_word = frac.frac_word if frac is not None else 0
+    dtc = DTC(_need(frac.dtc), np.random.default_rng(0), noise=False) \
+        if frac is not None else None
+    dtc_half_range = _need(frac.dtc).range_s / 2.0 if frac is not None else 0.0
+    n_int = int(cfg.fout // cfg.fref) if frac is not None \
+        else int(round(cfg.n_div))
     t_div = 0.0
     fv = cfg.osc.freq_law(lf.vctrl)
     cols = {k: np.zeros(n) for k in ("perr", "dq", "vctrl", "fv")}
     for i in range(n):
         d_dtc = 0.0
-        if mash is not None:
+        if mash is not None and dtc is not None:
             residual = mash.residual_ui()
-            t_target = -residual / cfg.fout - cfg.frac.dtc.range_s / 2.0
+            t_target = -residual / cfg.fout - dtc_half_range
             d_dtc = dtc.delay(t_target)
         perr = TWOPI * cfg.fref * (t_div + d_dtc - i * tref)
         perr = ((perr + np.pi) % TWOPI) - np.pi
@@ -143,11 +166,12 @@ def golden_spll(cfg: SPLLConfig, n: int) -> dict[str, np.ndarray]:
 def golden_adpll_tdc(cfg: ADPLLConfig, n: int) -> dict[str, np.ndarray]:
     tref = 1.0 / cfg.fref
     fcw = cfg.fcw
+    tdc = _need(cfg.tdc)
     kdco_hat = cfg.osc.gain * (1.0 + cfg.kdco_est_error)
     otw_center = (cfg.fout - cfg.osc.f0) / cfg.osc.gain
-    cpp_nom = (1.0 / cfg.fout) / cfg.tdc.t_res
-    t_lsb_true = cfg.tdc.t_res * (1.0 + cfg.tdc.gain_error)
-    code_max = (1 << cfg.tdc.n_bits) - 1
+    cpp_nom = (1.0 / cfg.fout) / tdc.t_res
+    t_lsb_true = tdc.t_res * (1.0 + tdc.gain_error)
+    code_max = (1 << tdc.n_bits) - 1
     acc = 0.0
     iir = [0.0] * len(cfg.dlf.iir_lambdas)
     qerr = 0.0
@@ -182,12 +206,13 @@ def golden_adpll_tdc(cfg: ADPLLConfig, n: int) -> dict[str, np.ndarray]:
 
 def golden_adpll_bbpd(cfg: ADPLLConfig, n: int) -> dict[str, np.ndarray]:
     tref = 1.0 / cfg.fref
-    mash = _mash(cfg.frac.mash_order, cfg.frac.bits)
-    frac_word = cfg.frac.frac_word
+    frac = _need(cfg.frac)
+    mash = _mash(frac.mash_order, frac.bits)
+    frac_word = frac.frac_word
     n_int = int(cfg.fout // cfg.fref)
     otw_center = (cfg.fout - cfg.osc.f0) / cfg.osc.gain
-    dtc = DTC(cfg.frac.dtc, np.random.default_rng(0), noise=False) \
-        if cfg.frac.dtc else None
+    dtc = DTC(frac.dtc, np.random.default_rng(0), noise=False) \
+        if frac.dtc is not None else None
     acc = 0.0
     qerr = 0.0
     t_div = 0.0

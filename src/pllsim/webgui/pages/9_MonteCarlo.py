@@ -12,7 +12,7 @@ st.set_page_config(page_title="Monte Carlo", layout="wide")
 sidebar_lang_toggle()
 
 from pllsim.guiutil import mc_build_frac_cppll
-from pllsim.montecarlo import monte_carlo, plot_mc
+from pllsim.montecarlo import MCResult, monte_carlo, plot_mc
 
 st.title(L("Monte Carlo 良率", "Monte Carlo yield"))
 st.caption(L("ex11 的小数N CPPLL：逐芯片抽样（CP 失配、泄漏、DTC 增益/INL、"
@@ -36,10 +36,10 @@ if st.button("Run Monte Carlo", type="primary"):
     build = partial(mc_build_frac_cppll, s_gain=s_gain, s_inl=s_inl,
                     n_cycles=n_cyc)
     with st.spinner(L(f"{n_runs} 颗芯片仿真中…", f"{n_runs} chips...")):
-        res = monte_carlo(build, n_runs=n_runs, seed=42)
-    st.session_state["mc_res"] = res
+        st.session_state["mc_res"] = monte_carlo(build, n_runs=n_runs,
+                                                 seed=42)
 
-res = st.session_state.get("mc_res")
+res: MCResult | None = st.session_state.get("mc_res")
 if res is not None:
     y_jit = res.yield_frac("jitter_fs", lim_jit)
     cal = res.metrics.get("cal_dtc_gain_final")

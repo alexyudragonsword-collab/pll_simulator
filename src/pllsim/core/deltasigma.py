@@ -23,6 +23,10 @@ class _DsmBase:
         self._sum_y = 0      # integer sum of outputs
         self._sum_frac = 0   # integer sum of frac words
 
+    def step(self, frac: int) -> int:
+        """Advance one reference cycle; every modulator implements this."""
+        raise NotImplementedError
+
     def _track(self, y: int, frac: int) -> int:
         self._sum_y += y
         self._sum_frac += frac

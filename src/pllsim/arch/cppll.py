@@ -13,6 +13,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..blocks.chargepump import ChargePump, CPConfig
+from ..blocks.dtc import DTCConfig
 from ..blocks.loopfilter import FilterDesign, LoopFilter
 from ..blocks.oscillator import OscConfig, Oscillator
 from ..core.colored import synth_from_psd
@@ -62,7 +63,7 @@ class FracConfig:
     frac: float                       # fractional part of N, [0, 1)
     mash_order: int = 3               # 1, 2 or 3
     bits: int = 24
-    dtc: "object | None" = None       # DTCConfig, wired by blocks.dtc
+    dtc: DTCConfig | None = None      # wired by blocks.dtc
     dtc_cal: "object | None" = None   # gain calibrator (LMSGainCal/SignSignLMS)
     dtc_lut_cal: "object | None" = None   # INL calibrator (LUTCal, seconds)
 

@@ -11,7 +11,7 @@ from _common import L, sidebar_lang_toggle
 st.set_page_config(page_title="Selector", layout="wide")
 sidebar_lang_toggle()
 
-from pllsim.selector import Requirement, select
+from pllsim.selector import Requirement, SelectorReport, select
 
 st.title(L("架构选型", "Architecture selector"))
 c = st.columns(5)
@@ -25,11 +25,11 @@ mod = c[4].checkbox(L("需要两点调制", "needs two-point TX"), False)
 if st.button("Select", type="primary"):
     b = tuple(float(x) for x in band.replace(",", " ").split())
     with st.spinner(L("七架构综合与评估中…", "synthesizing 7 architectures...")):
-        rep = select(Requirement(fref=fref, fout=fout, jitter_fs_max=jmax,
-                                 int_band=b, modulation=mod))
-    st.session_state["sel_rep"] = rep
+        st.session_state["sel_rep"] = select(
+            Requirement(fref=fref, fout=fout, jitter_fs_max=jmax,
+                        int_band=b, modulation=mod))
 
-rep = st.session_state.get("sel_rep")
+rep: SelectorReport | None = st.session_state.get("sel_rep")
 if rep is not None:
     rows = []
     for cand in sorted(rep.candidates, key=lambda c: c.key):

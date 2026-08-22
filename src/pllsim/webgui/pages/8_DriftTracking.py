@@ -4,6 +4,8 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from typing import Any
+
 import matplotlib.pyplot as plt
 import numpy as np
 import streamlit as st
@@ -42,7 +44,8 @@ if st.button("Run ramp", type="primary"):
     drift = np.zeros(n)
     drift[ramp_start:] = eps_tot * np.arange(n_ramp) / n_ramp
     with st.spinner(L("斜坡仿真中…", "ramping...")):
-        sim = pll.simulate(n, seed=3, dtc_gain_drift=drift)
+        drift_kw: dict[str, Any] = {"dtc_gain_drift": drift}
+        sim = pll.simulate(n, seed=3, **drift_kw)
     g = sim.cal_traces["dtc_gain"]
     lag = np.abs(g * (1.0 + drift) - 1.0)
     c2 = pll.cfg
