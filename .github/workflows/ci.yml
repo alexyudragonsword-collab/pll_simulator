@@ -109,11 +109,9 @@ jobs:
       - name: Lint
         run: ruff check src tests examples packaging
       - name: Type check
-        # the file list is in pyproject [tool.mypy]: the physics core, the
-        # blocks, the calibrators and the analysis modules -- everything whose
-        # types carry a convention.  arch/ and webgui/ are named there as not
-        # yet covered rather than silenced, so this gate cannot be mistaken
-        # for whole-package checking.
+        # the whole package: pyproject [tool.mypy] says files=["src/pllsim"].
+        # If a path ever has to leave the gate it goes in gen_roadmap.py's
+        # TYPE_CANDIDATES, where its cost is measured, not remembered.
         run: mypy
       - name: Run tests
         env:

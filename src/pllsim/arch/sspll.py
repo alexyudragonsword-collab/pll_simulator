@@ -43,6 +43,7 @@ from .base import (
     run_band_select,
     supply_ripple_v,
 )
+from .cppll import FracConfig
 
 TWOPI = 2.0 * np.pi
 
@@ -60,7 +61,7 @@ class SSPLLConfig:
     fll_window: int = 64
     fll_engage: float = 3e6
     fll_release: float = 500e3
-    frac: "object | None" = None    # FracConfig (DTC-assisted fractional-N)
+    frac: FracConfig | None = None  # DTC-assisted fractional-N
     int_band: tuple[float, float] = (1e3, 100e6)
 
     @property

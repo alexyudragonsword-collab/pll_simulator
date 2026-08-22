@@ -26,15 +26,14 @@ if you touch `guiqt/`, make sure those tests are actually running for you.
 | tests | `pytest tests/` on 3.11 and 3.12 |
 | coverage | floor of 88% (`[tool.coverage.report]`) |
 
-The mypy file list covers `core/`, `blocks/`, `calibration/`, `arch/`,
-`guiqt/` and the analysis modules — everything whose types carry a
-*convention* (rad²/Hz vs dBc/Hz, seconds vs UI, amps vs coulombs).  What is
-still outside, and what including it would cost, is **measured** in
-[`docs/roadmap.md`](docs/roadmap.md) rather than remembered here.
-
-Shrinking that list is welcome; silencing it with `ignore_errors` is not,
-because an exclusion list that says what is missing is honest and a blanket
-ignore reads as "type-checked".
+The mypy gate is the whole package (`files = ["src/pllsim"]`) — every module
+whose types carry a *convention* (rad²/Hz vs dBc/Hz, seconds vs UI, amps vs
+coulombs), and everything else too, since `export/` and `webgui/` — the last
+two paths outside — were fixed and gated together.  If something ever has to
+leave the gate, it goes in `docs/gen_roadmap.py`'s `TYPE_CANDIDATES`, so its
+cost is **measured** in [`docs/roadmap.md`](docs/roadmap.md) rather than
+remembered here; silencing with `ignore_errors` is not an option, because a
+blanket ignore reads as "type-checked".
 
 ## Conventions that will bite you
 

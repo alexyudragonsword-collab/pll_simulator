@@ -10,17 +10,11 @@ each entry says what is true today and what would close it.
 
 ## Type checking
 
-15 paths are in the `mypy` gate (`pyproject.toml`).  What is
-still outside, and what including it would cost:
-
-| package | errors today | what it is |
-|---|---|---|
-| `src/pllsim/export` | 24 | the RTL/RNM/VAMS emitters — `rnm_golden.py` carries most of it: it builds heterogeneous row dicts for the golden CSV, so the types are genuinely loose rather than merely unannotated. |
-| `src/pllsim/webgui` | 15 | the Streamlit pages — Mostly `st.number_input` returning a union that then indexes an array. Shallow, but touching every page for it is a wide diff for little. |
-
-Shrinking that table is welcome.  Silencing it with `ignore_errors` is
-not: an exclusion list that says what is missing is honest, where a
-blanket ignore would read as "type-checked".
+1 paths are in the `mypy` gate (`pyproject.toml`).
+Nothing in `src/pllsim` is outside it: `export/` and `webgui/`
+were the last two out, fixed and gated together.  A future
+exclusion goes in this generator's `TYPE_CANDIDATES` so its cost
+is measured, not remembered.
 
 ## Coverage
 

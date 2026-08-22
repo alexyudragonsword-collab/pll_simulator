@@ -37,7 +37,7 @@ elif demo:
     l = ldbc_from_sphi(ar.pn_breakdown["total"][sel]) \
         + rng.normal(0, 0.5, int(sel.sum()))
 
-if f is not None:
+if f is not None and l is not None:
     st.caption(f"{f.size} points, {f[0]:.3g} Hz - {f[-1]:.3g} Hz")
     mode = st.radio(L("拟合模式", "fit mode"),
                     [L("自由振荡 (Leeson)", "free-running (Leeson)"),

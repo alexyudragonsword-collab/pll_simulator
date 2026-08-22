@@ -24,16 +24,10 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 OUT = Path(__file__).with_name("roadmap.md")
 
-# packages not yet in the mypy gate; the cost is measured, not stated
-TYPE_CANDIDATES = [
-    ("src/pllsim/export", "the RTL/RNM/VAMS emitters",
-     "`rnm_golden.py` carries most of it: it builds heterogeneous row dicts "
-     "for the golden CSV, so the types are genuinely loose rather than merely "
-     "unannotated."),
-    ("src/pllsim/webgui", "the Streamlit pages",
-     "Mostly `st.number_input` returning a union that then indexes an array. "
-     "Shallow, but touching every page for it is a wide diff for little."),
-]
+# packages not yet in the mypy gate; the cost is measured, not stated.
+# Empty since export/ and webgui/ were fixed and gated -- kept as a list so
+# the machinery (and the staleness test) survives the next exclusion.
+TYPE_CANDIDATES: list[tuple[str, str, str]] = []
 
 # Coverage notes are written, not measured.  A live `coverage report` lookup
 # made this file depend on whichever run last left a .coverage behind, which
@@ -107,19 +101,32 @@ def main() -> int:
         "",
         "## Type checking",
         "",
-        f"{len(gated)} paths are in the `mypy` gate (`pyproject.toml`).  What is",
-        "still outside, and what including it would cost:",
-        "",
-        "| package | errors today | what it is |",
-        "|---|---|---|",
+        f"{len(gated)} paths are in the `mypy` gate (`pyproject.toml`).",
     ]
-    for path, what, why in TYPE_CANDIDATES:
-        L.append(f"| `{path}` | {mypy_errors(path)} | {what} — {why} |")
+    if TYPE_CANDIDATES:
+        L += [
+            "What is still outside, and what including it would cost:",
+            "",
+            "| package | errors today | what it is |",
+            "|---|---|---|",
+        ]
+        for path, what, why in TYPE_CANDIDATES:
+            L.append(f"| `{path}` | {mypy_errors(path)} | {what} — {why} |")
+        L += [
+            "",
+            "Shrinking that table is welcome.  Silencing it with",
+            "`ignore_errors` is not: an exclusion list that says what is",
+            "missing is honest, where a blanket ignore would read as",
+            "\"type-checked\".",
+        ]
+    else:
+        L += [
+            "Nothing in `src/pllsim` is outside it: `export/` and `webgui/`",
+            "were the last two out, fixed and gated together.  A future",
+            "exclusion goes in this generator's `TYPE_CANDIDATES` so its cost",
+            "is measured, not remembered.",
+        ]
     L += [
-        "",
-        "Shrinking that table is welcome.  Silencing it with `ignore_errors` is",
-        "not: an exclusion list that says what is missing is honest, where a",
-        "blanket ignore would read as \"type-checked\".",
         "",
         "## Coverage",
         "",
