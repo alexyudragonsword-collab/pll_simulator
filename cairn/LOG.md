@@ -2,6 +2,29 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-22 · Android app v4: Modulation and Drift tabs (8/11 Qt pages)
+
+- appbridge grew modulate / drift / drift_info; EVM 0.98%→2.90% under 5%
+  direct-path error (the ex17 sensitivity), drift lag 2.60% at the slew
+  wall with the −71.4 dBc lag spur.
+- Mutation lesson worth keeping: "lag(slow) < lag(fast)" survived a bridge
+  that never injected the ramp — the lag *formula* carries the drift array,
+  so monotonicity holds with zero simulation coupling. The discriminating
+  assertion is "the calibrator tracked": peak lag strictly below total
+  drift. Recorded in the test docstring.
+
+## 2026-08-22 · Android app v3: Selector, Synthesis, Benchmarks tabs
+
+- appbridge grew 7 methods + a selector→workbench candidate handoff: the
+  synthesized candidate crosses via module state (`_CANDIDATES`), every
+  consumer deep-copies, and all workbench methods take `candidate=`.
+  bw_sweep reports requested-vs-returned (sweep_bandwidth silently skips
+  infeasible UGB points — 5 asked, 3 answered must be visible).
+- 4 new test groups, 5 mutations each red; Chromium end-to-end including
+  the full handoff loop (candidate analyze 115→1014 fs via the form,
+  back-to-presets restores). Coverage vs Qt: 6 of 11 pages in the app;
+  the rest are listed with reasons in `cairn/android-app.md`.
+
 ## 2026-08-22 · mypy gate closed: files = ["src/pllsim"], 85/85, 0 errors
 
 - export/ (24 errors) fixed at the *source*: FracConfig.dtc and

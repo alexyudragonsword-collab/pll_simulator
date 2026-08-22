@@ -158,6 +158,96 @@ def test_hop_stats_short():
     assert base64.b64decode(got["png"])[:8] == b"\x89PNG\r\n\x1a\n"
 
 
+def test_benchmarks_are_the_same_table_both_guis_render():
+    from pllsim.presets import benchmark_table
+    got = call("benchmarks")["rows"]
+    want = benchmark_table()
+    assert [r["paper"] for r in got] == [r["paper"] for r in want]
+    for g, w in zip(got, want):
+        assert g["linear [fs]"] == pytest.approx(w["linear [fs]"])
+
+
+def test_select_ranks_and_hands_candidates_to_the_workbench():
+    """The selector's whole point on a phone: requirement in, ranked table
+    out, and the winner editable in the workbench without retyping."""
+    sel = call("select", fref_hz=100e6, fout_hz=8e9, jitter_fs_max=120)
+    assert len(sel["rows"]) == 7
+    assert sel["best"] is not None and sel["best"] in sel["handoff"]
+    base = call("analyze", candidate=sel["best"])["jitter_fs"]
+    assert base == pytest.approx(sel["best_jitter_fs"], rel=1e-6)
+    worse = call("analyze", candidate=sel["best"],
+                 overrides={"osc.pn_dbchz": "-90"})["jitter_fs"]
+    assert worse > base * 1.5, (base, worse)
+    fields = call("fields", candidate=sel["best"])
+    assert fields["arch"].lower().startswith(sel["best"][:4])
+    reply = json.loads(appbridge.call(
+        "analyze", json.dumps({"candidate": "no_such_arch"})))
+    assert reply["ok"] is False and "select first" in reply["error"]
+
+
+def test_synth_hands_back_the_library_numbers_unchanged():
+    from pllsim.synth import cppll_kdet, design_adpll_dlf, design_cp_filter
+    got = call("synth_cp", icp_a=1.5e-3, n=250, kvco_hz_v=60e6,
+               ugb_hz=1e6, pm_deg=58, fref_hz=19.2e6)
+    want = design_cp_filter(cppll_kdet(1.5e-3, 250), 60e6, 1e6, 58, 19.2e6)
+    for k, w in [("c1_f", want.c1), ("r2_ohm", want.r2), ("c2_f", want.c2),
+                 ("r3_ohm", want.r3), ("c3_f", want.c3)]:
+        assert got[k] == pytest.approx(w, rel=1e-12), k
+    a, r = design_adpll_dlf(100e6, 1e6, 55)
+    got = call("synth_dlf", fref_hz=100e6, ugb_hz=1e6, pm_deg=55)
+    assert got["alpha"] == pytest.approx(a) and got["rho"] == pytest.approx(r)
+
+
+def test_bw_sweep_says_when_points_were_dropped():
+    """sweep_bandwidth silently skips infeasible UGB targets; the bridge has
+    to report requested-vs-returned or 5-asked-3-answered reads as a full
+    sweep."""
+    got = call("bw_sweep", preset="sspll_19p2m_4p8g", n_points=5)
+    assert got["n_requested"] == 5
+    assert 1 <= len(got["jitter_fs"]) <= 5
+    assert len(got["f_ugb_hz"]) == len(got["jitter_fs"])
+    assert base64.b64decode(got["png"])[:8] == b"\x89PNG\r\n\x1a\n"
+    reply = json.loads(appbridge.call(
+        "bw_sweep", json.dumps({"preset": "ilcm_250m_12g"})))
+    assert reply["ok"] is False and "no loop" in reply["error"]
+
+
+def test_modulate_mismatch_drives_the_evm():
+    """The page's one conclusion: direct-path mismatch is what EVM buys.
+    5% mismatch must cost at least 2x over the noise-only baseline."""
+    kw = dict(preset="sspll_19p2m_4p8g", n_cycles=80_000)
+    base = call("modulate", **kw)
+    worse = call("modulate", dp_err=0.05, **kw)
+    assert worse["evm_pct"] > 2.0 * base["evm_pct"], (base, worse)
+    assert base["sps"] == pytest.approx(19.2e6 / 2.5e6)
+    assert base64.b64decode(base["png"])[:8] == b"\x89PNG\r\n\x1a\n"
+    reply = json.loads(appbridge.call(
+        "modulate", json.dumps({"preset": "ilcm_250m_12g",
+                                "n_cycles": 80_000})))
+    assert reply["ok"] is False   # no two-point injection on this engine
+
+
+def test_drift_lag_tracks_the_ramp_rate():
+    """Slower ramp -> smaller tracking lag; a drift knob that does not move
+    the lag is the decorative-parameter bug wearing a thermometer."""
+    kw = dict(preset="cppll_frac_38p4m_6g", ramp_cycles=40_000,
+              ramp_start=50_000)
+    fast = call("drift", eps_total=0.03, **kw)
+    slow = call("drift", eps_total=0.003, **kw)
+    assert 0.0 < slow["peak_lag_pct"] < fast["peak_lag_pct"], (slow, fast)
+    # the calibrator must actually TRACK: peak lag strictly below the total
+    # drift.  A run where the ramp was never injected has lag == drift
+    # exactly (the lag formula carries the drift array), which slipped past
+    # the monotonicity assertion above when this was first mutation-tested.
+    assert fast["peak_lag_pct"] < 0.95 * 3.0, fast["peak_lag_pct"]
+    assert fast["rate_over_mu"] == pytest.approx(10 * slow["rate_over_mu"])
+    assert fast["lag_spur_dbc"] is None or fast["lag_spur_dbc"] < 0
+    assert base64.b64decode(fast["png"])[:8] == b"\x89PNG\r\n\x1a\n"
+    reply = json.loads(appbridge.call(
+        "drift_info", json.dumps({"preset": "cppll_19p2m_4p8g"})))
+    assert reply["ok"] is False and "calibrator" in reply["error"]
+
+
 def test_non_finite_floats_become_null():
     # ILCM/MDLL analyze with default f_free_error leaves f_ugb/pm undefined
     # in some architectures; whatever the source, the serializer must never
