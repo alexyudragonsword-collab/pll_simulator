@@ -10,7 +10,7 @@ each entry says what is true today and what would close it.
 
 ## Type checking
 
-14 paths are in the `mypy` gate (`pyproject.toml`).  What is
+15 paths are in the `mypy` gate (`pyproject.toml`).  What is
 still outside, and what including it would cost:
 
 | package | errors today | what it is |

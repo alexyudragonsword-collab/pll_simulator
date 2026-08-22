@@ -19,6 +19,12 @@ import numpy as np
 
 TWOPI = 2.0 * np.pi
 
+# np.trapezoid is the numpy>=2 name for np.trapz, and this was the one call
+# that silently required numpy 2 while pyproject declared >=1.24.  The
+# Android build pins numpy 1.x (no 2.x wheels for its Python), so the floor
+# has to be real: resolve whichever name this numpy provides.
+_trapezoid = getattr(np, "trapezoid", None) or getattr(np, "trapz")
+
 
 def sphi_from_ldbc(l_dbc) -> np.ndarray:
     """dBc/Hz -> double-sideband S_phi [rad^2/Hz]."""
@@ -49,7 +55,7 @@ def integrate_pn(f: np.ndarray, s_phi: np.ndarray, f1: float = 1e3, f2: float = 
         fi, si = np.append(fi, f2), np.append(si, s2)
     if fi.size < 2:
         return 0.0
-    return float(np.trapezoid(si, fi))
+    return float(_trapezoid(si, fi))
 
 
 def ipn_dbc(f: np.ndarray, s_phi: np.ndarray, f1: float = 1e3, f2: float = 100e6) -> float:

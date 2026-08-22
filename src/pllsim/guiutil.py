@@ -22,6 +22,20 @@ from .arch.base import start_offset_kwarg
 # fields never shown in forms (derived/rebuilt/complex)
 _SKIP = {"trace", "lut", "counts"}
 
+# form-section heading per config subtree (key = first dot-path component).
+# One source for every form that groups by subtree: the web GUI and the app
+# bridge both read it, so a new sub-config named here appears in both.
+GROUP_LABELS = {
+    "": ("环路 / 顶层", "Loop / top level"),
+    "osc": ("振荡器", "Oscillator"),
+    "cp": ("电荷泵", "Charge pump"),
+    "sampler": ("采样器", "Sampler"),
+    "filt": ("环路滤波器", "Loop filter"),
+    "tdc": ("TDC", "TDC"),
+    "dlf": ("数字环路滤波器", "Digital loop filter"),
+    "frac": ("小数N / DTC / 校准", "Fractional-N / DTC / cal"),
+}
+
 # field name -> (unit, zh label, en label); unlisted fields show raw names
 FIELD_INFO = {
     "fref": ("Hz", "参考频率", "reference frequency"),

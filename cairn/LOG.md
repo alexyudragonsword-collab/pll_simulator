@@ -2,6 +2,17 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-18 · appbridge: JSON layer for the Android app (PR-1 of 2)
+
+- `src/pllsim/appbridge.py` + tests: str→str JSON RPC over the existing
+  `guiutil` machinery, in-package so pytest reaches it. 5 mutations each
+  turned a test red before the suite was trusted.
+- Found and fixed en route: `np.trapezoid` (numpy≥2-only) made the declared
+  `numpy>=1.24` floor a lie; floors now measured — full suite green on
+  Python 3.10 + numpy 1.24.4 + scipy 1.8.1, so `scipy>=1.8`.
+- `GROUP_LABELS` moved webgui→guiutil (third consumer appeared).
+- Conclusions to settle in `cairn/android-app.md` with PR-2.
+
 ## 2026-08-18 · Project Cairn initialized
 
 - Initialized Project Cairn structure: `AGENTS.md`, `CLAUDE.md` (now the

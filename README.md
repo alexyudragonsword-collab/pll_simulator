@@ -228,6 +228,7 @@ src/pllsim/
   corners.py  fit.py  modulation.py  montecarlo.py  selector.py
   settling.py  synth.py
   guiutil.py   GUI-support introspection (no GUI dependency)
+  appbridge.py JSON bridge for embedded hosts (the Android app)
   plotting.py  presets.py
 examples/      ex01..ex21 (plots into examples/out/)
 tests/         closed-form core math + architecture-level regressions

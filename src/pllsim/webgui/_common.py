@@ -7,18 +7,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import streamlit as st
 
-from pllsim.guiutil import enumerate_fields, fmt_value
-
-GROUP_LABELS = {
-    "": ("环路 / 顶层", "Loop / top level"),
-    "osc": ("振荡器", "Oscillator"),
-    "cp": ("电荷泵", "Charge pump"),
-    "sampler": ("采样器", "Sampler"),
-    "filt": ("环路滤波器", "Loop filter"),
-    "tdc": ("TDC", "TDC"),
-    "dlf": ("数字环路滤波器", "Digital loop filter"),
-    "frac": ("小数N / DTC / 校准", "Fractional-N / DTC / cal"),
-}
+from pllsim.guiutil import GROUP_LABELS, enumerate_fields, fmt_value
 
 
 def lang() -> str:

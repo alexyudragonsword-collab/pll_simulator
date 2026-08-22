@@ -10,8 +10,13 @@ readme = "README.md"
 requires-python = ">=3.10"
 license = { text = "MIT" }
 dependencies = [
+    # Floors are measured, not aspirational: the full suite passes on Python
+    # 3.10 with numpy 1.24.4 + scipy 1.8.1 (the oldest stack the Android
+    # build can get -- Chaquopy's scipy wheels stop at Python 3.10).  numpy
+    # 1.24 was a lie until core/jitter.py stopped calling np.trapezoid,
+    # which only exists in numpy>=2.
     "numpy>=1.24",
-    "scipy>=1.10",
+    "scipy>=1.8",
     "matplotlib>=3.7",
 ]
 
@@ -64,6 +69,7 @@ files = [
     "src/pllsim/blocks",
     "src/pllsim/calibration",
     "src/pllsim/arch",
+    "src/pllsim/appbridge.py",
     "src/pllsim/corners.py",
     "src/pllsim/guiutil.py",
     "src/pllsim/modulation.py",
