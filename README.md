@@ -96,6 +96,17 @@ the run's artifacts, or pass an existing release tag to attach them as
 release assets.  Expect large files (Python + numpy/scipy/matplotlib
 bundled; the web exes also carry streamlit).
 
+**Android app** (workbench only, fully offline): `android/` is a Gradle
+project embedding CPython via Chaquopy — a WebView front end over
+`pllsim.appbridge`, with the parameter form generated from the same
+`guiutil.FIELD_INFO` as both desktop GUIs.  Build a sideload APK from
+Actions -> Android APK -> Run workflow (manual only; it is not a release
+gate), or locally with Android Studio opened on `android/`.  The app pins
+Python 3.10 because Chaquopy's package repository has no scipy wheel for
+anything newer — the pyproject dependency floors are verified against that
+stack, and `cairn/android-app.md` records the constraints before you change
+any of this.
+
 Quick start:
 
 ```python

@@ -10,6 +10,7 @@ submodule needs its own import statement is not something a name tells you, so
 difference with no reason a user could see.
 """
 from . import (
+    appbridge,
     corners,
     fit,
     guiutil,
@@ -49,6 +50,6 @@ __all__ = [
     "SSPLL", "SSPLLConfig",
     "CPConfig", "DTCConfig", "FilterDesign", "OscConfig", "SamplerConfig",
     "TDCConfig",
-    "corners", "fit", "guiutil", "modulation", "montecarlo", "plotting",
-    "presets", "selector", "settling", "synth",
+    "appbridge", "corners", "fit", "guiutil", "modulation", "montecarlo",
+    "plotting", "presets", "selector", "settling", "synth",
 ]
