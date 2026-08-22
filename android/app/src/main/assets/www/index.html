@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pllsim</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <h1>pllsim <span id="version"></span></h1>
+  <button id="lang" class="ghost">EN</button>
+</header>
+
+<div id="boot" class="card">
+  <p data-zh="正在启动 Python 运行时（首次约数秒）…"
+     data-en="Starting the Python runtime (a few seconds on first launch)…">
+     正在启动 Python 运行时（首次约数秒）…</p>
+</div>
+
+<main id="app" hidden>
+  <section class="card">
+    <label data-zh="preset（每次运行取全新实例）"
+           data-en="preset (fresh instance per run)">preset（每次运行取全新实例）</label>
+    <select id="preset"></select>
+    <p id="preset-info" class="muted"></p>
+    <p id="edited" class="muted" hidden></p>
+    <div id="form"></div>
+  </section>
+
+  <section class="card">
+    <h2>analyze() — <span data-zh="线性模型" data-en="linear model">线性模型</span></h2>
+    <button id="run-analyze" class="primary"
+            data-zh="运行 analyze" data-en="Run analyze">运行 analyze</button>
+    <div id="analyze-out"></div>
+  </section>
+
+  <section class="card">
+    <h2>simulate() — <span data-zh="时域行为级" data-en="time-domain behavioral">时域行为级</span></h2>
+    <div class="grid3">
+      <label><span data-zh="参考周期数" data-en="ref cycles">参考周期数</span>
+        <input id="n-cycles" type="number" value="50000" min="10000" step="10000"></label>
+      <label>seed
+        <input id="seed" type="number" value="1" min="0"></label>
+      <label><span data-zh="起始频偏 [MHz]" data-en="start offset [MHz]">起始频偏 [MHz]</span>
+        <input id="f-off" type="number" value="0" step="1"></label>
+      <label><span data-zh="噪声" data-en="noise">噪声</span>
+        <input id="noise" type="checkbox" checked></label>
+      <label><span data-zh="校准" data-en="calibration">校准</span>
+        <input id="cal" type="checkbox" checked></label>
+      <label><span data-zh="DTC 增益误差" data-en="DTC gain error">DTC 增益误差</span>
+        <input id="dtc-err" type="number" value="0" step="0.01"></label>
+    </div>
+    <div id="fine-row" hidden>
+      <label><span data-zh="参考周期内细采样 M（0=引擎默认）"
+                   data-en="intra-period samples M (0 = engine default)">参考周期内细采样 M（0=引擎默认）</span>
+        <input id="m-os" type="number" value="0" min="0" max="4096" step="16"></label>
+      <p id="fine-note" class="muted"></p>
+    </div>
+    <button id="run-simulate" class="primary"
+            data-zh="运行 simulate" data-en="Run simulate">运行 simulate</button>
+    <div id="simulate-out"></div>
+  </section>
+</main>
+
+<div id="busy" hidden><div class="spinner"></div><p id="busy-text"></p></div>
+
+<script src="app.js"></script>
+</body>
+</html>

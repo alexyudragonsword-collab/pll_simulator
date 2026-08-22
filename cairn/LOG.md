@@ -2,6 +2,28 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-22 · Android app builds green; APK artifact produced
+
+- `android.yml` run 2 on `7c7c5a6`: success in 2m45s after the sdist fix
+  (run 1 died in Gradle 8 task validation — `install("../..")` trap, see
+  `cairn/android-app.md`). Artifact `pllsim-debug-apk`, 84 MB, arm64+x86_64.
+- Chaquopy resolved numpy/scipy/matplotlib for Python 3.10 from its own
+  repo with pllsim's floors (`numpy>=1.24, scipy>=1.8, matplotlib>=3.7`) —
+  the open question about its matplotlib version resolved itself green.
+- Still unverified: touch on a physical phone (needs a sideload).
+- Shipped as one PR (#36, two commits) rather than the planned two.
+
+## 2026-08-18 · appbridge: JSON layer for the Android app (PR-1 of 2)
+
+- `src/pllsim/appbridge.py` + tests: str→str JSON RPC over the existing
+  `guiutil` machinery, in-package so pytest reaches it. 5 mutations each
+  turned a test red before the suite was trusted.
+- Found and fixed en route: `np.trapezoid` (numpy≥2-only) made the declared
+  `numpy>=1.24` floor a lie; floors now measured — full suite green on
+  Python 3.10 + numpy 1.24.4 + scipy 1.8.1, so `scipy>=1.8`.
+- `GROUP_LABELS` moved webgui→guiutil (third consumer appeared).
+- Conclusions to settle in `cairn/android-app.md` with PR-2.
+
 ## 2026-08-18 · Project Cairn initialized
 
 - Initialized Project Cairn structure: `AGENTS.md`, `CLAUDE.md` (now the
