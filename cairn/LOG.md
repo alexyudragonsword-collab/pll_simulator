@@ -2,6 +2,21 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-22 · Android line paused after a parity audit against the Qt GUI
+
+- v3+v4 merged (#38, CI + APK green). Android work stops here by request.
+- Audited both GUIs side by side: 8/11 pages covered, and **5 within-page
+  gaps** the page count hid — see `cairn/android-app.md` → Parity. The one
+  that matters is the missing `fine_oversample_note` on the app's Spurs tab
+  (an under-resolved M reads the spur low, silently); the one worth fixing
+  everywhere is that only Qt passes `fine_oversample` to the measured
+  spectrum — web and app both cannot show the reference spur there.
+- Two earlier judgments **corrected by measurement**: Fit's synthetic-demo
+  path needs no file picker and fits in <0.03 s; MonteCarlo runs serially
+  at 0.88 s/chip (50k cycles) with `n_jobs=1`, so neither is blocked the
+  way the first pass claimed. Correction note is in the topic note.
+- `guiqt/widgets.py` still keeps a third copy of the form group labels.
+
 ## 2026-08-22 · Android app v4: Modulation and Drift tabs (8/11 Qt pages)
 
 - appbridge grew modulate / drift / drift_info; EVM 0.98%→2.90% under 5%
