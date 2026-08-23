@@ -177,6 +177,12 @@ async function runAnalyze() {
       html += `<pre class="spurs">${esc(JSON.stringify(r.spurs_analytic, null, 1))}</pre>`;
     }
     html += pngHtml(r.png);
+    // the curve says what shape the noise is; the pie says what to fix
+    html += pngHtml(r.pie_png) + tableHtml(r.ipn_rows.map(x => ({
+      source: x.source,
+      "share [%]": x.share_pct.toFixed(1),
+      "jitter [fs]": x.jitter_fs.toFixed(1),
+    })));
     out.innerHTML = html;
   } catch (e) {
     out.innerHTML = errHtml(e);

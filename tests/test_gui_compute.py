@@ -89,6 +89,15 @@ def test_workbench_simulate_runs():
     assert out.metric or out.dataframe
 
 
+def test_workbench_analyze_shows_the_ipn_breakdown():
+    at = _run("1_Workbench.py")
+    out = _press(at, "Run analyze")
+    rows = [r for df in out.dataframe for r in _rows_of(df)]
+    shares = [r["share [%]"] for r in rows if "share [%]" in r]
+    assert shares, f"no IPN breakdown table: {rows[:2]}"
+    assert sum(shares) == pytest.approx(100.0, abs=0.3)
+
+
 @pytest.mark.parametrize("arch", ["ilcm_250m_12g", "mdll_150m_2p4g"])
 def test_workbench_simulates_the_injection_locked_pair(arch):
     """These name their start-offset keyword differently from the rest, which

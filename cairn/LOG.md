@@ -15,6 +15,11 @@ This file records substantive progress in reverse-chronological order — newest
   contributor buys 29% of the total, not 25%.
 - Wired into Qt, web and the Android tab in the same change (the rule), and
   driven on each. 4 mutations verified red.
+- Then extended from the 5 benchmark presets to **every** analyze(): the
+  workbench carries it on all three surfaces, so it covers all 15 presets
+  plus edited configs and selector candidates. Checked on each of the 15 —
+  shares sum to 100.0000% including the degenerate ILCM case (3 sources,
+  one at 97.9%), which is where a pie routine would fall over.
 
 ## 2026-08-22 · All five parity gaps closed, plus a Qt crash the audit surfaced
 

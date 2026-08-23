@@ -165,6 +165,12 @@ def _analyze(preset: str = "", overrides: dict[str, str] | None = None,
                            for k, v in ar.spurs_analytic.items()},
         "notes": list(ar.notes),
         "png": _png(plot_pn_breakdown(ar, None)),
+        # the same decomposition the benchmark tab shows, for whatever is in
+        # the workbench: any preset, a selector candidate, an edited config.
+        # The curve says what shape the noise is; this says what to fix.
+        "pie_png": _png(plot_ipn_pie(ar)),
+        "ipn_rows": [{"source": k, "share_pct": share * 100.0,
+                      "jitter_fs": j} for k, share, j in ar.ipn_shares()],
     }
 
 

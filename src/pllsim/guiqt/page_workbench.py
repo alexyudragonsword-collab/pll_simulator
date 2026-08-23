@@ -25,7 +25,7 @@ from ..guiutil import (
     simulate_kwargs,
     supports_fine,
 )
-from ..plotting import plot_pn_breakdown
+from ..plotting import plot_ipn_pie, plot_pn_breakdown
 from .i18n import tr
 from .widgets import (
     ConfigForm,
@@ -219,8 +219,14 @@ class WorkbenchPage(Page):
             self._a_lay.addWidget(table_from_rows(
                 [{"check": en, "value": val} for en, _zh, val in bank]))
         figs = FigList()
-        figs.set_figs([plot_pn_breakdown(ar, None)])
+        # curve then pie: "what shape is the noise" and "what do I fix
+        # first" are different questions, and the table of spurs below
+        # answers neither
+        figs.set_figs([plot_pn_breakdown(ar, None), plot_ipn_pie(ar)])
         self._a_lay.addWidget(figs)
+        self._a_lay.addWidget(table_from_rows(
+            [{"source": k, "share [%]": f"{share * 100:.1f}",
+              "jitter [fs]": f"{j:.1f}"} for k, share, j in ar.ipn_shares()]))
         spurs = [{"spur": k, "value [dBc]": f"{float(v):.1f}"}
                  for k, v in ar.spurs_analytic.items()
                  if isinstance(v, (int, float))]

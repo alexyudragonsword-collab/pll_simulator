@@ -54,6 +54,19 @@ def test_analyze_reports_the_number_the_library_computes():
     assert png[:8] == b"\x89PNG\r\n\x1a\n"
 
 
+@pytest.mark.parametrize("name", ["ilcm_250m_12g", "adpll_100m_10g",
+                                  "spll_frac_52m_6p253g"])
+def test_analyze_carries_the_ipn_breakdown_for_any_preset(name):
+    """Not just the benchmark tab: the workbench shows this for whatever is
+    loaded, which is every preset plus edited configs and candidates."""
+    got = call("analyze", preset=name)
+    rows = got["ipn_rows"]
+    assert sum(r["share_pct"] for r in rows) == pytest.approx(100.0, abs=1e-6)
+    assert base64.b64decode(got["pie_png"])[:8] == b"\x89PNG\r\n\x1a\n"
+    quad = math.sqrt(sum(r["jitter_fs"] ** 2 for r in rows))
+    assert quad == pytest.approx(got["jitter_fs"], rel=1e-6)
+
+
 def test_an_override_moves_the_number():
     """A parameter that reads correctly and does nothing is this repo's
     signature bug; the bridge must not add a new place for it to happen."""

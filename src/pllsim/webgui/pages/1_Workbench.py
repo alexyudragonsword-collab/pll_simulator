@@ -27,7 +27,7 @@ from pllsim.guiutil import (
     simulate_kwargs,
     supports_fine,
 )
-from pllsim.plotting import plot_pn_breakdown
+from pllsim.plotting import plot_ipn_pie, plot_pn_breakdown
 
 st.title(L("架构工作台", "Architecture workbench"))
 
@@ -105,6 +105,12 @@ with col_a:
              if np.isfinite(ar.loop.pm_deg) else "-"),
         ])
         show_fig(plot_pn_breakdown(ar, None))
+        # the curve says what shape the noise is; the pie says what to fix
+        show_fig(plot_ipn_pie(ar))
+        st.dataframe([{"source": k, "share [%]": round(share * 100, 1),
+                       "jitter [fs]": round(j, 1)}
+                      for k, share, j in ar.ipn_shares()],
+                     use_container_width=True)
         if ar.spurs_analytic:
             st.write(L("解析杂散 [dBc]:", "analytic spurs [dBc]:"))
             st.json({k: round(float(v), 1)

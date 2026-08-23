@@ -75,7 +75,14 @@ def test_the_pie_pools_small_slices_and_says_how_many():
     assert all("fs)" in ln for ln in labels), labels
 
 
-def test_the_pie_survives_an_architecture_with_few_sources():
-    ar = presets.ilcm_250m_12g().analyze()
+@pytest.mark.parametrize("name", list(presets.ALL_PRESETS))
+def test_every_preset_can_be_drawn_as_a_pie(name):
+    """The workbench offers this for all 15, including ILCM/MDLL with three
+    sources and one of them at 98% -- a partition that degenerate is exactly
+    where a pie routine falls over."""
+    ar = presets.ALL_PRESETS[name]().analyze()
+    rows = ar.ipn_shares()
+    assert rows and sum(s for _k, s, _j in rows) == pytest.approx(1.0, abs=1e-9)
     fig = plot_ipn_pie(ar)
     assert len(fig.axes[0].patches) >= 1
+    assert fig.axes[0].get_legend() is not None

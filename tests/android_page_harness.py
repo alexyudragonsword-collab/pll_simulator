@@ -142,7 +142,15 @@ def _workbench(page):
     page.wait_for_selector("#analyze-out img.plot", timeout=180_000)
     worse = page.locator("#analyze-out .metric b").first.inner_text()
     assert float(worse.split()[0]) > float(base.split()[0]) * 1.5, (base, worse)
-    print(f"workbench: bank renders; a form edit moved {base} -> {worse}")
+    # every preset's linear model carries the IPN breakdown, not only the
+    # benchmark tab's five: curve + pie is two plots, and the share table
+    # is read back rather than the image trusted
+    assert page.locator("#analyze-out img.plot").count() == 2
+    cells = page.locator("#analyze-out table.rows td").all_inner_texts()
+    shares = [float(c) for c in cells[1::3]]
+    assert abs(sum(shares) - 100.0) < 0.3, shares
+    print(f"workbench: bank renders; a form edit moved {base} -> {worse}; "
+          f"IPN pie sums to {sum(shares):.1f}%")
 
 
 def _spurs(page):

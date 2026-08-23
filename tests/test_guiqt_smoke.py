@@ -42,6 +42,18 @@ def test_workbench_analyze_and_render(app):
     page.deleteLater()
 
 
+def test_workbench_analyze_shows_the_ipn_breakdown(app):
+    """Every preset's linear model gets the pie, not only the benchmarks."""
+    from pllsim.guiqt.page_workbench import WorkbenchPage
+    page = WorkbenchPage()
+    page.preset.setCurrentText("ilcm_250m_12g")   # only three sources
+    ar = page.compute_analyze()
+    page.render_analyze(ar)
+    assert sum(s for _k, s, _j in ar.ipn_shares()) == pytest.approx(1.0)
+    assert page._a_lay.count() >= 2, "curve, pie and share table expected"
+    page.deleteLater()
+
+
 def test_workbench_form_overrides_flow(app):
     from pllsim.guiqt.page_workbench import WorkbenchPage
     page = WorkbenchPage()
