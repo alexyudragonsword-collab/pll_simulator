@@ -116,6 +116,24 @@ def test_spurs_predicts_and_simulates():
     assert _produced_output(b)
 
 
+def test_spurs_measured_spectrum_survives_an_adpll_preset():
+    """This page's dropdown carries two ADPLL fractional presets, whose
+    simulate() takes no fine_oversample.  The measured spectrum now offers
+    an M box, so it has to route through simulate_kwargs or pressing the
+    button on either preset raises TypeError.
+    """
+    at = _run("4_Spurs.py")
+    names = list(at.selectbox[0].options)
+    adpll = next(n for n in names if "adpll" in n)
+    at = at.selectbox[0].select(adpll).run()
+    # by key, never by index: a widget inserted above would silently
+    # re-point an index-based lookup at the wrong box
+    at.number_input(key="m_meas").set_value(128).run()
+    out = _press_key(at, "measure")
+    assert not out.exception, out.exception
+    assert _produced_output(out)
+
+
 def test_spurs_page_compares_the_reference_spur():
     """The reference spur needs an intra-period record, so this page could
     not show it at all until the M control existed."""

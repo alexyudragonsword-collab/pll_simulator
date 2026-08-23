@@ -14,8 +14,7 @@ pytest tests/                    # ~18 min; -x -k <name> while iterating
 
 `QT_QPA_PLATFORM=offscreen` is needed for the desktop-GUI tests on a headless
 box.  They *skip* without PySide6 and its system GL libraries rather than
-fail, which is exactly how the two GUIs drifted apart for several releases —
-if you touch `guiqt/`, make sure those tests are actually running for you.
+fail — see the next section for why that matters.
 
 ## Three front ends share one library
 
@@ -32,18 +31,24 @@ QT_QPA_PLATFORM=offscreen pytest tests/test_guiqt_smoke.py -q   # read the count
 pytest tests/test_appbridge.py -q           # the Android bridge, no SDK needed
 ```
 
-The Android *page* is not covered by any of those: drive it by serving
-`android/app/src/main/assets/www/` with an HTTP shim in place of
-`window.host` and clicking through it in real Chromium.  The invisible
-overlay that swallowed every tap was found that way and by nothing else.
+The Android *page* is not covered by any of those.  `python
+tests/android_page_harness.py` is: it stands up its own shim for
+`window.host` and drives every tab in real Chromium against the real
+bridge (`pip install playwright` first; it is deliberately not in CI, and
+not collected by pytest).  The invisible overlay that swallowed every tap,
+and a crash in the measured spectrum, were both found that way and by
+nothing else.
 The APK itself builds from Actions → *Android APK* → Run workflow, which is
 manual and deliberately off the push path.
 
 A bridge method with no caller is half a feature: `appbridge._METHODS`
 gaining an entry that no page renders looks tested and does nothing.  Wire
-the UI in the same change.  Where the surfaces differ on purpose — phone
-defaults, unit choices — record it in `cairn/android-app.md` so the next
-reader can tell a decision from a gap.
+the UI in the same change — `tests/test_android_parity.py` checks both
+directions from text alone, so it runs in every CI job at no browser cost.
+
+Where the surfaces differ on purpose — phone defaults, unit choices — record
+it in `cairn/android-app.md` so the next reader can tell a decision from a
+gap.
 
 ## What CI enforces
 

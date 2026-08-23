@@ -18,6 +18,8 @@ from pllsim.guiutil import (
     frac_presets,
     make_pll,
     ref_spur_comparison,
+    simulate_kwargs,
+    supports_fine,
 )
 from pllsim.plotting import plot_spur_spectrum
 
@@ -62,14 +64,32 @@ st.caption(L("解析表是预测，这里是同一配置跑出来的周期图，
              "ex15 的对照就是这两者。",
              "the table is the prediction; this is the periodogram of the same "
              "config with the detected spurs marked — ex15 compares the two."))
-n_meas = int(st.number_input(L("参考周期数", "ref cycles"), 50_000, 500_000,
-                             150_000, 50_000))
+cm = st.columns(2)
+n_meas = int(cm[0].number_input(L("参考周期数", "ref cycles"), 50_000, 500_000,
+                                150_000, 50_000))
+# M belongs here too, not only in the reference-spur section below: without
+# an intra-period record this spectrum can show fractional spurs and nothing
+# else, so the reference spur the page discusses is simply absent from it.
+m_meas = int(cm[1].number_input(
+    L("周期内细采样 M（0=引擎默认）", "intra-period samples M (0 = default)"),
+    0, 4096, 0, 16, key="m_meas",
+    help=L("大于 1 才能在这张谱里看到参考杂散；对无周期内记录的架构（ADPLL）会"
+           "被忽略。", "M > 1 is what puts the reference spur in this "
+           "spectrum; ignored for architectures with no intra-period record "
+           "(ADPLL).")))
 if st.button(L("仿真并画谱", "Simulate and plot"), key="measure"):
     pll = make_pll(preset)
     pll.cfg.frac.dtc.inl_sin = (inl_amp, inl_cyc, 0.3) if inl_amp else ()
     pll.cfg.frac.dtc.gain_error_residual = gain_eps
+    if m_meas > 1 and not supports_fine(pll):
+        st.info(L("该架构没有周期内记录，M 已忽略。",
+                  "this architecture has no intra-period record; M ignored."))
     with st.spinner(L("时域仿真中…", "simulating...")):
-        sim = pll.simulate(n_meas, seed=2)
+        # through simulate_kwargs, which filters by the engine's signature:
+        # two of the fractional presets in this page's dropdown are ADPLLs
+        # and take no fine_oversample at all
+        sim = pll.simulate(n_meas, **simulate_kwargs(
+            pll, seed=2, fine_oversample=m_meas))
     for note in sim.notes:
         st.warning(note)
     show_fig(plot_spur_spectrum(sim, ar=make_pll(preset).analyze()))

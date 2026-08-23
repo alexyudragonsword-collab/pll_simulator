@@ -2,6 +2,23 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-22 · All five parity gaps closed, plus a Qt crash the audit surfaced
+
+- The five app/Qt differences are fixed and each verified in Chromium; see
+  `cairn/android-app.md` → Parity for the table and one **correction**: the
+  bank table is empty in *all three* GUIs for stock presets, so that gap's
+  user-visible consequence was smaller than the audit claimed.
+- **New bug found while fixing:** Qt's Spurs page passed M straight into
+  `simulate()`, and two of its own seven fractional presets are ADPLLs that
+  take no `fine_oversample` — `TypeError` on either. All three surfaces now
+  route through `simulate_kwargs`. Regression test mutation-verified.
+- Measured, not assumed: M=0 shows nothing at fref; M=64 puts the reference
+  spur at −111.9 dBc. That is what the web and app spectra were missing.
+- The rule stopped being prose-only: `tests/test_android_parity.py` (16
+  checks, browser-free, 3 mutations verified) and the committed
+  `tests/android_page_harness.py`. `guiqt/widgets.py`'s third copy of the
+  group labels is gone.
+
 ## 2026-08-22 · Rule recorded: a change is not done until all three front ends are checked
 
 - `AGENTS.md` gains "Three front ends, one contract" — web / Qt / Android

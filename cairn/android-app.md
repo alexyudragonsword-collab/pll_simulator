@@ -50,10 +50,12 @@ pages have app equivalents. What each would actually cost is measured under
 - **`MPLCONFIGDIR` must be set before `Python.start()`** (Kotlin `Os.setenv`
   to a writable app dir): matplotlib writes a font cache on first import and
   dies on a read-only default.
-- The WebView page can be driven end-to-end without Android: serve
-  `assets/www/` plus an HTTP shim for `window.host`, run real Chromium
-  (Playwright) against the real bridge. That harness moved a form field and
-  watched analyze jitter go 258.3 → 2955.2 fs, and ran a 12k-cycle simulate.
+- The WebView page can be driven end-to-end without Android:
+  `python tests/android_page_harness.py` stands up an HTTP shim for
+  `window.host` and drives every tab in real Chromium against the real
+  bridge. It moves a form field and watches analyze jitter go 258.3 → 2955.2
+  fs, so a decorative control cannot pass. Not in CI (needs Playwright and
+  several minutes); `AGENTS.md` names it as the required manual check.
 
 ## Lessons
 
@@ -75,28 +77,37 @@ pages have app equivalents. What each would actually cost is measured under
   instead (`python -m build --sdist --outdir android/app/pysrc .`), which
   the fresh-venv check also proved installable with the old stack.
 
-## Parity with the desktop GUIs (audited 2026-08-22)
+## Parity with the desktop GUIs (audited 2026-08-22, all five closed)
 
-8 of the Qt GUI's 11 pages have app equivalents. Within those 8, five
-concrete gaps found by reading both sides rather than by memory:
+8 of the Qt GUI's 11 pages have app equivalents. The audit found five gaps
+inside those 8 — all fixed the same day, each verified in a real browser:
 
-| gap | where | consequence |
+| gap | where | how it was closed |
 |---|---|---|
-| `bank` bridge method is never called | app workbench | the coarse-band bank table Qt shows under analyze is absent; the method exists and is tested, only the render is missing |
-| measured spectrum does not pass `fine_oversample` | app + **web** Spurs | Qt's spectrum plot can show the reference spur; the other two cannot. A three-way inconsistency that predates the app — Qt is the odd one out, and it is the one that is right |
-| no `fine_oversample_note` on the Spurs tab | app Spurs | the "M too coarse, the spur will read low" warning appears only in the workbench. This is the silent-wrong-number class the repo cares most about |
-| selector table drops the PM column | app Selector | `pm_deg` is in the bridge reply, unrendered |
-| FLL banner goes blank for non-FLL architectures | app Hop | Qt says "no FLL in this architecture"; silence reads as a failed lookup |
+| `bank` bridge method was never called | app workbench | the table now renders above the analyze metrics. **Correction:** the audit said Qt "shows" it — in fact `osc_bank_report` returns nothing until the varactor has a control-voltage range, which no stock preset sets, so all three GUIs were empty by default. The gap was real, its user-visible consequence was not |
+| measured spectrum ignored `fine_oversample` | app + **web** Spurs | both gained an M box. Measured: at M=0 nothing appears at fref; at M=64 the reference spur reads −111.9 dBc |
+| no `fine_oversample_note` on the Spurs tab | app Spurs | live caption under both M boxes, carrying the under-resolved warning — the silent-low-reading class |
+| selector table dropped the PM column | app Selector | rendered from the `pm_deg` the reply already carried |
+| FLL banner went blank for non-FLL architectures | app Hop | says "no FLL in this architecture", as Qt does |
+
+**A Qt bug the audit surfaced:** its Spurs page passed M straight into
+`simulate()`, and two of the seven fractional presets in its own dropdown
+are ADPLLs whose engines take no `fine_oversample` — so "Simulate + plot
+spectrum" raised `TypeError` on either of them. All three surfaces now go
+through `guiutil.simulate_kwargs`, which filters by the engine signature.
+Regression test: `test_spurs_measured_spectrum_survives_an_adpll_preset`.
+
+**Drift guards now in place:** `tests/test_android_parity.py` fails when a
+bridge method has no caller (both directions) or an id `app.js` drives
+disappears from `index.html`, at no browser cost; and
+`tests/android_page_harness.py` is the committed Chromium harness the
+AGENTS.md rule names. `guiqt/widgets.py` no longer keeps its own group
+labels — it derives the English half from `guiutil.GROUP_LABELS`.
 
 Deliberate, not gaps: workbench cycle default (50k app vs 150k Qt — phone),
 start offset in MHz (app follows the web GUI; Qt uses Hz), analytic spurs as
 JSON rather than a table, and no "re-run live" button on Benchmarks (Qt's is
 redundant — `benchmark_table()` already computes its linear column live).
-
-**Third copy of the group labels:** `guiqt/widgets.py` keeps its own
-English-only `GROUP_TITLES` beside `guiutil.GROUP_LABELS` (which the web GUI
-and the app share). The key sets agree today — checked — but a new
-sub-config would have to be added in two places.
 
 ### Correction to the earlier "not portable" judgment
 

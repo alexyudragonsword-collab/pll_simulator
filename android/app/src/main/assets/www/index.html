@@ -50,6 +50,7 @@
     <h2>analyze() — <span data-zh="线性模型" data-en="linear model">线性模型</span></h2>
     <button id="run-analyze" class="primary"
             data-zh="运行 analyze" data-en="Run analyze">运行 analyze</button>
+    <div id="bank-out"></div>
     <div id="analyze-out"></div>
   </section>
 
@@ -104,8 +105,13 @@
 
   <section class="card">
     <h2 data-zh="时域实测谱（与上表对照）" data-en="Measured spectrum (against the table)">时域实测谱（与上表对照）</h2>
-    <label><span data-zh="参考周期数" data-en="ref cycles">参考周期数</span>
-      <input id="sp-ncyc" type="number" value="60000" min="20000" step="20000"></label>
+    <div class="grid3">
+      <label><span data-zh="参考周期数" data-en="ref cycles">参考周期数</span>
+        <input id="sp-ncyc" type="number" value="60000" min="20000" step="20000"></label>
+      <label><span data-zh="周期内细采样 M（0=引擎默认）" data-en="intra-period samples M (0 = default)">周期内细采样 M（0=引擎默认）</span>
+        <input id="sp-mmeas" type="number" value="0" min="0" max="4096" step="16"></label>
+    </div>
+    <p id="sp-mmeas-note" class="muted"></p>
     <button id="sp-measure" class="primary"
             data-zh="仿真并画谱" data-en="Simulate and plot">仿真并画谱</button>
     <div id="sp-measure-out"></div>
@@ -120,6 +126,7 @@
       <label><span data-zh="周期数" data-en="cycles">周期数</span>
         <input id="sp-refcyc" type="number" value="20000" min="5000" step="5000"></label>
     </div>
+    <p id="sp-ref-note" class="muted"></p>
     <button id="sp-ref" class="primary"
             data-zh="比较参考杂散" data-en="Compare">比较参考杂散</button>
     <div id="sp-ref-out"></div>

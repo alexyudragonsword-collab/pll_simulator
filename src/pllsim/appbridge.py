@@ -260,11 +260,25 @@ def _spur_predict(preset: str, inl_amp_s: float = 50e-15,
 
 def _spur_spectrum(preset: str, inl_amp_s: float = 50e-15,
                    inl_cycles: float = 1.0, gain_residual: float = 0.002,
-                   n_cycles: int = 150_000, seed: int = 2) -> dict:
+                   n_cycles: int = 150_000, seed: int = 2,
+                   fine_oversample: int = 0) -> dict:
+    """Measured periodogram of the same config the prediction table used.
+
+    M reaches the engine through simulate_kwargs, which filters by the
+    engine's own signature: two of the fractional presets are ADPLLs, whose
+    simulate() takes no fine_oversample at all.  Without M > 1 this spectrum
+    can show fractional spurs and nothing else -- the reference spur lives
+    inside one reference period and no per-edge sample sees it.
+    """
     pll = _frac_pll(preset, inl_amp_s, inl_cycles, gain_residual)
-    sim = pll.simulate(int(n_cycles), seed=seed)
+    kw = simulate_kwargs(pll, seed=int(seed),
+                         fine_oversample=int(fine_oversample))
+    sim = pll.simulate(int(n_cycles), **kw)
     fig = plot_spur_spectrum(sim, ar=make_pll(preset, {}).analyze())
-    return {"notes": list(sim.notes), "png": _png(fig)}
+    return {"notes": list(sim.notes),
+            "fine_applied": bool(int(fine_oversample) > 1
+                                 and supports_fine(pll)),
+            "png": _png(fig)}
 
 
 def _ref_spur(preset: str, m: int = 128, n_cycles: int = 40_000) -> dict:

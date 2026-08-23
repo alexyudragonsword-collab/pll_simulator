@@ -133,6 +133,43 @@ def test_spurs_page_says_why_a_sampling_loop_has_no_reference_spur(app):
     page.deleteLater()
 
 
+def test_spurs_measured_spectrum_survives_an_adpll_preset(app):
+    """Two of this page's own seven fractional presets are ADPLLs, whose
+    simulate() takes no fine_oversample -- and the page passed M straight in,
+    so pressing "Simulate + plot spectrum" on either raised
+    "ADPLL.simulate() got an unexpected keyword argument 'fine_oversample'".
+    Mutation: drop simulate_kwargs from compute_measure and this goes red.
+    """
+    from pllsim.guiqt.page_analysis import SpursPage
+    page = SpursPage()
+    page.MEASURE_CYCLES = 4_000
+    names = [page.preset.itemText(i) for i in range(page.preset.count())]
+    page.preset.setCurrentText(next(n for n in names if "adpll" in n))
+    page.fine_os.setValue(128)
+    page._fine_hint()
+    assert "no intra-period record" in page.fine_note.text()
+    sim, ar = page.compute_measure()            # used to raise TypeError
+    page.render_measure((sim, ar))
+    assert ar.jitter_fs > 0
+    page.deleteLater()
+
+
+def test_spurs_measured_spectrum_reaches_past_the_reference_edge(app):
+    """M is what puts the reference spur in this plot: without it the record
+    is one sample per reference edge and nothing at fref can appear."""
+    from pllsim.guiqt.page_analysis import SpursPage
+    page = SpursPage()
+    page.MEASURE_CYCLES = 20_000
+    names = [page.preset.itemText(i) for i in range(page.preset.count())]
+    page.preset.setCurrentText(next(n for n in names if n.startswith("cppll")))
+    page.fine_os.setValue(64)
+    sim, _ = page.compute_measure()
+    from pllsim import presets
+    fref = presets.ALL_PRESETS[page.preset.currentText()]().cfg.fref
+    assert any(abs(f - fref) < 1e3 for f in sim.spurs_fft), sim.spurs_fft
+    page.deleteLater()
+
+
 def test_selector_page_flow(app):
     from pllsim.guiqt.page_design import SelectorPage
     page = SelectorPage()
