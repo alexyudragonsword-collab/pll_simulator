@@ -252,6 +252,22 @@ def test_drift_page_computes_a_tracking_lag(app):
     page.deleteLater()
 
 
+def test_benchmarks_page_plots_an_ipn_pie(app):
+    """The table says whether the model matches the paper; the pie says
+    which source to attack first.  Both live on this page now."""
+    from pllsim.guiqt.page_analysis import BenchmarksPage
+    page = BenchmarksPage()
+    names = [page.pie_preset.itemText(i)
+             for i in range(page.pie_preset.count())]
+    assert len(names) == 5, names
+    page.pie_preset.setCurrentText("bench_wu19_spll_frac_52m_6p253g")
+    name, ar = page.compute_pie()             # same fn the worker runs
+    assert name == "bench_wu19_spll_frac_52m_6p253g"
+    assert sum(s for _k, s, _j in ar.ipn_shares()) == pytest.approx(1.0)
+    page.render_pie((name, ar))               # renders without raising
+    page.deleteLater()
+
+
 def test_the_desktop_entry_point_is_importable(app):
     """`pllsim-gui` and the exe both go through app.main."""
     from pllsim.guiqt.app import main

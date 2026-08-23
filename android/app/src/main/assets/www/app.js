@@ -597,6 +597,8 @@ async function loadBench() {
   if (benchLoaded) return;
   try {
     const r = await call("benchmarks");
+    $("pie-preset").innerHTML = r.presets.map(n =>
+      `<option value="${esc(n)}">${esc(n)}</option>`).join("");
     $("bench-out").innerHTML = tableHtml(r.rows.map(x => ({
       paper: x.paper,
       "published [fs]": x["published [fs]"],
@@ -610,6 +612,20 @@ async function loadBench() {
 }
 document.querySelector('#tabs button[data-tab="bench"]')
   .addEventListener("click", loadBench);
+
+$("pie-run").addEventListener("click", () => runInto(
+  "pie-out", async () => {
+    const r = await call("benchmark_ipn", { preset: $("pie-preset").value });
+    return metricsHtml([
+      ["jitter", r.jitter_fs.toFixed(1) + " fs"],
+      ["IPN", r.ipn_dbc.toFixed(1) + " dBc"],
+      [lang === "zh" ? "主导源" : "dominant", r.dominant],
+    ]) + pngHtml(r.png) + tableHtml(r.rows.map(x => ({
+      source: x.source,
+      "share [%]": x.share_pct.toFixed(1),
+      "jitter [fs]": x.jitter_fs.toFixed(1),
+    })));
+  }, "analyze…", "analyze…"));
 
 /* ---------------------------------------------------------- boot */
 async function boot() {

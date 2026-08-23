@@ -1,6 +1,8 @@
 """Plot helpers consuming AnalysisResult / SimResult."""
 from __future__ import annotations
 
+import math
+
 import matplotlib
 
 matplotlib.use("Agg")
@@ -33,6 +35,49 @@ def plot_pn_breakdown(ar: AnalysisResult, sim: SimResult | None = None,
                  f"{ar.int_band[1] / 1e6:.0f} MHz)")
     ax.grid(True, which="both", alpha=0.3)
     ax.legend(fontsize=8, loc="lower left")
+    fig.tight_layout()
+    if save:
+        fig.savefig(save, dpi=140)
+    return fig
+
+
+def plot_ipn_pie(ar: AnalysisResult, save: str | None = None,
+                 title: str | None = None, min_share: float = 0.015):
+    """Where the integrated phase noise actually comes from, as a pie.
+
+    The slices are shares of integrated phase *power*, which is the quantity
+    that adds: the sources are uncorrelated and `pn_breakdown["total"]` is
+    their sum, so the shares total 1 exactly (verified on every benchmark
+    preset).  The curve plot answers "what shape"; this answers "what do I
+    fix first", which is a different question and the one a budget review
+    starts from.
+
+    Each label carries the source's own RMS jitter as well as its percentage,
+    because the two do not rank the same way to the eye: halving the power of
+    a 50% contributor buys 1 - 1/sqrt(2) ~ 29% of the total jitter, not 25%.
+    Slices below `min_share` are pooled into one "other" wedge, named so that
+    a reader can see how much was pooled rather than wondering.
+    """
+    rows = ar.ipn_shares()
+    big = [(k, s, j) for k, s, j in rows if s >= min_share]
+    small = [(k, s, j) for k, s, j in rows if s < min_share]
+    if small:
+        pooled = sum(s for _k, s, _j in small)
+        pooled_fs = math.sqrt(sum(j * j for _k, _s, j in small))
+        big.append((f"other ({len(small)})", pooled, pooled_fs))
+
+    fig, ax = plt.subplots(figsize=(7.5, 5.5))
+    labels = [f"{k}  {s * 100:.1f}%  ({j:.0f} fs)" for k, s, j in big]
+    wedges, _texts = ax.pie(
+        [s for _k, s, _j in big], startangle=90, counterclock=False,
+        wedgeprops={"linewidth": 0.6, "edgecolor": "white"})
+    ax.axis("equal")
+    ax.legend(wedges, labels, fontsize=8, loc="center left",
+              bbox_to_anchor=(1.0, 0.5))
+    ax.set_title(title or
+                 f"IPN breakdown @ {ar.f0 / 1e9:.4g} GHz — "
+                 f"σ = {ar.jitter_fs:.0f} fs, IPN = {ar.ipn_dbc:.1f} dBc "
+                 f"({ar.int_band[0]:.0f} Hz…{ar.int_band[1] / 1e6:.0f} MHz)")
     fig.tight_layout()
     if save:
         fig.savefig(save, dpi=140)

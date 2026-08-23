@@ -194,6 +194,15 @@ def test_drift_tracking_runs():
     assert _produced_output(out)
 
 
+def test_benchmarks_page_plots_an_ipn_pie():
+    at = _run("11_Benchmarks.py")
+    out = _press_key(at, "pie")
+    rows = [r for df in out.dataframe for r in _rows_of(df)]
+    shares = [r["share [%]"] for r in rows if "share [%]" in r]
+    assert shares, f"no breakdown table: {rows[:2]}"
+    assert sum(shares) == pytest.approx(100.0, abs=0.3)   # rounded to 0.1
+
+
 def test_monte_carlo_runs():
     at = _run("9_MonteCarlo.py")
     out = _press(at, "monte carlo")

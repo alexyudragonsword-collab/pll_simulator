@@ -314,6 +314,18 @@
        data-zh="所有未公开电路参数均为标注过的工艺合理假设——验证的是架构一致性，不是与某颗芯片的点对点吻合。"
        data-en="all undisclosed parameters are labelled technology-plausible assumptions — the check is architectural consistency, not point agreement with one chip.">所有未公开电路参数均为标注过的工艺合理假设——验证的是架构一致性，不是与某颗芯片的点对点吻合。</p>
   </section>
+
+  <section class="card">
+    <h2 data-zh="IPN 分解（线性模型）" data-en="IPN breakdown (linear model)">IPN 分解（线性模型）</h2>
+    <p class="muted"
+       data-zh="表格回答“数字对不对得上论文”，饼图回答“先改哪一个”。份额是积分相位功率占比（各源不相关，加起来正好是总数）；每项同时给出该源自己的 RMS jitter，因为功率份额不等于抖动份额。"
+       data-en="the table answers whether the number matches the paper; the pie answers which source to attack first. Slices are shares of integrated phase power (uncorrelated sources, summing exactly to the total); each row also carries that source's own RMS jitter, because a share of power is not a share of jitter.">表格回答“数字对不对得上论文”，饼图回答“先改哪一个”。份额是积分相位功率占比（各源不相关，加起来正好是总数）；每项同时给出该源自己的 RMS jitter，因为功率份额不等于抖动份额。</p>
+    <label><span data-zh="对标预设" data-en="benchmark preset">对标预设</span>
+      <select id="pie-preset"></select></label>
+    <button id="pie-run" class="primary"
+            data-zh="画 IPN 饼图" data-en="Plot IPN breakdown">画 IPN 饼图</button>
+    <div id="pie-out"></div>
+  </section>
 </div>
 </main>
 

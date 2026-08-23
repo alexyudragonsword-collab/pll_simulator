@@ -27,7 +27,7 @@ from ..guiutil import (
     simulate_kwargs,
     supports_fine,
 )
-from ..plotting import plot_spur_spectrum
+from ..plotting import plot_ipn_pie, plot_spur_spectrum
 from .i18n import tr
 from .widgets import FigList, Page, float_edit, table_from_rows
 
@@ -369,8 +369,34 @@ class BenchmarksPage(Page):
         lay.addLayout(row)
         self._body = QVBoxLayout()
         lay.addLayout(self._body)
-        lay.addStretch(1)
+
+        # Which source to attack first is a different question from "does
+        # our number match the paper", and the table cannot answer it.
+        row2 = QHBoxLayout()
+        row2.addWidget(tr(QLabel(), "IPN 分解", "IPN breakdown"))
+        self.pie_preset = QComboBox()
+        self.pie_preset.addItems([b["preset"] for b in presets.BENCHMARKS])
+        row2.addWidget(self.pie_preset, 1)
+        self.btn_pie = tr(QPushButton(), "画饼图", "Pie chart")
+        row2.addWidget(self.btn_pie)
+        row2.addStretch(1)
+        lay.addLayout(row2)
+        self.figs = FigList()
+        lay.addWidget(self.figs, 1)
         self.btn.clicked.connect(self._go)
+        self.btn_pie.clicked.connect(self._go_pie)
+
+    def compute_pie(self):
+        """The worker body, named so a test can call exactly what runs."""
+        name = self.pie_preset.currentText()
+        return name, presets.ALL_PRESETS[name]().analyze()
+
+    def render_pie(self, res):
+        name, ar = res
+        self.figs.set_figs([plot_ipn_pie(ar, title=f"{name} — IPN breakdown")])
+
+    def _go_pie(self):
+        self.run_async(self.compute_pie, self.render_pie, self.btn_pie)
 
     def _go(self):
         def fn():

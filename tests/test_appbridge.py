@@ -11,6 +11,7 @@ on its way through the bridge.
 """
 import base64
 import json
+import math
 
 import pytest
 
@@ -180,6 +181,22 @@ def test_benchmarks_are_the_same_table_both_guis_render():
     assert [r["paper"] for r in got] == [r["paper"] for r in want]
     for g, w in zip(got, want):
         assert g["linear [fs]"] == pytest.approx(w["linear [fs]"])
+
+
+def test_benchmark_ipn_partitions_the_jitter():
+    """The pie's premise: the shares are a partition and the per-source
+    jitters recombine to the total.  A bridge that dropped or rescaled a
+    source would pass a "returns some rows" check and fail this."""
+    got = call("benchmark_ipn", preset="bench_gao09_sspll_55p25m_2p21g")
+    shares = [r["share_pct"] for r in got["rows"]]
+    assert sum(shares) == pytest.approx(100.0, abs=1e-6)
+    quad = math.sqrt(sum(r["jitter_fs"] ** 2 for r in got["rows"]))
+    assert quad == pytest.approx(got["jitter_fs"], rel=1e-6)
+    assert got["dominant"] == got["rows"][0]["source"]
+    assert base64.b64decode(got["png"])[:8] == b"\x89PNG\r\n\x1a\n"
+    # the tab needs the preset list to populate its selector
+    assert got["dominant"] in [r["source"] for r in got["rows"]]
+    assert call("benchmarks")["presets"], "no preset list for the pie selector"
 
 
 def test_select_ranks_and_hands_candidates_to_the_workbench():

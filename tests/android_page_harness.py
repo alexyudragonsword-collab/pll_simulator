@@ -233,7 +233,17 @@ def _synth_mod_drift_bench(page):
     page.click('#tabs button[data-tab="bench"]')
     page.wait_for_selector("#bench-out table.rows", timeout=60_000)
     rows = page.locator("#bench-out table.rows tr").count() - 1
-    print(f"synth/mod/drift/bench: EVM {evm}, peak lag {lag}, {rows} papers")
+    # the IPN pie: its premise is that the slices are a partition, so read
+    # the shares back off the rendered table rather than trusting the image
+    page.select_option("#pie-preset", "bench_wu19_spll_frac_52m_6p253g")
+    run_into(page, "pie-out", "pie-run")
+    assert page.locator("#pie-out img.plot").count() == 1
+    cells = page.locator("#pie-out table.rows td").all_inner_texts()
+    shares = [float(c) for c in cells[1::3]]
+    assert abs(sum(shares) - 100.0) < 0.3, shares
+    dom = page.locator("#pie-out .metric b").nth(2).inner_text()
+    print(f"synth/mod/drift/bench: EVM {evm}, peak lag {lag}, {rows} papers, "
+          f"pie sums to {sum(shares):.1f}% with {dom} dominant")
 
 
 if __name__ == "__main__":

@@ -1,6 +1,7 @@
 """Structured results consumed by plotting and reports."""
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 
 import numpy as np
@@ -23,17 +24,35 @@ class AnalysisResult:
     ntfs: dict[str, FreqResponse] = field(default_factory=dict)
     notes: list[str] = field(default_factory=list)
 
-    def dominant_source(self) -> str:
-        """Source with the largest contribution to integrated phase power."""
+    def ipn_shares(self) -> list[tuple[str, float, float]]:
+        """Per-source (name, share of integrated phase power, jitter [fs]).
+
+        Sorted worst first.  The shares sum to 1 because the sources are
+        uncorrelated and `total` is their sum -- checked to 1e-6 on every
+        benchmark preset, which is what lets this be drawn as a pie at all.
+
+        The *share* is of power, not of jitter: a source holding half the
+        power contributes 1/sqrt(2) of the total RMS jitter, not half of it,
+        which is why the per-source jitter is returned alongside rather than
+        left for the reader to divide.
+        """
         from .jitter import integrate_pn
-        best, best_p = "", -1.0
+        rows = []
         for k, s in self.pn_breakdown.items():
             if k == "total":
                 continue
             p = integrate_pn(self.f, s, *self.int_band)
-            if p > best_p:
-                best, best_p = k, p
-        return best
+            rows.append((k, p, 1e15 * math.sqrt(p) / (2.0 * math.pi * self.f0)))
+        tot = sum(p for _k, p, _j in rows)
+        if tot <= 0.0:
+            return [(k, 0.0, j) for k, _p, j in rows]
+        return sorted(((k, p / tot, j) for k, p, j in rows),
+                      key=lambda r: -r[1])
+
+    def dominant_source(self) -> str:
+        """Source with the largest contribution to integrated phase power."""
+        shares = self.ipn_shares()
+        return shares[0][0] if shares else ""
 
 
 @dataclass
