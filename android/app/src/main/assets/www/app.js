@@ -74,6 +74,16 @@ function errHtml(e) {
 /* ---------------------------------------------------------- form */
 let baseline = {};          // path -> preset value string
 let fieldMeta = null;       // last fields() reply
+let candidate = "";         // non-empty: editing a selector candidate
+
+function wbArgs(extra) {
+  // every workbench call goes through here so candidate mode cannot be
+  // half-applied: either all calls carry the candidate or none do
+  const a = Object.assign({ overrides: overrides() }, extra || {});
+  if (candidate) a.candidate = candidate;
+  else a.preset = $("preset").value;
+  return a;
+}
 
 function overrides() {
   const out = {};
@@ -98,7 +108,8 @@ function markEdited() {
 async function loadPreset(name) {
   busy("载入 preset…", "loading preset…", true);
   try {
-    fieldMeta = await call("fields", { preset: name });
+    fieldMeta = await call("fields",
+      candidate ? { candidate } : { preset: name });
     baseline = {};
     const groups = {};
     fieldMeta.fields.forEach(f => {
@@ -139,8 +150,7 @@ async function runAnalyze() {
   busy("analyze…", "analyze…", true);
   const out = $("analyze-out");
   try {
-    const r = await call("analyze",
-      { preset: $("preset").value, overrides: overrides() });
+    const r = await call("analyze", wbArgs());
     let html = metricsHtml([
       ["jitter", r.jitter_fs === null ? "-" : r.jitter_fs.toFixed(1) + " fs"],
       ["IPN", r.ipn_dbc === null ? "-" : r.ipn_dbc.toFixed(1) + " dBc"],
@@ -165,10 +175,9 @@ async function updateFineNote() {
   const m = +$("m-os").value;
   if (m <= 1) { $("fine-note").textContent = ""; return; }
   try {
-    const r = await call("fine_info", {
-      preset: $("preset").value, overrides: overrides(),
+    const r = await call("fine_info", wbArgs({
       n_cycles: +$("n-cycles").value, m,
-    });
+    }));
     let t = `record ~${r.record_mb.toFixed(0)} MB`;
     if (r.note) t += " — " + r.note;
     $("fine-note").textContent = t;
@@ -192,14 +201,13 @@ async function runSimulate() {
        "simulating… (this can take minutes on a phone)", true);
   const out = $("simulate-out");
   try {
-    const r = await call("simulate", {
-      preset: $("preset").value, overrides: overrides(),
+    const r = await call("simulate", wbArgs({
       n_cycles: nCycles, seed: +$("seed").value,
       noise: $("noise").checked, calibration: $("cal").checked,
       f_start_offset_mhz: +$("f-off").value,
       dtc_gain_init_error: +$("dtc-err").value,
       fine_oversample: m,
-    });
+    }));
     let html = metricsHtml([
       ["jitter", r.jitter_fs === null ? "-" : r.jitter_fs.toFixed(1) + " fs"],
       ["lock", r.lock_time_us === null ? "-" : r.lock_time_us.toFixed(1) + " us"],
@@ -338,6 +346,211 @@ $("hop-stats").addEventListener("click", () => runInto(
     ]) + pngHtml(r.png);
   }, "多种子跳频中…", "hopping (all seeds)…"));
 
+/* ------------------------------------------------- selector tab */
+async function enterCandidate(arch) {
+  candidate = arch;
+  $("wb-candidate").hidden = false;
+  $("wb-candidate-label").textContent = (lang === "zh"
+    ? `正在编辑来自选型器的候选：${arch}（不是 preset）`
+    : `editing a candidate handed over by the selector: ${arch} (not a preset)`);
+  $("preset").disabled = true;
+  showTab("workbench");
+  await loadPreset("");
+}
+
+$("wb-back").addEventListener("click", async () => {
+  candidate = "";
+  $("wb-candidate").hidden = true;
+  $("preset").disabled = false;
+  await loadPreset($("preset").value);
+});
+
+$("sel-run").addEventListener("click", () => runInto(
+  "sel-out", async () => {
+    const r = await call("select", {
+      fref_hz: Number($("sel-fref").value),
+      fout_hz: Number($("sel-fout").value),
+      jitter_fs_max: Number($("sel-jmax").value),
+      band_lo_hz: Number($("sel-blo").value),
+      band_hi_hz: Number($("sel-bhi").value),
+      modulation: $("sel-mod").checked,
+    });
+    let html = tableHtml(r.rows.map(x => ({
+      arch: x.arch,
+      "jitter [fs]": x.jitter_fs === null ? "-" : x.jitter_fs.toFixed(1),
+      verdict: x.verdict,
+      "UGB [kHz]": x.f_ugb_khz === null ? "-" : x.f_ugb_khz.toFixed(0),
+      notes: x.notes,
+    })));
+    if (r.best !== null) {
+      html += `<p class="banner-ok">${esc((lang === "zh"
+        ? `推荐: ${r.best}（${r.best_jitter_fs.toFixed(0)} fs，目标 ${r.target_fs} fs）`
+        : `recommendation: ${r.best} (${r.best_jitter_fs.toFixed(0)} fs vs target ${r.target_fs} fs)`))}</p>`;
+      html += `<p class="muted">${lang === "zh" ? "在工作台中打开：" : "open in the workbench:"}</p>`;
+      html += r.handoff.map(a =>
+        `<button class="handoff" data-arch="${esc(a)}">${esc(a)}</button>`).join(" ");
+    } else {
+      html += `<p class="note">${lang === "zh"
+        ? "没有架构达标：放宽目标、改善振荡器档或提高 fref。"
+        : "no architecture meets the target — relax it, improve the oscillator class, or raise fref."}</p>`;
+    }
+    return html;
+  }, "七架构综合中…", "synthesizing 7 architectures…").then(() => {
+    document.querySelectorAll("#sel-out button.handoff").forEach(b =>
+      b.addEventListener("click", () => enterCandidate(b.dataset.arch)));
+  }));
+
+/* ------------------------------------------------- synthesis tab */
+function filtHtml(r) {
+  return tableHtml([{ c1: r.c1_f.toPrecision(4) + " F",
+                      r2: r.r2_ohm.toPrecision(4) + " Ohm",
+                      c2: r.c2_f.toPrecision(4) + " F",
+                      r3: r.r3_ohm.toPrecision(4) + " Ohm",
+                      c3: r.c3_f.toPrecision(4) + " F" }]);
+}
+
+$("sy-cp-run").addEventListener("click", () => runInto(
+  "sy-cp-out", async () => filtHtml(await call("synth_cp", {
+    icp_a: Number($("sy-cp-icp").value), n: Number($("sy-cp-n").value),
+    kvco_hz_v: Number($("sy-cp-kv").value), ugb_hz: Number($("sy-cp-ugb").value),
+    pm_deg: Number($("sy-cp-pm").value), fref_hz: Number($("sy-cp-fr").value),
+  })), "综合中…", "synthesizing…"));
+
+$("sy-ss-run").addEventListener("click", () => runInto(
+  "sy-ss-out", async () => filtHtml(await call("synth_sspll", {
+    amp_v: Number($("sy-ss-amp").value), gm_s: Number($("sy-ss-gm").value),
+    pulse_s: Number($("sy-ss-pw").value), kvco_hz_v: Number($("sy-ss-kv").value),
+    ugb_hz: Number($("sy-ss-ugb").value), pm_deg: Number($("sy-ss-pm").value),
+    fref_hz: Number($("sy-ss-fr").value),
+  })), "综合中…", "synthesizing…"));
+
+$("sy-sp-run").addEventListener("click", () => runInto(
+  "sy-sp-out", async () => filtHtml(await call("synth_spll", {
+    amp_v: Number($("sy-sp-amp").value), gm_s: Number($("sy-sp-gm").value),
+    pulse_s: Number($("sy-sp-pw").value), n: Number($("sy-sp-n").value),
+    kvco_hz_v: Number($("sy-sp-kv").value), ugb_hz: Number($("sy-sp-ugb").value),
+    pm_deg: Number($("sy-sp-pm").value), fref_hz: Number($("sy-sp-fr").value),
+  })), "综合中…", "synthesizing…"));
+
+$("sy-d-run").addEventListener("click", () => runInto(
+  "sy-d-out", async () => {
+    const r = await call("synth_dlf", {
+      fref_hz: Number($("sy-d-fr").value), ugb_hz: Number($("sy-d-ugb").value),
+      pm_deg: Number($("sy-d-pm").value),
+    });
+    return tableHtml([{ alpha: r.alpha.toPrecision(6),
+                        rho: r.rho.toPrecision(6) }]);
+  }, "综合中…", "synthesizing…"));
+
+$("sw-run").addEventListener("click", () => runInto(
+  "sw-out", async () => {
+    const pmTxt = $("sw-pm").value.trim();
+    const args = {
+      preset: $("sw-preset").value, lo_hz: Number($("sw-lo").value),
+      hi_hz: Number($("sw-hi").value), n_points: +$("sw-n").value,
+    };
+    if (pmTxt !== "") args.pm_deg = Number(pmTxt);
+    const r = await call("bw_sweep", args);
+    let html = "";
+    if (r.jitter_fs.length < r.n_requested) {
+      html += `<p class="note">${lang === "zh"
+        ? `${r.n_requested} 个带宽点中 ${r.jitter_fs.length} 个可综合，其余跳过`
+        : `${r.jitter_fs.length} of ${r.n_requested} UGB targets were synthesizable; the rest were skipped`}</p>`;
+    }
+    return html + pngHtml(r.png);
+  }, "带宽扫描中…", "sweeping…"));
+
+/* ------------------------------------------------- modulation tab */
+let presetMeta = [];        // list_presets rows, for fref lookups
+
+function updateSpsNote() {
+  const p = presetMeta.find(x => x.name === $("mod-preset").value);
+  if (!p) return;
+  const sps = p.fref_mhz * 1e6 / Number($("mod-rb").value);
+  $("mod-sps").textContent = sps >= 8
+    ? `${sps.toFixed(1)} samples/symbol`
+    : (lang === "zh"
+       ? `${sps.toFixed(1)} 采样/符号 < 8：离散化底会抬高读数，结论只看失配敏感度`
+       : `${sps.toFixed(1)} samples/symbol < 8: the per-ref-cycle grid floors the comparison — trust the mismatch trend`);
+}
+$("mod-preset").addEventListener("change", updateSpsNote);
+$("mod-rb").addEventListener("change", updateSpsNote);
+
+$("mod-run").addEventListener("click", () => runInto(
+  "mod-out", async () => {
+    const r = await call("modulate", {
+      preset: $("mod-preset").value,
+      bit_rate_hz: Number($("mod-rb").value),
+      dp_err: Number($("mod-dperr").value),
+      n_cycles: +$("mod-ncyc").value,
+    });
+    return metricsHtml([
+      ["EVM", r.evm_pct.toFixed(2) + " %"],
+      ["EVM", r.evm_db.toFixed(1) + " dB"],
+      [lang === "zh" ? "相位误差" : "phase err",
+       r.phase_err_rms_deg.toFixed(2) + " deg rms"],
+    ]) + pngHtml(r.png);
+  }, "调制仿真中…", "modulating…"));
+
+/* ------------------------------------------------- drift tab */
+async function updateDriftRate() {
+  try {
+    const r = await call("drift_info", {
+      preset: $("dr-preset").value,
+      eps_total: Number($("dr-eps").value),
+      ramp_cycles: +$("dr-ncyc").value,
+    });
+    $("dr-rate").textContent =
+      `rate = ${r.rate_per_cycle.toExponential(2)} /cycle = ` +
+      `${r.rate_over_mu.toFixed(2)} x mu_final ` +
+      `(${r.mu_final.toExponential(1)}) — ` +
+      (lang === "zh" ? "超过 1x 即符号-符号转换率墙"
+                     : "the sign-sign slew wall is 1x");
+  } catch (e) {
+    $("dr-rate").textContent = String(e.message || e);
+  }
+}
+$("dr-preset").addEventListener("change", updateDriftRate);
+$("dr-eps").addEventListener("change", updateDriftRate);
+$("dr-ncyc").addEventListener("change", updateDriftRate);
+
+$("dr-run").addEventListener("click", () => runInto(
+  "dr-out", async () => {
+    const r = await call("drift", {
+      preset: $("dr-preset").value,
+      eps_total: Number($("dr-eps").value),
+      ramp_cycles: +$("dr-ncyc").value,
+      ramp_start: +$("dr-start").value,
+    });
+    return metricsHtml([
+      [lang === "zh" ? "峰值滞后" : "peak lag",
+       r.peak_lag_pct.toFixed(2) + " %"],
+      ["jitter", r.jitter_fs === null ? "-" : r.jitter_fs.toFixed(0) + " fs"],
+      [lang === "zh" ? "滞后杂散" : "lag spur",
+       r.lag_spur_dbc === null ? "-" : r.lag_spur_dbc.toFixed(1) + " dBc"],
+    ]) + notesHtml(r.notes) + pngHtml(r.png);
+  }, "斜坡仿真中…", "ramping…"));
+
+/* ------------------------------------------------- benchmarks tab */
+let benchLoaded = false;
+async function loadBench() {
+  if (benchLoaded) return;
+  try {
+    const r = await call("benchmarks");
+    $("bench-out").innerHTML = tableHtml(r.rows.map(x => ({
+      paper: x.paper,
+      "published [fs]": x["published [fs]"],
+      "linear [fs]": x["linear [fs]"],
+      "time-domain [fs]": x["time-domain [fs]"],
+    })));
+    benchLoaded = true;
+  } catch (e) {
+    $("bench-out").innerHTML = errHtml(e);
+  }
+}
+document.querySelector('#tabs button[data-tab="bench"]')
+  .addEventListener("click", loadBench);
+
 /* ---------------------------------------------------------- boot */
 async function boot() {
   applyLang();
@@ -348,6 +561,15 @@ async function boot() {
     $("preset").innerHTML = presets.map(opt).join("");
     $("sp-preset").innerHTML = presets.filter(p => p.frac).map(opt).join("");
     $("hop-preset").innerHTML = presets.map(opt).join("");
+    $("sw-preset").innerHTML =
+      presets.filter(p => p.sweepable).map(opt).join("");
+    presetMeta = presets;
+    $("mod-preset").innerHTML =
+      presets.filter(p => p.two_point).map(opt).join("");
+    $("dr-preset").innerHTML =
+      presets.filter(p => p.frac).map(opt).join("");
+    updateSpsNote();
+    updateDriftRate();
     $("boot").hidden = true;
     $("app").hidden = false;
     await loadPreset(presets[0].name);

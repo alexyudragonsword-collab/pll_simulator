@@ -11,8 +11,10 @@ header { display: flex; align-items: baseline; gap: .6em;
 header h1 { font-size: 1.15em; margin: 0; flex: 1; }
 header #version { color: var(--muted); font-weight: normal; font-size: .8em; }
 main, #boot { padding: .7em; max-width: 720px; margin: 0 auto; }
-#tabs { display: flex; gap: .4em; margin-bottom: .7em; }
-#tabs button { flex: 1; padding: .5em 0; }
+#tabs { display: flex; gap: .4em; margin-bottom: .7em;
+        overflow-x: auto; -webkit-overflow-scrolling: touch; }
+#tabs button { flex: 1 0 auto; min-width: 4em; padding: .5em .4em;
+               white-space: nowrap; }
 #tabs button.active { background: var(--accent); border-color: var(--accent);
                       color: #fff; }
 .tab[hidden] { display: none; }

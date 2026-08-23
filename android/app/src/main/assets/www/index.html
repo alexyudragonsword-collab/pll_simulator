@@ -21,13 +21,23 @@
 <main id="app" hidden>
 <nav id="tabs">
   <button data-tab="workbench" class="active"
-          data-zh="工作台" data-en="Workbench">工作台</button>
+          data-zh="工作台" data-en="Bench">工作台</button>
   <button data-tab="spurs" data-zh="杂散" data-en="Spurs">杂散</button>
-  <button data-tab="hop" data-zh="跳频" data-en="Hop">跳频</button>
+  <button data-tab="hop" data-zh="跳频" data-en="Hop">Hop</button>
+  <button data-tab="selector" data-zh="选型" data-en="Select">选型</button>
+  <button data-tab="synth" data-zh="综合" data-en="Synth">综合</button>
+  <button data-tab="mod" data-zh="调制" data-en="Mod">调制</button>
+  <button data-tab="drift" data-zh="温漂" data-en="Drift">温漂</button>
+  <button data-tab="bench" data-zh="对标" data-en="Papers">对标</button>
 </nav>
 
 <div id="tab-workbench" class="tab">
   <section class="card">
+    <div id="wb-candidate" hidden>
+      <p class="note" id="wb-candidate-label"></p>
+      <button id="wb-back" class="ghost"
+              data-zh="回到 preset" data-en="back to presets">回到 preset</button>
+    </div>
     <label data-zh="preset（每次运行取全新实例）"
            data-en="preset (fresh instance per run)">preset（每次运行取全新实例）</label>
     <select id="preset"></select>
@@ -149,6 +159,153 @@
     <button id="hop-stats" class="primary"
             data-zh="统计" data-en="Run statistics">统计</button>
     <div id="hop-stats-out"></div>
+  </section>
+</div>
+
+<div id="tab-selector" class="tab" hidden>
+  <section class="card">
+    <h2 data-zh="架构选型" data-en="Architecture selector">架构选型</h2>
+    <div class="grid3">
+      <label>fref [Hz] <input id="sel-fref" type="text" value="100e6"></label>
+      <label>fout [Hz] <input id="sel-fout" type="text" value="8e9"></label>
+      <label><span data-zh="jitter 目标 [fs]" data-en="jitter target [fs]">jitter 目标 [fs]</span>
+        <input id="sel-jmax" type="text" value="120"></label>
+      <label><span data-zh="积分带下限 [Hz]" data-en="band from [Hz]">积分带下限 [Hz]</span>
+        <input id="sel-blo" type="text" value="10e3"></label>
+      <label><span data-zh="积分带上限 [Hz]" data-en="band to [Hz]">积分带上限 [Hz]</span>
+        <input id="sel-bhi" type="text" value="40e6"></label>
+      <label><span data-zh="需要两点调制" data-en="needs two-point TX">需要两点调制</span>
+        <input id="sel-mod" type="checkbox"></label>
+    </div>
+    <button id="sel-run" class="primary"
+            data-zh="七架构综合评估" data-en="Select">七架构综合评估</button>
+    <div id="sel-out"></div>
+  </section>
+</div>
+
+<div id="tab-synth" class="tab" hidden>
+  <section class="card">
+    <h2 data-zh="环路综合" data-en="Loop synthesis">环路综合</h2>
+    <p class="muted" data-zh="ILCM/MDLL 不在此页：它们没有环路滤波器。"
+       data-en="ILCM/MDLL are absent by design: they have no loop filter.">ILCM/MDLL 不在此页：它们没有环路滤波器。</p>
+    <details open><summary>CP filter</summary>
+      <div class="grid3">
+        <label>Icp [A] <input id="sy-cp-icp" type="text" value="1.5e-3"></label>
+        <label>N <input id="sy-cp-n" type="text" value="250"></label>
+        <label>Kvco [Hz/V] <input id="sy-cp-kv" type="text" value="60e6"></label>
+        <label>UGB [Hz] <input id="sy-cp-ugb" type="text" value="1e6"></label>
+        <label>PM [deg] <input id="sy-cp-pm" type="text" value="58"></label>
+        <label>fref [Hz] <input id="sy-cp-fr" type="text" value="19.2e6"></label>
+      </div>
+      <button id="sy-cp-run" class="primary">Synthesize</button>
+      <div id="sy-cp-out"></div>
+    </details>
+    <details><summary>SSPLL filter</summary>
+      <div class="grid3">
+        <label>amp [V] <input id="sy-ss-amp" type="text" value="0.4"></label>
+        <label>gm [S] <input id="sy-ss-gm" type="text" value="1e-3"></label>
+        <label>pulse [s] <input id="sy-ss-pw" type="text" value="150e-12"></label>
+        <label>Kvco [Hz/V] <input id="sy-ss-kv" type="text" value="60e6"></label>
+        <label>UGB [Hz] <input id="sy-ss-ugb" type="text" value="1e6"></label>
+        <label>PM [deg] <input id="sy-ss-pm" type="text" value="60"></label>
+        <label>fref [Hz] <input id="sy-ss-fr" type="text" value="19.2e6"></label>
+      </div>
+      <button id="sy-ss-run" class="primary">Synthesize</button>
+      <div id="sy-ss-out"></div>
+    </details>
+    <details><summary>SPLL filter</summary>
+      <div class="grid3">
+        <label>amp [V] <input id="sy-sp-amp" type="text" value="0.8"></label>
+        <label>gm [S] <input id="sy-sp-gm" type="text" value="10e-3"></label>
+        <label>pulse [s] <input id="sy-sp-pw" type="text" value="1e-9"></label>
+        <label>N <input id="sy-sp-n" type="text" value="80"></label>
+        <label>Kvco [Hz/V] <input id="sy-sp-kv" type="text" value="60e6"></label>
+        <label>UGB [Hz] <input id="sy-sp-ugb" type="text" value="3e5"></label>
+        <label>PM [deg] <input id="sy-sp-pm" type="text" value="60"></label>
+        <label>fref [Hz] <input id="sy-sp-fr" type="text" value="100e6"></label>
+      </div>
+      <button id="sy-sp-run" class="primary">Synthesize</button>
+      <div id="sy-sp-out"></div>
+    </details>
+    <details><summary>ADPLL DLF</summary>
+      <div class="grid3">
+        <label>fref [Hz] <input id="sy-d-fr" type="text" value="100e6"></label>
+        <label>UGB [Hz] <input id="sy-d-ugb" type="text" value="1e6"></label>
+        <label>PM [deg] <input id="sy-d-pm" type="text" value="55"></label>
+      </div>
+      <button id="sy-d-run" class="primary">Synthesize</button>
+      <div id="sy-d-out"></div>
+    </details>
+  </section>
+
+  <section class="card">
+    <h2 data-zh="带宽扫描（jitter 最优带宽）" data-en="BW sweep (jitter-optimal bandwidth)">带宽扫描（jitter 最优带宽）</h2>
+    <label>preset <select id="sw-preset"></select></label>
+    <div class="grid3">
+      <label>UGB from [Hz] <input id="sw-lo" type="text" value="2e5"></label>
+      <label>UGB to [Hz] <input id="sw-hi" type="text" value="3e6"></label>
+      <label><span data-zh="点数" data-en="points">点数</span>
+        <input id="sw-n" type="number" value="6" min="3" max="20"></label>
+    </div>
+    <label><span data-zh="PM [deg]（留空=架构默认）" data-en="PM [deg] (blank = arch default)">PM [deg]（留空=架构默认）</span>
+      <input id="sw-pm" type="text" value=""></label>
+    <button id="sw-run" class="primary"
+            data-zh="扫描" data-en="Sweep">扫描</button>
+    <div id="sw-out"></div>
+  </section>
+</div>
+
+<div id="tab-mod" class="tab" hidden>
+  <section class="card">
+    <h2 data-zh="两点 GMSK 调制与 EVM" data-en="Two-point GMSK modulation and EVM">两点 GMSK 调制与 EVM</h2>
+    <label><span data-zh="架构（引擎已接注入点）" data-en="architecture (injection wired)">架构（引擎已接注入点）</span>
+      <select id="mod-preset"></select></label>
+    <div class="grid3">
+      <label>bit rate [b/s] <input id="mod-rb" type="text" value="2.5e6"></label>
+      <label><span data-zh="直通路增益误差" data-en="direct-path error">直通路增益误差</span>
+        <input id="mod-dperr" type="number" value="0" step="0.01" min="-0.2" max="0.2"></label>
+      <label><span data-zh="周期数" data-en="cycles">周期数</span>
+        <input id="mod-ncyc" type="number" value="100000" min="60000" step="20000"></label>
+    </div>
+    <p id="mod-sps" class="muted"></p>
+    <button id="mod-run" class="primary"
+            data-zh="运行" data-en="Run">运行</button>
+    <div id="mod-out"></div>
+    <p class="muted"
+       data-zh="失配 1% 即 EVM 三倍类（ex17）——两点校准的量化依据。"
+       data-en="1% mismatch triples the EVM class (ex17) — the spec for two-point calibration.">失配 1% 即 EVM 三倍类（ex17）——两点校准的量化依据。</p>
+  </section>
+</div>
+
+<div id="tab-drift" class="tab" hidden>
+  <section class="card">
+    <h2 data-zh="温漂下的后台校准" data-en="Background calibration under drift">温漂下的后台校准</h2>
+    <label>preset<select id="dr-preset"></select></label>
+    <div class="grid3">
+      <label><span data-zh="总增益漂移" data-en="total gain drift">总增益漂移</span>
+        <input id="dr-eps" type="text" value="0.03"></label>
+      <label><span data-zh="斜坡周期数" data-en="ramp cycles">斜坡周期数</span>
+        <input id="dr-ncyc" type="number" value="60000" min="20000" step="10000"></label>
+      <label><span data-zh="斜坡起点" data-en="ramp start">斜坡起点</span>
+        <input id="dr-start" type="number" value="80000" min="40000" step="10000"></label>
+    </div>
+    <p id="dr-rate" class="muted"></p>
+    <button id="dr-run" class="primary"
+            data-zh="跑斜坡" data-en="Run ramp">跑斜坡</button>
+    <div id="dr-out"></div>
+    <p class="muted"
+       data-zh="两个机制叠加：EMA 误差去直流在斜坡中使相关器部分失明（即使远低于转换率墙也 ~1%），rate>mu 后转换率极限叠加；每 1% 滞后 = 带内杂散 20log10(lag)。真实温度斜坡比墙低约 5 个数量级（ex20）。"
+       data-en="two stacked mechanisms: EMA error-centering blinds the correlator during ramps (~1% even below the wall); the slew limit adds beyond rate ~ mu. Real thermal ramps sit ~5 orders below the wall (ex20).">两个机制叠加：EMA 误差去直流在斜坡中使相关器部分失明（即使远低于转换率墙也 ~1%），rate>mu 后转换率极限叠加；每 1% 滞后 = 带内杂散 20log10(lag)。真实温度斜坡比墙低约 5 个数量级（ex20）。</p>
+  </section>
+</div>
+
+<div id="tab-bench" class="tab" hidden>
+  <section class="card">
+    <h2 data-zh="文献对标（线性列为现算）" data-en="Literature benchmarks (linear column computed live)">文献对标（线性列为现算）</h2>
+    <div id="bench-out"><p class="muted" data-zh="载入中…" data-en="loading…">载入中…</p></div>
+    <p class="muted"
+       data-zh="所有未公开电路参数均为标注过的工艺合理假设——验证的是架构一致性，不是与某颗芯片的点对点吻合。"
+       data-en="all undisclosed parameters are labelled technology-plausible assumptions — the check is architectural consistency, not point agreement with one chip.">所有未公开电路参数均为标注过的工艺合理假设——验证的是架构一致性，不是与某颗芯片的点对点吻合。</p>
   </section>
 </div>
 </main>
