@@ -2,6 +2,22 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-22 · Rule recorded: a change is not done until all three front ends are checked
+
+- `AGENTS.md` gains "Three front ends, one contract" — web / Qt / Android
+  share `guiutil`, `presets`, `plotting` and the `arch/` signatures, so a
+  shared change must be *run* on all three, with the exact command per
+  surface (and the reminder to read the Qt skip count, not the silence).
+  `CONTRIBUTING.md` carries the contributor-facing version plus what CI
+  does not enforce.
+- Two corollaries from this week's findings: a bridge method with no caller
+  is half a feature (`bank`), and deliberate differences go in
+  `cairn/android-app.md` → Parity so a decision is not read as a gap.
+- **Prose-only so far.** The Android-page check needs the Chromium shim
+  harness, which currently exists only in a session scratchpad; committing
+  it (and a test asserting every `appbridge._METHODS` entry is referenced by
+  `app.js`) is what would make this rule self-enforcing.
+
 ## 2026-08-22 · Android line paused after a parity audit against the Qt GUI
 
 - v3+v4 merged (#38, CI + APK green). Android work stops here by request.
