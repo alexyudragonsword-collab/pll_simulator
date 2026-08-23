@@ -14,8 +14,41 @@ pytest tests/                    # ~18 min; -x -k <name> while iterating
 
 `QT_QPA_PLATFORM=offscreen` is needed for the desktop-GUI tests on a headless
 box.  They *skip* without PySide6 and its system GL libraries rather than
-fail, which is exactly how the two GUIs drifted apart for several releases —
-if you touch `guiqt/`, make sure those tests are actually running for you.
+fail — see the next section for why that matters.
+
+## Three front ends share one library
+
+`webgui/` (Streamlit), `guiqt/` (PySide6) and `android/` (a WebView over
+`pllsim.appbridge`) all render the same models.  Anything they share —
+`guiutil`, `presets`, `plotting`, an `arch/` signature, a config field —
+lands in all three, so **a change is not finished until all three are
+checked**, by running them rather than by reading them:
+
+```bash
+QT_QPA_PLATFORM=offscreen pytest tests/test_gui_smoke.py \
+    tests/test_gui_compute.py -q            # web pages, via Streamlit AppTest
+QT_QPA_PLATFORM=offscreen pytest tests/test_guiqt_smoke.py -q   # read the count
+pytest tests/test_appbridge.py -q           # the Android bridge, no SDK needed
+```
+
+The Android *page* is not covered by any of those.  `python
+tests/android_page_harness.py` is: it stands up its own shim for
+`window.host` and drives every tab in real Chromium against the real
+bridge (`pip install playwright` first; it is deliberately not in CI, and
+not collected by pytest).  The invisible overlay that swallowed every tap,
+and a crash in the measured spectrum, were both found that way and by
+nothing else.
+The APK itself builds from Actions → *Android APK* → Run workflow, which is
+manual and deliberately off the push path.
+
+A bridge method with no caller is half a feature: `appbridge._METHODS`
+gaining an entry that no page renders looks tested and does nothing.  Wire
+the UI in the same change — `tests/test_android_parity.py` checks both
+directions from text alone, so it runs in every CI job at no browser cost.
+
+Where the surfaces differ on purpose — phone defaults, unit choices — record
+it in `cairn/android-app.md` so the next reader can tell a decision from a
+gap.
 
 ## What CI enforces
 
@@ -25,6 +58,10 @@ if you touch `guiqt/`, make sure those tests are actually running for you.
 | types | `mypy` (file list in `pyproject.toml`) |
 | tests | `pytest tests/` on 3.11 and 3.12 |
 | coverage | floor of 88% (`[tool.coverage.report]`) |
+
+What CI does **not** enforce: the Android APK build (manual
+`workflow_dispatch`) and the Android page itself (no headless browser in the
+test job).  Both are on you — see "Three front ends" above.
 
 The mypy gate is the whole package (`files = ["src/pllsim"]`) — every module
 whose types carry a *convention* (rad²/Hz vs dBc/Hz, seconds vs UI, amps vs

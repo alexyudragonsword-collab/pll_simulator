@@ -24,6 +24,8 @@ from ..guiutil import (
     frac_presets,
     make_pll,
     ref_spur_comparison,
+    simulate_kwargs,
+    supports_fine,
 )
 from ..plotting import plot_spur_spectrum
 from .i18n import tr
@@ -36,12 +38,18 @@ class SpursPage(Page):
     title = "Spur prediction"
     title_zh = "杂散预测"
 
+    # a seam, not a setting: the measured spectrum wants a long record, and a
+    # test that has to run 150k cycles to check a signature is a test nobody
+    # keeps
+    MEASURE_CYCLES = 150_000
+
     def __init__(self):
         super().__init__()
         lay = QVBoxLayout(self)
         row = QHBoxLayout()
         self.preset = QComboBox()
         self.preset.addItems(FRAC_PRESETS)
+        self.preset.currentTextChanged.connect(self._fine_hint)
         row.addWidget(tr(QLabel(), "预设", "preset"))
         row.addWidget(self.preset)
         self.inl_amp = float_edit("50e-15")
@@ -90,19 +98,29 @@ class SpursPage(Page):
         self.btn_sweep.clicked.connect(self._go_sweep)
         self.btn_meas.clicked.connect(self._go_measure)
 
+    def compute_measure(self):
+        """The worker body, named so a test can call exactly what runs.
+
+        M goes through simulate_kwargs rather than straight into simulate():
+        two of the seven fractional presets in this page's own dropdown are
+        ADPLLs, whose engines take no fine_oversample at all, so passing it
+        unconditionally raised TypeError the moment either was selected.
+        """
+        pll = self._cfg_pll()
+        kw = simulate_kwargs(pll, seed=2,
+                             fine_oversample=int(self.fine_os.value()))
+        return (pll.simulate(self.MEASURE_CYCLES, **kw),
+                self._cfg_pll().analyze())
+
+    def render_measure(self, res):
+        sim, ar = res
+        self.figs.set_figs([plot_spur_spectrum(sim, ar=ar)])
+
     def _go_measure(self):
         """The table is the prediction; this is the measured periodogram of
         the same config, which is the comparison ex15 is built on."""
-        def fn():
-            pll = self._cfg_pll()
-            return (pll.simulate(150_000, seed=2,
-                                 fine_oversample=int(self.fine_os.value())),
-                    self._cfg_pll().analyze())
-
-        def done(res):
-            sim, ar = res
-            self.figs.set_figs([plot_spur_spectrum(sim, ar=ar)])
-        self.run_async(fn, done, self.btn_meas)
+        self.run_async(self.compute_measure, self.render_measure,
+                       self.btn_meas)
 
     def _fine_hint(self):
         try:
@@ -111,6 +129,13 @@ class SpursPage(Page):
             self.fine_note.setText("")
             return
         m = int(self.fine_os.value())
+        if not supports_fine(pll):
+            # two of this page's own fractional presets are ADPLLs: the
+            # control word is a register that holds between edges, so there
+            # is no intra-period waveform and M buys nothing
+            self.fine_note.setText("this architecture has no intra-period "
+                                   "record — M is ignored")
+            return
         note = fine_oversample_note(pll, m)
         mb = fine_record_mb(40_000, m)
         self.fine_note.setText(f"record ~{mb:.0f} MB"

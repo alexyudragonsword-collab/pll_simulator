@@ -119,6 +119,21 @@ def test_ref_spur_answers_per_architecture():
     assert got["rows"] == [] and "no analog control node" in got["notes"][0]
 
 
+def test_spur_spectrum_m_reaches_the_engine_and_says_when_it_cannot():
+    """M is what puts the reference spur in this spectrum, and two of the
+    fractional presets are ADPLLs whose simulate() takes no M at all --
+    passing it straight through raised TypeError for them."""
+    kw = dict(preset="cppll_frac_38p4m_6g", n_cycles=20_000)
+    off = call("spur_spectrum", **kw)
+    on = call("spur_spectrum", fine_oversample=64, **kw)
+    assert off["fine_applied"] is False and on["fine_applied"] is True
+    assert base64.b64decode(on["png"])[:8] == b"\x89PNG\r\n\x1a\n"
+    # the ADPLL path must answer, not raise, and must not claim it applied
+    adpll = call("spur_spectrum", preset="adpll_bb_100m_10g",
+                 n_cycles=8_000, fine_oversample=128)
+    assert adpll["fine_applied"] is False
+
+
 def test_spur_sweep_is_worst_near_integer():
     """The physics the plot exists to show: in-band beats (near-integer
     channels) sit on the |NTF| ~ 1 plateau -- within a dB of each other, so

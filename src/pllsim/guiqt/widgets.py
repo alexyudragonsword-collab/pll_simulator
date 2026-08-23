@@ -23,18 +23,12 @@ from PySide6.QtWidgets import (
     QWidget,
 )
 
-from ..guiutil import enumerate_fields, fmt_value
+from ..guiutil import GROUP_LABELS, enumerate_fields, fmt_value
 
-GROUP_TITLES = {
-    "": "Loop / top level",
-    "osc": "Oscillator",
-    "cp": "Charge pump",
-    "sampler": "Sampler",
-    "filt": "Loop filter",
-    "tdc": "TDC",
-    "dlf": "Digital loop filter",
-    "frac": "Fractional-N / DTC / calibration",
-}
+# English half of the shared table, not a second copy: the web GUI and the
+# Android form read the same guiutil.GROUP_LABELS, and a new sub-config used
+# to need adding in two places before anyone noticed one was missing.
+GROUP_TITLES = {k: en for k, (_zh, en) in GROUP_LABELS.items()}
 
 
 class Worker(QThread):

@@ -136,6 +136,7 @@ async function loadPreset(name) {
       inp.addEventListener("input", markEdited));
     markEdited();
     $("fine-row").hidden = !fieldMeta.supports_fine;
+    $("bank-out").innerHTML = "";
     $("analyze-out").innerHTML = "";
     $("simulate-out").innerHTML = "";
   } catch (e) {
@@ -150,6 +151,20 @@ async function runAnalyze() {
   busy("analyze…", "analyze…", true);
   const out = $("analyze-out");
   try {
+    // the coarse-band bank first, as the desktop pages do: a bank that
+    // cannot reach the target is the first thing to know, not a footnote
+    // under thirty text boxes
+    try {
+      const bank = await call("bank", wbArgs());
+      $("bank-out").innerHTML = bank.length
+        ? `<p class="muted">${lang === "zh" ? "粗调频段组 (osc.v_min / v_max)"
+             : "Coarse band bank (osc.v_min / v_max)"}</p>` +
+          tableHtml(bank.map(b => ({
+            check: lang === "zh" ? b.label_zh : b.label_en, value: b.value })))
+        : "";
+    } catch (e) {                  // a half-typed override; the run reports it
+      $("bank-out").innerHTML = "";
+    }
     const r = await call("analyze", wbArgs());
     let html = metricsHtml([
       ["jitter", r.jitter_fs === null ? "-" : r.jitter_fs.toFixed(1) + " fs"],
@@ -266,6 +281,37 @@ async function runInto(outId, fn, busyZh, busyEn) {
   finally { busy("", "", false); }
 }
 
+async function spurFineNote(mId, cycId, outId) {
+  const m = +$(mId).value;
+  const el = $(outId);
+  if (m <= 1) { el.textContent = ""; return; }
+  try {
+    const r = await call("fine_info", {
+      preset: $("sp-preset").value, n_cycles: +$(cycId).value, m,
+    });
+    if (!r.supported) {
+      el.textContent = lang === "zh"
+        ? "该架构没有周期内记录，M 会被忽略"
+        : "this architecture has no intra-period record — M is ignored";
+      return;
+    }
+    // the note is the whole point: an M coarser than the reset pulse cannot
+    // resolve the ripple doublet, and the spur then reads LOW with nothing
+    // on screen saying so
+    el.textContent = `record ~${r.record_mb.toFixed(0)} MB` +
+      (r.note ? " — " + r.note : "");
+  } catch (e) {
+    el.textContent = String(e.message || e);
+  }
+}
+
+function refreshSpurNotes() {
+  spurFineNote("sp-mmeas", "sp-ncyc", "sp-mmeas-note");
+  spurFineNote("sp-m", "sp-refcyc", "sp-ref-note");
+}
+["sp-preset", "sp-mmeas", "sp-ncyc", "sp-m", "sp-refcyc"].forEach(id =>
+  $(id).addEventListener("change", refreshSpurNotes));
+
 $("sp-predict").addEventListener("click", () => runInto(
   "sp-predict-out", async () => {
     const r = await call("spur_predict", spurArgs());
@@ -275,9 +321,17 @@ $("sp-predict").addEventListener("click", () => runInto(
 
 $("sp-measure").addEventListener("click", () => runInto(
   "sp-measure-out", async () => {
-    const r = await call("spur_spectrum",
-      { ...spurArgs(), n_cycles: +$("sp-ncyc").value });
-    return notesHtml(r.notes) + pngHtml(r.png);
+    const r = await call("spur_spectrum", {
+      ...spurArgs(), n_cycles: +$("sp-ncyc").value,
+      fine_oversample: +$("sp-mmeas").value,
+    });
+    let head = "";
+    if (+$("sp-mmeas").value > 1 && !r.fine_applied) {
+      head = `<p class="note">${lang === "zh"
+        ? "该架构没有周期内记录，M 已忽略"
+        : "this architecture has no intra-period record; M was ignored"}</p>`;
+    }
+    return head + notesHtml(r.notes) + pngHtml(r.png);
   }, "时域仿真中…", "simulating…"));
 
 $("sp-ref").addEventListener("click", () => runInto(
@@ -302,7 +356,12 @@ async function updateFllBanner() {
   el.innerHTML = "";
   try {
     const st = await call("hop_check", { preset: $("hop-preset").value });
-    if (st === null) return;
+    if (st === null) {
+      // silence reads as a failed lookup; the desktop page says which it is
+      el.innerHTML = `<p class="muted">${lang === "zh"
+        ? "该架构没有 FLL 交接" : "no FLL in this architecture"}</p>`;
+      return;
+    }
     const txt = `FLL: slew ${st.slew_khz_per_window.toFixed(0)} kHz/window, ` +
       `i_fll_max ${st.i_fll_max_ua.toFixed(2)} uA, ` +
       `margin ${st.margin.toFixed(2)}x` +
@@ -380,6 +439,7 @@ $("sel-run").addEventListener("click", () => runInto(
       "jitter [fs]": x.jitter_fs === null ? "-" : x.jitter_fs.toFixed(1),
       verdict: x.verdict,
       "UGB [kHz]": x.f_ugb_khz === null ? "-" : x.f_ugb_khz.toFixed(0),
+      "PM [deg]": x.pm_deg === null ? "-" : x.pm_deg.toFixed(0),
       notes: x.notes,
     })));
     if (r.best !== null) {
@@ -570,6 +630,7 @@ async function boot() {
       presets.filter(p => p.frac).map(opt).join("");
     updateSpsNote();
     updateDriftRate();
+    refreshSpurNotes();
     $("boot").hidden = true;
     $("app").hidden = false;
     await loadPreset(presets[0].name);

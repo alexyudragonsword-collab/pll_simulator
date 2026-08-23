@@ -126,12 +126,36 @@ mypy                                # file list in pyproject.toml
 QT_QPA_PLATFORM=offscreen pytest tests/test_guiqt_smoke.py -q
 ```
 
-The Qt tests **skip** without PySide6 and system GL libraries rather than
-fail — that silence is how the two GUIs drifted apart for several releases.
-If you touch `guiqt/`, confirm they actually ran.
-
 The full suite is long enough that it is tempting to report before it
 finishes.  Do not: say it is still running, or wait.
+
+## Three front ends, one contract — verify all of them
+
+`webgui/` (Streamlit), `guiqt/` (PySide6) and `android/` (WebView over
+`appbridge`) render the same library.  A change to anything they share —
+`guiutil`, `presets`, `plotting`, an `arch/` signature, a config field —
+reaches all three, and **a change is not done until all three are checked**.
+Checking means running them, not reasoning that they should be fine: every
+drift this project has had was invisible from the source.
+
+| surface | how to actually verify it |
+|---|---|
+| web | `QT_QPA_PLATFORM=offscreen pytest tests/test_gui_smoke.py tests/test_gui_compute.py -q` — Streamlit `AppTest` execs each page |
+| Qt | `QT_QPA_PLATFORM=offscreen pytest tests/test_guiqt_smoke.py -q`, then **read the count**: these tests *skip* without PySide6 and the system GL libs (`libegl1 libgl1 libxkbcommon0 libdbus-1-3`) instead of failing, and that silence is how the two GUIs drifted for several releases |
+| Android bridge | `pytest tests/test_appbridge.py -q` — pure Python, no SDK needed |
+| Android page | `python tests/android_page_harness.py` — starts its own shim for `window.host` and drives every tab in real Chromium against the real bridge.  Needs `pip install playwright`; not in CI.  The overlay that swallowed every tap, and the ADPLL crash in the measured spectrum, were both found this way and by nothing else |
+| Android build | Actions → *Android APK* → Run workflow.  Manual only; it does not run on push |
+
+Two rules that follow from the same lesson:
+
+- **A new bridge method is half a feature.** `appbridge._METHODS` gaining an
+  entry that no page calls looks tested and does nothing — `bank` sat that
+  way.  Wire the render in the same change; `tests/test_android_parity.py`
+  now fails if you do not, and it costs no browser.
+- **Parity is a property to re-check, not to assume.** When the surfaces
+  legitimately differ (phone defaults, unit choices), record it in
+  `cairn/android-app.md` under Parity so the next reader can tell a decision
+  from a gap.
 
 ## Do not hand-edit these
 
