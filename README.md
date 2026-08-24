@@ -63,7 +63,7 @@ Coverage targets: fref = 19.2–250 MHz, fout up to 12 GHz, integrated jitter
 
 ```bash
 pip install -e .          # numpy, scipy, matplotlib
-pytest tests/             # 461 tests: closed-form math + architecture behavior
+pytest tests/             # 544 tests: closed-form math + architecture behavior
 python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 ```
 
@@ -106,7 +106,16 @@ Actions -> Android APK -> Run workflow (manual only; it is not a release
 gate), or locally with Android Studio opened on `android/` — after first
 running `python -m build --sdist --outdir android/app/pysrc .` from the
 repo root, which produces the pllsim archive the app embeds (the Gradle
-config refuses to guess and says exactly this if it is missing).  The app pins
+config refuses to guess and says exactly this if it is missing).
+
+The navigation shell is a build-time choice between two product flavors, so
+there is no plain `assembleDebug`: `gradle -p android :app:assembleTabsDebug`
+builds the horizontal tab bar, `:app:assembleDrawerDebug` the Claude-style
+left drawer that slides in horizontally.  They carry different application
+ids, so both install on one phone at once and can be compared side by side;
+the CI workflow takes a `variant` input of `both` (default), `tabs` or
+`drawer`.  The page itself reads the mode from `?nav=`, which is how the
+browser harness drives both.  The app pins
 Python 3.10 because Chaquopy's package repository has no scipy wheel for
 anything newer — the pyproject dependency floors are verified against that
 stack, and `cairn/android-app.md` records the constraints before you change

@@ -45,6 +45,7 @@ def test_the_page_calls_nothing_the_bridge_does_not_expose():
     "preset", "form", "analyze-out", "bank-out", "simulate-out",
     "sp-preset", "sp-mmeas-note", "sp-ref-note", "hop-fll", "sel-out",
     "mod-sps", "dr-rate", "bench-out",
+    "drawer", "scrim", "menu-btn", "section-title",
 ])
 def test_ids_app_js_drives_exist_in_the_page(element_id):
     """app.js addresses the DOM by id; a renamed id in index.html turns a
@@ -61,3 +62,47 @@ def test_every_tab_button_has_a_panel():
     panels = set(re.findall(r'<div id="tab-([a-z]+)"', html))
     assert tabs == panels, f"tab buttons {tabs} vs panels {panels}"
     assert len(tabs) == 8, tabs
+
+
+def test_both_navigation_shells_are_wired():
+    """The bar is kept only so it can be compared with the drawer, and a
+    shell with no styling is a shell that renders as nothing.  Both modes
+    must exist in the CSS and app.js must know how to pick one.
+
+    Mutation: delete either `[data-nav="..."]` block from style.css, or the
+    `?nav=` read from app.js, and this goes red.
+    """
+    css = (WWW / "style.css").read_text()
+    # the load-bearing rule of each shell, not merely "the selector appears
+    # somewhere": the bar is #tabs laid out as a row, the drawer is #drawer
+    # translated off-screen.  Matching the selector alone passed while one
+    # shell's layout rule was renamed away.
+    assert '[data-nav="tabs"] #tabs { display: flex' in css, \
+        "the bar shell has no layout rule"
+    assert '[data-nav="drawer"] #drawer {' in css and \
+        "translateX(-100%)" in css, "the drawer shell has no slide rule"
+    js = APP_JS.read_text()
+    assert '"nav"' in js and "documentElement.dataset.nav" in js, \
+        "app.js no longer selects a shell from the ?nav= parameter"
+
+
+def test_the_scrim_cannot_swallow_taps_while_hidden():
+    """An author `display` beats the UA's [hidden]{display:none}: the busy
+    overlay intercepted every tap that way, invisibly, and the drawer scrim
+    is the same shape of element.  The rule has to be there in text; the
+    harness checks it by hit-testing a real page.
+    """
+    css = (WWW / "style.css").read_text()
+    assert "#scrim[hidden] { display: none; }" in css, \
+        "the scrim has no explicit hidden rule -- see cairn/android-app.md"
+
+
+def test_the_gradle_flavors_match_the_shells():
+    """Build-time selection and page-time selection have to name the same
+    two shells, or an APK ships a mode the page does not implement."""
+    import re
+    gradle = (WWW.parents[3] / "build.gradle.kts").read_text()
+    flavors = set(re.findall(r'create\("([a-z]+)"\)', gradle))
+    assert flavors == {"tabs", "drawer"}, flavors
+    for mode in flavors:
+        assert f'"{mode}"' in gradle, mode
