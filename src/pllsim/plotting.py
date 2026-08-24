@@ -77,8 +77,18 @@ def plot_ipn_pie(ar: AnalysisResult, save: str | None = None,
     ax.set_title(title or
                  f"IPN breakdown @ {ar.f0 / 1e9:.4g} GHz — "
                  f"σ = {ar.jitter_fs:.0f} fs, IPN = {ar.ipn_dbc:.1f} dBc "
-                 f"({ar.int_band[0]:.0f} Hz…{ar.int_band[1] / 1e6:.0f} MHz)")
+                 f"({ar.int_band[0]:.0f} Hz…{ar.int_band[1] / 1e6:.0f} MHz)",
+                 fontsize=10)
     fig.tight_layout()
+    # Centre the title on the *figure*, not on the axes.  The legend is
+    # anchored outside the pie, so tight_layout leaves the axes occupying
+    # roughly the left 70% -- and a title centred on that ran off the left
+    # edge of the canvas whenever the figure was drawn narrower than the
+    # 7.5 in it is laid out for.  In the Qt workbench, at a 666 px canvas,
+    # it started at x = -77 px and the reader saw "kdown @ 4.8 GHz".
+    # Must come after tight_layout, which is what fixes the axes position.
+    p = ax.get_position()
+    ax.title.set_x((0.5 - p.x0) / p.width)
     if save:
         fig.savefig(save, dpi=140)
     return fig
