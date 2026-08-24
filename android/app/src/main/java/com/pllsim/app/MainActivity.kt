@@ -42,7 +42,29 @@ class MainActivity : Activity() {
         web.settings.javaScriptEnabled = true
         web.addJavascriptInterface(HostBridge(), "host")
         setContentView(web)
-        web.loadUrl("file:///android_asset/www/index.html")
+        // the flavor decides which navigation shell the page renders; it
+        // travels as a query parameter so the browser harness can select it
+        // the same way, without Gradle
+        web.loadUrl("file:///android_asset/www/index.html?nav="
+                    + BuildConfig.NAV_MODE)
+    }
+
+    /** Back closes the drawer before it leaves the app.
+     *
+     * The page owns the answer, so it is asked; evaluateJavascript's callback
+     * is asynchronous, which is why the activity finishes from inside it
+     * rather than falling through to super.  Not reachable from the browser
+     * harness -- Chromium has no hardware back -- so this path is verified on
+     * a device, not in CI.
+     */
+    @Deprecated("onBackPressed is deprecated but is the API this minSdk has")
+    override fun onBackPressed() {
+        web.evaluateJavascript("window.onAndroidBack && window.onAndroidBack()") {
+            if (it != "true") {
+                @Suppress("DEPRECATION")
+                super.onBackPressed()
+            }
+        }
     }
 
     inner class HostBridge {

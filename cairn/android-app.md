@@ -109,6 +109,53 @@ start offset in MHz (app follows the web GUI; Qt uses Hz), analytic spurs as
 JSON rather than a table, and no "re-run live" button on Benchmarks (Qt's is
 redundant — `benchmark_table()` already computes its linear column live).
 
+### Navigation: deliberately unlike either desktop GUI, and currently doubled
+
+The phone does not copy Qt's page list or the web GUI's sidebar, and that is
+a decision, not a gap: 412 px could not hold eight entries, so the original
+tab bar squeezed them to `min-width: 4em` two-character stubs with the last
+few off-screen behind a horizontal scroll — **an entry you cannot see does not
+exist**. Since 2026-08-24 the page carries two shells and the APK picks one at
+build time:
+
+| shell | flavor | what it is |
+|---|---|---|
+| `tabs` | `:app:assembleTabsDebug` | the original horizontal bar |
+| `drawer` | `:app:assembleDrawerDebug` | left drawer, opens by horizontal slide, closes on choose |
+
+The two are **one shell over one set of buttons**: the same `#tabs` element,
+the same `<button data-tab="…">` markup, the same `showTab()`. Only the CSS
+(keyed on `html[data-nav]`) and ~60 lines of pointer-drag differ. That was the
+governing constraint — two independent navs would be two things to maintain,
+and this repository has paid for that twice already (the two GUIs that drifted
+for several releases, the group labels that lived in three places). It is also
+why every `#tabs button` selector in `app.js` and both regexes in
+`test_android_parity.py` kept working unchanged.
+
+The mode travels as `?nav=tabs|drawer` in the page URL rather than as a
+compile-time constant, so `tests/android_page_harness.py` drives **both** in
+one run. Without that, whichever shell the flavor did not build would rot
+unobserved.
+
+Two things that carried over from earlier lessons rather than being
+rediscovered: the drawer scrim has an explicit `#scrim[hidden] { display:
+none }` (the busy overlay, below), and the drag uses **Pointer** events, not
+Touch events, because `page.mouse` drives pointer events — a Touch-event
+gesture would be verifiable only by hand. Mutation-checked: giving the scrim
+an author `display` reproduces the old bug exactly (Chromium reports
+`<div hidden id="scrim"> intercepts pointer events`), and disabling the edge
+pull or dropping `setDrawer(false)` from `showTab()` both turn the harness
+red.
+
+Not reachable from the harness, so device-only: the hardware back button
+(`MainActivity.onBackPressed` → `window.onAndroidBack`), gesture feel, display
+cutouts, and whether the two `applicationIdSuffix`-separated APKs really
+co-install.
+
+**Both shells exist in order to be compared.** Once the comparison is
+settled on a real phone, deleting the losing flavor is the finishing move —
+"kept for comparison" stops being a reason the day you have compared.
+
 ### Correction to the earlier "not portable" judgment
 
 The first assessment (2026-08-22, earlier the same day) said Fit needs

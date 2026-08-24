@@ -2,6 +2,33 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-24 · Android gets a second navigation shell; both ship, build-time choice
+
+- A left drawer that opens by horizontal slide, alongside the original tab
+  bar. 412 px could not hold eight entries: the bar squeezed them to
+  two-character stubs with the last few behind a scroll, and an entry you
+  cannot see does not exist.
+- **One shell over one set of buttons**: same `#tabs`, same `data-tab`
+  markup, same `showTab()`; only CSS keyed on `html[data-nav]` and ~60 lines
+  of pointer-drag differ. Every `#tabs button` selector and both parity
+  regexes kept working untouched — that was the point, not a coincidence.
+- Mode arrives as `?nav=`, not a compile-time constant, so the harness drives
+  both in one run; the APK passes `BuildConfig.NAV_MODE` through the same
+  query string. Two Gradle flavors (`assembleTabsDebug` /
+  `assembleDrawerDebug`) with different application ids, so both install at
+  once — comparison is the whole reason the bar was kept.
+- Verified: harness green on both shells end to end; 4 mutations red,
+  including the scrim reproducing the busy-overlay bug verbatim
+  (`<div hidden id="scrim"> intercepts pointer events`). 3 new browser-free
+  parity tests.
+- One self-inflicted timeout worth remembering: `wait_for_selector` defaults
+  to `state="visible"`, so waiting on `#scrim[hidden]` waits for a
+  `display:none` element to become visible. Forever.
+- Device-only, and said so in the PR: hardware back, gesture feel, cutouts,
+  and whether the two APKs really co-install. See `cairn/android-app.md`
+  (Navigation) — including that deleting the losing flavor is the finishing
+  move once the comparison is settled.
+
 ## 2026-08-23 · IPN breakdown pie on the benchmark pages (all three surfaces)
 
 - `AnalysisResult.ipn_shares()` + `plotting.plot_ipn_pie()`; `dominant_source`

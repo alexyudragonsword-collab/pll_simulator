@@ -39,6 +39,11 @@ function applyLang() {
   });
   document.getElementById("lang").textContent = lang === "zh" ? "EN" : "中文";
   document.documentElement.lang = lang;
+  // the header title is a copy of the active entry's label; applyLang has
+  // just rewritten those, so the copy is stale until refreshed here
+  const active = document.querySelector("#tabs button.active");
+  const title = document.getElementById("section-title");
+  if (active && title) title.textContent = active.textContent;
 }
 
 /* ---------------------------------------------------------- helpers */
@@ -250,15 +255,94 @@ async function runSimulate() {
   }
 }
 
-/* ---------------------------------------------------------- tabs */
+/* --------------------------------------------------- navigation shell
+ * Two shells over ONE nav element: #tabs, its buttons and showTab() are
+ * shared, and only the presentation differs.  Keeping them shared is the
+ * whole point -- two independent navs would be two things to maintain, and
+ * this project has already paid for that twice (the two GUIs that drifted,
+ * the group labels that lived in three places).
+ *
+ * The mode arrives as ?nav=tabs|drawer so the browser harness can drive
+ * both in one run; the app passes BuildConfig.NAV_MODE through the same
+ * query string.  Anything unrecognized falls back to the bar.
+ */
+const NAV = new URLSearchParams(location.search).get("nav") === "drawer"
+  ? "drawer" : "tabs";
+document.documentElement.dataset.nav = NAV;
+
+function drawerOpen() {
+  return NAV === "drawer" && $("drawer").classList.contains("open");
+}
+
+function setDrawer(open) {
+  if (NAV !== "drawer") return;
+  const d = $("drawer");
+  d.classList.remove("dragging");
+  d.style.transform = "";            // hand control back to the class
+  d.classList.toggle("open", open);
+  $("scrim").hidden = !open;
+  $("menu-btn").setAttribute("aria-expanded", String(open));
+}
+
 function showTab(name) {
   document.querySelectorAll("#tabs button").forEach(b =>
     b.classList.toggle("active", b.dataset.tab === name));
   document.querySelectorAll(".tab").forEach(t =>
     t.hidden = t.id !== "tab-" + name);
+  const btn = document.querySelector(`#tabs button[data-tab="${name}"]`);
+  if (btn) $("section-title").textContent = btn.textContent;
+  setDrawer(false);                  // choosing is done; get out of the way
 }
 document.querySelectorAll("#tabs button").forEach(b =>
   b.addEventListener("click", () => showTab(b.dataset.tab)));
+
+$("menu-btn").addEventListener("click", () => setDrawer(!drawerOpen()));
+$("scrim").addEventListener("click", () => setDrawer(false));
+
+/* The horizontal drag.  Pointer events, not touch events: Playwright's
+ * page.mouse drives pointer events, so the gesture is checkable in the
+ * harness instead of only by hand. */
+const EDGE_PX = 20;
+let drag = null;
+
+document.addEventListener("pointerdown", ev => {
+  if (NAV !== "drawer") return;
+  const open = drawerOpen();
+  if (!open && ev.clientX > EDGE_PX) return;      // not an edge pull
+  if (open && !$("drawer").contains(ev.target) && ev.target !== $("scrim")) return;
+  drag = { x0: ev.clientX, open, w: $("drawer").offsetWidth, moved: false };
+});
+
+document.addEventListener("pointermove", ev => {
+  if (!drag) return;
+  const dx = ev.clientX - drag.x0;
+  if (!drag.moved && Math.abs(dx) < 6) return;    // let taps stay taps
+  drag.moved = true;
+  const d = $("drawer");
+  d.classList.add("dragging");
+  $("scrim").hidden = false;
+  const base = drag.open ? 0 : -drag.w;
+  const x = Math.max(-drag.w, Math.min(0, base + dx));
+  d.style.transform = `translateX(${x}px)`;
+});
+
+document.addEventListener("pointerup", ev => {
+  if (!drag) return;
+  const d = drag;
+  drag = null;
+  if (!d.moved) { setDrawer(d.open); return; }
+  const dx = ev.clientX - d.x0;
+  const base = d.open ? 0 : -d.w;
+  setDrawer(base + dx > -d.w / 2);                // past halfway decides
+});
+
+/* The Android back button, forwarded by MainActivity.  Returning true means
+ * "handled"; anything else lets the activity finish.  Not reachable from the
+ * harness -- Chromium has no hardware back -- so it is device-verified. */
+window.onAndroidBack = function () {
+  if (drawerOpen()) { setDrawer(false); return true; }
+  return false;
+};
 
 function tableHtml(rows) {
   if (!rows.length) return "";

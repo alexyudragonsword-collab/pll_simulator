@@ -38,8 +38,27 @@ bridge (`pip install playwright` first; it is deliberately not in CI, and
 not collected by pytest).  The invisible overlay that swallowed every tap,
 and a crash in the measured spectrum, were both found that way and by
 nothing else.
-The APK itself builds from Actions → *Android APK* → Run workflow, which is
-manual and deliberately off the push path.
+
+It drives **both navigation shells** by default — `--nav tabs` or `--nav
+drawer` runs one.  The phone has two: the original horizontal tab bar, and a
+left drawer that slides in horizontally, kept side by side so they can be
+compared on a real device.  They are one shell over one set of buttons: same
+`#tabs` element, same `data-tab` markup, same `showTab()`, differing only in
+CSS and about sixty lines of pointer-drag.  The mode comes from `?nav=` in the
+page URL, which is what lets the harness drive both in one run.
+
+The APK builds from Actions → *Android APK* → Run workflow (input `variant`:
+`both`, `tabs` or `drawer`), which is manual and deliberately off the push
+path.  Locally the flavors mean there is no plain `assembleDebug`:
+
+```bash
+gradle -p android :app:assembleTabsDebug      # horizontal bar
+gradle -p android :app:assembleDrawerDebug    # left drawer
+```
+
+The two carry different application ids so both sit on one phone at once.
+When the comparison is settled, deleting the losing flavor is the finishing
+move — "so they can be compared" stops being a reason once you have compared.
 
 A bridge method with no caller is half a feature: `appbridge._METHODS`
 gaining an entry that no page renders looks tested and does nothing.  Wire
@@ -60,8 +79,11 @@ gap.
 | coverage | floor of 88% (`[tool.coverage.report]`) |
 
 What CI does **not** enforce: the Android APK build (manual
-`workflow_dispatch`) and the Android page itself (no headless browser in the
-test job).  Both are on you — see "Three front ends" above.
+`workflow_dispatch`), the Android page itself (no headless browser in the
+test job), and — even in the harness — the hardware back button, the feel of
+the drawer gesture on glass, display cutouts and gesture bars, and whether the
+two flavors really co-install.  Those need a sideload.  The rest is on you —
+see "Three front ends" above.
 
 The mypy gate is the whole package (`files = ["src/pllsim"]`) — every module
 whose types carry a *convention* (rad²/Hz vs dBc/Hz, seconds vs UI, amps vs

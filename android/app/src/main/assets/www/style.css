@@ -11,12 +11,53 @@ header { display: flex; align-items: baseline; gap: .6em;
 header h1 { font-size: 1.15em; margin: 0; flex: 1; }
 header #version { color: var(--muted); font-weight: normal; font-size: .8em; }
 main, #boot { padding: .7em; max-width: 720px; margin: 0 auto; }
-#tabs { display: flex; gap: .4em; margin-bottom: .7em;
-        overflow-x: auto; -webkit-overflow-scrolling: touch; }
-#tabs button { flex: 1 0 auto; min-width: 4em; padding: .5em .4em;
-               white-space: nowrap; }
+/* ---- navigation: two shells over one nav element ------------------
+   #tabs, its buttons and showTab() are shared; only the presentation differs.
+   Everything below is keyed on html[data-nav], set from ?nav= at boot. */
+
 #tabs button.active { background: var(--accent); border-color: var(--accent);
                       color: #fff; }
+
+/* --- shell 1: the horizontal bar (default) --- */
+[data-nav="tabs"] #tabs { display: flex; gap: .4em; margin-bottom: .7em;
+        overflow-x: auto; -webkit-overflow-scrolling: touch; }
+[data-nav="tabs"] #tabs button { flex: 1 0 auto; min-width: 4em;
+               padding: .5em .4em; white-space: nowrap; }
+[data-nav="tabs"] #menu-btn,
+[data-nav="tabs"] #section-title { display: none; }
+[data-nav="tabs"] #scrim { display: none; }
+
+/* --- shell 2: the left drawer --- */
+[data-nav="drawer"] #drawer {
+  position: fixed; top: 0; left: 0; bottom: 0; z-index: 30;
+  width: min(78vw, 300px); background: var(--card);
+  border-right: 1px solid var(--line);
+  padding: .8em .6em calc(.8em + env(safe-area-inset-bottom));
+  padding-top: calc(.8em + env(safe-area-inset-top));
+  overflow-y: auto;
+  transform: translateX(-100%);
+  transition: transform .22s ease;
+  will-change: transform;
+}
+[data-nav="drawer"] #drawer.open { transform: translateX(0); }
+/* while a finger is dragging, the inline transform leads and the
+   transition must not fight it */
+[data-nav="drawer"] #drawer.dragging { transition: none; }
+[data-nav="drawer"] #tabs { display: flex; flex-direction: column;
+                            gap: .25em; }
+[data-nav="drawer"] #tabs button { text-align: left; padding: .7em .8em;
+                                   border: none; background: none;
+                                   font-size: 1.02em; }
+[data-nav="drawer"] #tabs button.active { background: var(--accent);
+                                          color: #fff; border-radius: 8px; }
+[data-nav="drawer"] #scrim { position: fixed; inset: 0; z-index: 20;
+                             background: rgba(0, 0, 0, .38); }
+/* an author display beats the UA's [hidden]{display:none}: the busy overlay
+   swallowed every tap for exactly this reason.  Not twice. */
+[data-nav="drawer"] #scrim[hidden] { display: none; }
+[data-nav="drawer"] #menu-btn { font-size: 1.25em; line-height: 1;
+                                padding: .1em .45em; }
+[data-nav="drawer"] #section-title { color: var(--muted); font-size: .9em; }
 .tab[hidden] { display: none; }
 table.rows { border-collapse: collapse; width: 100%; margin: .5em 0;
              font-size: .85em; }

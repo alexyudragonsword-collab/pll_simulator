@@ -7,7 +7,12 @@ sideloading an APK, which is why `AGENTS.md` names it as the required check
 for `android/app/src/main/assets/www/`.
 
     pip install playwright
-    python tests/android_page_harness.py [screenshot.png]
+    python tests/android_page_harness.py [screenshot.png] [--nav tabs|drawer]
+
+Both navigation shells are driven by default.  That is deliberate: the
+horizontal bar is kept only so it can be compared against the drawer on a
+real phone, and a shell nobody exercises is a shell that rots -- which is
+exactly how the two desktop GUIs drifted apart.
 
 The only thing faked is `window.host`: the Kotlin bridge is replaced by a
 small HTTP shim that forwards to `pllsim.appbridge.call` in this process, so
@@ -85,7 +90,99 @@ def run_into(page, out_id: str, button_id: str, timeout: int = 300_000):
     assert not errs.count(), errs.first.inner_text()
 
 
-def main(shot: str | None = None) -> int:
+def open_section(page, name: str):
+    """Reach a section the way a user would, in whichever shell is loaded.
+
+    In the bar the entry is always on screen; in the drawer it has to be
+    opened first, and the drawer must close again afterwards -- an entry that
+    leaves the drawer covering the content is the bug this checks for.
+    """
+    nav = page.evaluate("document.documentElement.dataset.nav")
+    if nav == "drawer" and not page.locator("#drawer.open").count():
+        # only when closed: an open drawer covers the hamburger, and
+        # clicking through it lands on whatever entry sits there
+        page.click("#menu-btn")
+        page.wait_for_selector("#drawer.open", timeout=10_000)
+    page.click(f'#tabs button[data-tab="{name}"]')
+    if nav == "drawer":
+        page.wait_for_selector("#drawer:not(.open)", timeout=10_000)
+        # state="hidden", not a `[hidden]` selector: wait_for_selector defaults
+        # to state="visible", so waiting for `#scrim[hidden]` waits for a
+        # display:none element to become visible -- which never happens, and
+        # cost a 10 s timeout before it was read carefully
+        page.wait_for_selector("#scrim", state="hidden", timeout=10_000)
+
+
+def _nav_shell(page, nav: str):
+    """Whatever the shell, the same eight sections must be reachable, and
+    nothing invisible may be sitting on top of the content."""
+    assert page.evaluate("document.documentElement.dataset.nav") == nav
+    # the scrim must never intercept taps while closed -- the busy overlay
+    # swallowed every tap for exactly this reason, and hit-testing the point
+    # is the only way to see it
+    hit = page.evaluate(
+        "document.elementFromPoint(200, 400)?.closest('#scrim') ? 'scrim' : 'content'")
+    assert hit == "content", "something invisible is covering the page"
+
+    if nav == "tabs":
+        assert page.locator("#menu-btn").is_hidden()
+        assert page.locator("#scrim").is_hidden()
+        print("nav[tabs]: bar visible, no hamburger, scrim inert")
+        return
+
+    assert page.locator("#menu-btn").is_visible()
+    # open, pick, and confirm the header now names where we are
+    open_section(page, "spurs")
+    assert page.locator("#section-title").inner_text() == "Spurs", \
+        page.locator("#section-title").inner_text()
+    # the scrim closes it
+    page.click("#menu-btn")
+    page.wait_for_selector("#drawer.open", timeout=10_000)
+    page.mouse.click(390, 500)                       # on the scrim, past the drawer
+    page.wait_for_selector("#drawer:not(.open)", timeout=10_000)
+    # and so does a drag, which is the whole point of the shell
+    page.mouse.move(3, 500)
+    page.mouse.down()
+    page.mouse.move(240, 500, steps=12)
+    page.mouse.up()
+    page.wait_for_selector("#drawer.open", timeout=10_000)
+    page.mouse.move(240, 500)
+    page.mouse.down()
+    page.mouse.move(10, 500, steps=12)
+    page.mouse.up()
+    page.wait_for_selector("#drawer:not(.open)", timeout=10_000)
+    open_section(page, "workbench")
+    print("nav[drawer]: hamburger, scrim, edge-drag open and drag-close all work")
+
+
+def drive(browser, nav: str, shot: str | None) -> None:
+    page = browser.new_page(viewport={"width": 412, "height": 915})
+    errors: list[str] = []
+    page.on("pageerror", lambda e: errors.append(str(e)))
+    page.add_init_script(SHIM)
+    page.goto(f"http://127.0.0.1:{PORT}/index.html?nav={nav}")
+    page.wait_for_selector("#app:not([hidden])", timeout=60_000)
+    page.wait_for_selector("#form input[data-path]", timeout=60_000)
+    # the page boots in Chinese; one toggle so assertions below can
+    # quote the English string rather than a translation of it
+    page.click("#lang")
+    page.wait_for_selector("#form input[data-path]", timeout=60_000)
+
+    _nav_shell(page, nav)
+    _workbench(page)
+    _spurs(page)
+    _hop(page)
+    _selector_and_handoff(page)
+    _synth_mod_drift_bench(page)
+
+    if shot:
+        page.screenshot(path=shot, full_page=True)
+    assert not errors, errors
+    print(f"OK [{nav}] — every section driven, no page errors")
+    page.close()
+
+
+def main(shot: str | None = None, navs=("tabs", "drawer")) -> int:
     from playwright.sync_api import sync_playwright
 
     srv = serve()
@@ -93,28 +190,11 @@ def main(shot: str | None = None) -> int:
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 executable_path="/opt/pw-browsers/chromium")
-            page = browser.new_page(viewport={"width": 412, "height": 915})
-            errors: list[str] = []
-            page.on("pageerror", lambda e: errors.append(str(e)))
-            page.add_init_script(SHIM)
-            page.goto(f"http://127.0.0.1:{PORT}/index.html")
-            page.wait_for_selector("#app:not([hidden])", timeout=60_000)
-            page.wait_for_selector("#form input[data-path]", timeout=60_000)
-            # the page boots in Chinese; one toggle so assertions below can
-            # quote the English string rather than a translation of it
-            page.click("#lang")
-            page.wait_for_selector("#form input[data-path]", timeout=60_000)
-
-            _workbench(page)
-            _spurs(page)
-            _hop(page)
-            _selector_and_handoff(page)
-            _synth_mod_drift_bench(page)
-
-            if shot:
-                page.screenshot(path=shot, full_page=True)
-            assert not errors, errors
-            print("OK — every tab driven, no page errors")
+            for nav in navs:
+                out = None if shot is None else (
+                    shot if len(navs) == 1
+                    else shot.replace(".png", f"-{nav}.png"))
+                drive(browser, nav, out)
             browser.close()
     finally:
         srv.shutdown()
@@ -154,7 +234,7 @@ def _workbench(page):
 
 
 def _spurs(page):
-    page.click('#tabs button[data-tab="spurs"]')
+    open_section(page, "spurs")
     page.select_option("#sp-preset", "cppll_frac_38p4m_6g")
     page.dispatch_event("#sp-preset", "change")
     page.fill("#sp-m", "4")                      # coarser than t_reset
@@ -184,7 +264,7 @@ def _spurs(page):
 
 
 def _hop(page):
-    page.click('#tabs button[data-tab="hop"]')
+    open_section(page, "hop")
     page.select_option("#hop-preset", "cppll_19p2m_4p8g")
     page.wait_for_function(
         "document.getElementById('hop-fll').textContent.includes('no FLL')",
@@ -201,7 +281,7 @@ def _hop(page):
 
 
 def _selector_and_handoff(page):
-    page.click('#tabs button[data-tab="selector"]')
+    open_section(page, "selector")
     run_into(page, "sel-out", "sel-run")
     heads = page.locator("#sel-out table.rows th").all_inner_texts()
     assert "PM [deg]" in heads, heads
@@ -221,24 +301,24 @@ def _selector_and_handoff(page):
 
 
 def _synth_mod_drift_bench(page):
-    page.click('#tabs button[data-tab="synth"]')
+    open_section(page, "synth")
     run_into(page, "sy-cp-out", "sy-cp-run")
     page.select_option("#sw-preset", "sspll_19p2m_4p8g")
     page.fill("#sw-n", "4")
     run_into(page, "sw-out", "sw-run")
 
-    page.click('#tabs button[data-tab="mod"]')
+    open_section(page, "mod")
     page.fill("#mod-ncyc", "80000")
     run_into(page, "mod-out", "mod-run")
     evm = page.locator("#mod-out .metric b").first.inner_text()
 
-    page.click('#tabs button[data-tab="drift"]')
+    open_section(page, "drift")
     page.fill("#dr-ncyc", "40000")
     page.fill("#dr-start", "50000")
     run_into(page, "dr-out", "dr-run")
     lag = page.locator("#dr-out .metric b").first.inner_text()
 
-    page.click('#tabs button[data-tab="bench"]')
+    open_section(page, "bench")
     page.wait_for_selector("#bench-out table.rows", timeout=60_000)
     rows = page.locator("#bench-out table.rows tr").count() - 1
     # the IPN pie: its premise is that the slices are a partition, so read
@@ -255,4 +335,10 @@ def _synth_mod_drift_bench(page):
 
 
 if __name__ == "__main__":
-    sys.exit(main(sys.argv[1] if len(sys.argv) > 1 else None))
+    args = sys.argv[1:]
+    navs = ("tabs", "drawer")
+    if "--nav" in args:
+        i = args.index("--nav")
+        navs = (args[i + 1],)
+        args = args[:i] + args[i + 2:]
+    sys.exit(main(args[0] if args else None, navs))

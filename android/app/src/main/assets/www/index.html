@@ -8,9 +8,14 @@
 </head>
 <body>
 <header>
+  <button id="menu-btn" class="ghost" aria-label="menu"
+          aria-controls="drawer" aria-expanded="false">&#9776;</button>
   <h1>pllsim <span id="version"></span></h1>
+  <span id="section-title"></span>
   <button id="lang" class="ghost">EN</button>
 </header>
+
+<div id="scrim" hidden></div>
 
 <div id="boot" class="card">
   <p data-zh="正在启动 Python 运行时（首次约数秒）…"
@@ -19,6 +24,7 @@
 </div>
 
 <main id="app" hidden>
+<div id="drawer">
 <nav id="tabs">
   <button data-tab="workbench" class="active"
           data-zh="工作台" data-en="Bench">工作台</button>
@@ -30,6 +36,7 @@
   <button data-tab="drift" data-zh="温漂" data-en="Drift">温漂</button>
   <button data-tab="bench" data-zh="对标" data-en="Papers">对标</button>
 </nav>
+</div>
 
 <div id="tab-workbench" class="tab">
   <section class="card">
