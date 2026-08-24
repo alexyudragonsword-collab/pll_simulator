@@ -52,7 +52,12 @@ from .guiutil import (
     supports_fine,
 )
 from .modulation import evm, gmsk_trajectory, prbs, two_point_presets
-from .plotting import plot_ipn_pie, plot_pn_breakdown, plot_spur_spectrum
+from .plotting import (
+    figure_cursor_data,
+    plot_ipn_pie,
+    plot_pn_breakdown,
+    plot_spur_spectrum,
+)
 from .selector import Requirement, select
 from .settling import fll_stability, hop_settling, hop_statistics
 from .synth import (
@@ -80,11 +85,47 @@ def _clean(x: Any) -> Any:
     return x
 
 
-def _png(fig: Any) -> str:
+#: One dpi for every plot the app shows.  The cursor map is expressed in the
+#: pixels of the image saved at this dpi, so the two cannot be set apart.
+_DPI = 130
+
+
+def _render(fig: Any, cursor: bool) -> dict:
+    """Encode a figure, optionally with the map a remote cursor needs.
+
+    Saved **without** ``bbox_inches="tight"``.  The crop rounds to whole
+    pixels and measured a constant 3.2 px of x error against the axes
+    rectangle; on a log frequency axis that is a visible slice of a decade,
+    and a readout showing a real value at the wrong offset is the worst kind
+    of wrong this codebase produces.  Every ``plot_*`` already calls
+    ``tight_layout()``, so the untrimmed image is about 1.5% larger.
+    """
+    data = figure_cursor_data(fig, _DPI) if cursor else None
     buf = io.BytesIO()
-    fig.savefig(buf, format="png", dpi=130, bbox_inches="tight")
+    fig.savefig(buf, format="png", dpi=_DPI)
     plt.close(fig)
-    return base64.b64encode(buf.getvalue()).decode("ascii")
+    out: dict[str, Any] = {
+        "png": base64.b64encode(buf.getvalue()).decode("ascii")}
+    if data is not None:
+        out["cursor"] = data
+    return out
+
+
+def _png(fig: Any) -> str:
+    """Just the image, for plots a cursor cannot read (a pie has no axes)."""
+    return _render(fig, cursor=False)["png"]
+
+
+def _plot(fig: Any) -> dict:
+    """``{"png": …, "cursor": …}`` -- spread into the reply beside its siblings.
+
+    Every plot gets the map, not a chosen few: a cursor wired into two tabs
+    and forgotten on the third is the same shape as a bridge method with no
+    caller.  Where a cursor is impossible the map is simply empty (a pie has
+    no coordinate system; a 20 000-point transient exceeds the transfer cap
+    and says which curves it refused), so it costs nothing to include.
+    """
+    return _render(fig, cursor=True)
 
 
 # Feasible candidates from the last select() call, keyed by architecture
@@ -164,7 +205,7 @@ def _analyze(preset: str = "", overrides: dict[str, str] | None = None,
         "spurs_analytic": {k: round(float(v), 1)
                            for k, v in ar.spurs_analytic.items()},
         "notes": list(ar.notes),
-        "png": _png(plot_pn_breakdown(ar, None)),
+        **_plot(plot_pn_breakdown(ar, None)),
         # the same decomposition the benchmark tab shows, for whatever is in
         # the workbench: any preset, a selector candidate, an edited config.
         # The curve says what shape the noise is; this says what to fix.
@@ -207,7 +248,7 @@ def _simulate(preset: str = "", overrides: dict[str, str] | None = None,
     # pages do -- the sim object holds no linear model to plot against
     ar = _build(preset, overrides, candidate).analyze()
 
-    pngs = [{"title": "phase noise", "png": _png(plot_pn_breakdown(ar, sim))}]
+    pngs = [{"title": "phase noise", **_plot(plot_pn_breakdown(ar, sim))}]
     fig, (a1, a2) = plt.subplots(2, 1, figsize=(8, 5), sharex=True)
     a1.plot(sim.t * 1e6, (sim.freq_out - sim.f0) / 1e6, lw=0.7)
     a1.set_ylabel("f err [MHz]")
@@ -216,14 +257,14 @@ def _simulate(preset: str = "", overrides: dict[str, str] | None = None,
     a2.set_ylabel("vctrl / OTW")
     a2.set_xlabel("t [us]")
     a2.grid(alpha=0.3)
-    pngs.append({"title": "transient", "png": _png(fig)})
+    pngs.append({"title": "transient", **_plot(fig)})
     for k, tr in sim.cal_traces.items():
         fig, ax = plt.subplots(figsize=(8, 2.2))
         ax.plot(sim.t * 1e6, tr, lw=0.8)
         ax.set_ylabel(k)
         ax.set_xlabel("t [us]")
         ax.grid(alpha=0.3)
-        pngs.append({"title": k, "png": _png(fig)})
+        pngs.append({"title": k, **_plot(fig)})
 
     return {
         "jitter_fs": sim.jitter_fs,
@@ -284,7 +325,7 @@ def _spur_spectrum(preset: str, inl_amp_s: float = 50e-15,
     return {"notes": list(sim.notes),
             "fine_applied": bool(int(fine_oversample) > 1
                                  and supports_fine(pll)),
-            "png": _png(fig)}
+            **_plot(fig)}
 
 
 def _ref_spur(preset: str, m: int = 128, n_cycles: int = 40_000) -> dict:
@@ -321,7 +362,7 @@ def _spur_sweep(preset: str, inl_amp_s: float = 50e-15,
     ax.grid(alpha=0.3, which="both")
     ax.set_title(f"{preset}: worst fractional spur vs channel")
     return {"beats_hz": beats, "worst_dbc": worst, "f_ugb_hz": f_ugb,
-            "png": _png(fig)}
+            **_plot(fig)}
 
 
 def _hop_check(preset: str) -> dict | None:
@@ -335,7 +376,7 @@ def _hop_check(preset: str) -> dict | None:
             "margin": st["margin"], "ok": bool(st["margin"] > 1.0)}
 
 
-def _hop_fig(r: Any) -> str:
+def _hop_fig(r: Any) -> dict:
     sim = r.sim
     fig, ax = plt.subplots(figsize=(9, 4))
     ax.plot(sim.t * 1e6, (sim.freq_out - r.f_to) / 1e6, lw=0.7)
@@ -350,7 +391,7 @@ def _hop_fig(r: Any) -> str:
     ax.set_ylabel("freq error [MHz]")
     ax.legend(fontsize=8)
     ax.grid(alpha=0.3)
-    return _png(fig)
+    return _plot(fig)
 
 
 def _hop(preset: str, hop_hz: float = -100e6, n_cycles: int = 100_000,
@@ -363,7 +404,7 @@ def _hop(preset: str, hop_hz: float = -100e6, n_cycles: int = 100_000,
         "t_phase_us": r.t_phase_s * 1e6,
         "fll_us": None if r.fll_engaged_s is None else r.fll_engaged_s * 1e6,
         "jitter_fs": r.jitter_fs,
-        "png": _hop_fig(r),
+        **_hop_fig(r),
     }
 
 
@@ -383,7 +424,7 @@ def _hop_stats(preset: str, hop_hz: float = -100e6, n_cycles: int = 100_000,
         "p95_us": stats["p95_s"] * 1e6,
         "worst_us": stats["worst_s"] * 1e6,
         "fail_pct": stats["fail_frac"] * 100.0,
-        "png": _png(fig),
+        **_plot(fig),
     }
 
 
@@ -495,7 +536,7 @@ def _bw_sweep(preset: str, lo_hz: float = 2e5, hi_hz: float = 3e6,
     return {"f_ugb_hz": list(res["f_ugb"]),
             "jitter_fs": list(res["jitter_fs"]),
             "n_requested": int(n_points),
-            "png": _png(fig)}
+            **_plot(fig)}
 
 
 def _modulate(preset: str, bit_rate_hz: float = 2.5e6, dp_err: float = 0.0,
@@ -542,7 +583,7 @@ def _modulate(preset: str, bit_rate_hz: float = 2.5e6, dp_err: float = 0.0,
         # < 8 samples/symbol: the per-ref-cycle grid floors the comparison
         # against the continuous ideal; only the mismatch trend is real then
         "sps_ok": bool(sps >= 8),
-        "png": _png(fig),
+        **_plot(fig),
     }
 
 
@@ -601,7 +642,7 @@ def _drift(preset: str, eps_total: float = 0.03, ramp_cycles: int = 60_000,
         "jitter_fs": sim.jitter_fs,
         "lag_spur_dbc": max(tab.values()) if tab else None,
         "notes": list(sim.notes),
-        "png": _png(fig),
+        **_plot(fig),
     }
 
 

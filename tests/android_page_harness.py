@@ -121,8 +121,12 @@ def _nav_shell(page, nav: str):
     # swallowed every tap for exactly this reason, and hit-testing the point
     # is the only way to see it
     hit = page.evaluate(
-        "document.elementFromPoint(200, 400)?.closest('#scrim') ? 'scrim' : 'content'")
-    assert hit == "content", "something invisible is covering the page"
+        "(() => { const e = document.elementFromPoint(200, 400);"
+        "  if (!e) return 'none';"
+        "  if (e.closest('#scrim')) return 'scrim';"
+        "  if (e.closest('#lightbox')) return 'lightbox';"
+        "  return 'content'; })()")
+    assert hit == "content", f"something invisible is covering the page: {hit}"
 
     if nav == "tabs":
         assert page.locator("#menu-btn").is_hidden()
@@ -156,7 +160,10 @@ def _nav_shell(page, nav: str):
 
 
 def drive(browser, nav: str, shot: str | None) -> None:
-    page = browser.new_page(viewport={"width": 412, "height": 915})
+    # has_touch: the plot viewer's pinch and double-tap are touch
+    # gestures, and a mouse-only context never dispatches them
+    page = browser.new_page(viewport={"width": 412, "height": 915},
+                            has_touch=True)
     errors: list[str] = []
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.add_init_script(SHIM)
@@ -170,6 +177,8 @@ def drive(browser, nav: str, shot: str | None) -> None:
 
     _nav_shell(page, nav)
     _workbench(page)
+    _plot_viewer(page)
+    _plot_cursor(page)
     _spurs(page)
     _hop(page)
     _selector_and_handoff(page)
@@ -231,6 +240,207 @@ def _workbench(page):
     assert abs(sum(shares) - 100.0) < 0.3, shares
     print(f"workbench: bank renders; a form edit moved {base} -> {worse}; "
           f"IPN pie sums to {sum(shares):.1f}%")
+
+
+def _pinch(page, a, b, a2, b2, steps: int = 8):
+    """A real two-finger pinch, through Chromium's input pipeline.
+
+    `page.mouse` cannot express two contacts, and dispatching synthetic DOM
+    events would only test the harness's own events -- so this goes through
+    CDP's touch input, the same path a finger takes.
+    """
+    cdp = page.context.new_cdp_session(page)
+
+    def pts(p, q):
+        return [{"x": p[0], "y": p[1], "id": 1}, {"x": q[0], "y": q[1], "id": 2}]
+
+    cdp.send("Input.dispatchTouchEvent",
+             {"type": "touchStart", "touchPoints": pts(a, b)})
+    for i in range(1, steps + 1):
+        f = i / steps
+        cdp.send("Input.dispatchTouchEvent", {"type": "touchMove", "touchPoints": pts(
+            (a[0] + (a2[0] - a[0]) * f, a[1] + (a2[1] - a[1]) * f),
+            (b[0] + (b2[0] - b[0]) * f, b[1] + (b2[1] - b[1]) * f))})
+    cdp.send("Input.dispatchTouchEvent", {"type": "touchEnd", "touchPoints": []})
+
+
+def _scale(page) -> float:
+    return float(page.locator("#lightbox").get_attribute("data-scale"))
+
+
+def _plot_viewer(page):
+    """The full-screen plot viewer, driven as a finger drives it.
+
+    A phase-noise plot spans eight decades in a 412 px column, so this is the
+    difference between seeing that a curve exists and reading it.  The scale
+    is published in a data attribute for exactly this reason: a screenshot
+    cannot tell you whether a pinch scaled by the right amount.
+    """
+    import math
+    page.locator("#analyze-out img.plot").first.click()
+    page.wait_for_selector("#lightbox:not([hidden])", timeout=10_000)
+    assert _scale(page) == 1.0
+
+    # double-tap magnifies to the image's own resolution -- no more, because
+    # past native it only softens the detail the zoom exists to show
+    nat_w, disp_w = page.evaluate(
+        "(() => { const e = document.getElementById('lightbox-img');"
+        "  return [e.naturalWidth, e.offsetWidth]; })()")
+    page.touchscreen.tap(206, 450)
+    page.touchscreen.tap(206, 450)
+    page.wait_for_function(
+        "parseFloat(document.getElementById('lightbox').dataset.scale) > 1.5",
+        timeout=5_000)
+    native = max(2.0, min(8.0, nat_w / disp_w))
+    assert abs(_scale(page) - native) < 0.02, (_scale(page), native)
+
+    page.touchscreen.tap(206, 450)
+    page.touchscreen.tap(206, 450)
+    page.wait_for_function(
+        "parseFloat(document.getElementById('lightbox').dataset.scale) < 1.05",
+        timeout=5_000)
+
+    # a two-finger pinch scales by the ratio of the finger separation; an
+    # assertion that merely says "bigger than before" passes on any nonsense
+    a, b, a2, b2 = (150, 400), (260, 500), (90, 330), (320, 570)
+    want = (math.dist(a2, b2) / math.dist(a, b))
+    _pinch(page, a, b, a2, b2)
+    page.wait_for_function(
+        "parseFloat(document.getElementById('lightbox').dataset.scale) > 1.5",
+        timeout=5_000)
+    assert abs(_scale(page) - want) < 0.05, (_scale(page), want)
+
+    # and a drag moves it, but only while zoomed in
+    before = page.evaluate(
+        "getComputedStyle(document.getElementById('lightbox-stage')).transform")
+    page.mouse.move(206, 450)
+    page.mouse.down()
+    page.mouse.move(120, 380, steps=10)
+    page.mouse.up()
+    after = page.evaluate(
+        "getComputedStyle(document.getElementById('lightbox-stage')).transform")
+    assert before != after, "a zoomed plot did not pan"
+
+    # rotating the phone relayouts the image; the anchor has to be re-measured
+    page.set_viewport_size({"width": 915, "height": 412})
+    page.wait_for_function(
+        "document.getElementById('lightbox').dataset.scale === '1.000'",
+        timeout=5_000)
+    page.set_viewport_size({"width": 412, "height": 915})
+
+    assert page.evaluate("window.onAndroidBack()") is True, \
+        "back did not consume the open viewer"
+    page.wait_for_selector("#lightbox", state="hidden", timeout=10_000)
+    print(f"plot viewer: opens at 1.0, double-tap -> {native:.2f} (native), "
+          f"pinch -> {want:.2f}, pan + rotate + back all work")
+
+
+def _plot_cursor(page):
+    """The readout, checked against the model rather than against itself.
+
+    The whole promise of a cursor is that the number under it is the number
+    on the curve, so the rows are compared with a fresh `analyze()` in this
+    process -- the same check a reader would do by hand, and the only one
+    that can catch the transfer quietly rounding the value away.
+    """
+    import math
+
+    from pllsim import presets
+    from pllsim.core.jitter import ldbc_from_sphi
+
+    # _workbench left osc.pn_dbchz at -90 and a varactor range on the form,
+    # so the plot on screen is NOT the stock preset.  Comparing its readout
+    # against presets.cppll_19p2m_4p8g() reported vco as -111.12 where the
+    # preset says -142.84 and looked exactly like a broken cursor -- it was a
+    # broken assertion.  Re-select the preset (which clears the overrides) so
+    # the page and the reference are the same configuration.
+    page.select_option("#preset", "cppll_19p2m_4p8g")
+    page.wait_for_selector("#form input[data-path]", timeout=60_000)
+    page.click("#run-analyze")
+    page.wait_for_selector("#analyze-out img.plot", timeout=180_000)
+    assert page.locator("#edited").is_hidden(), "the form still carries edits"
+
+    # the pie has no coordinate system, so it must offer no cursor at all
+    page.locator("#analyze-out img.plot").nth(1).click()
+    page.wait_for_selector("#lightbox:not([hidden])", timeout=10_000)
+    assert page.locator("#lightbox-cursor").is_hidden(), \
+        "the IPN pie was offered a cursor"
+    # and the close button must work -- tapping the X did nothing at all for
+    # a release, because pointer capture on #lightbox moved the click target
+    page.click("#lightbox-close")
+    page.wait_for_selector("#lightbox", state="hidden", timeout=10_000)
+
+    # The viewer's box has to agree with the map it is read through, so this
+    # swaps the breakdown (9/6) in over the pie (7.5/5.5) and measures inside
+    # one synchronous block.
+    #
+    # Kept, but read the comment: this was written chasing a "wrong reading"
+    # that looked like an image-load race and was actually the assertion below
+    # comparing against a preset the page was no longer showing.  It is a
+    # cheap invariant, not evidence of a race -- and it does not go red when
+    # the layout defences are removed, because by here the PNG is cached and
+    # Chromium knows its intrinsic size immediately.
+    page.locator("#analyze-out img.plot").nth(1).click()
+    page.wait_for_selector("#lightbox:not([hidden])", timeout=10_000)
+    page.wait_for_function(
+        "document.getElementById('lightbox-img').complete", timeout=10_000)
+    box = page.evaluate(
+        "(() => { const ims = document.querySelectorAll('#analyze-out img.plot');"
+        "  const pn = ims[0], d = plotData.get(pn.dataset.cursor);"
+        "  openLightbox(pn.src, pn.dataset.cursor, pn.dataset.nocursor);"
+        "  const s = document.getElementById('lightbox-stage')"
+        "    .getBoundingClientRect();"
+        "  return [s.width / s.height, d.w / d.h]; })()")
+    assert abs(box[0] - box[1]) < 0.01, (
+        "the viewer's box came from the previous image, so every cursor "
+        f"reading would be at the wrong abscissa: {box}")
+    page.evaluate("closeLightbox()")
+    page.wait_for_selector("#lightbox", state="hidden", timeout=10_000)
+
+    page.locator("#analyze-out img.plot").first.click()
+    page.wait_for_selector("#lightbox:not([hidden])", timeout=10_000)
+    page.click("#lightbox-cursor")
+    page.wait_for_selector("#lightbox-readout:not([hidden])", timeout=10_000)
+    page.mouse.move(206, 500)
+    page.mouse.down()
+    page.mouse.move(300, 500, steps=6)
+    page.mouse.up()
+
+    shown = page.locator("#lightbox-readout").inner_text().splitlines()
+    xs = float(page.locator("#lightbox").get_attribute("data-cursor-x"))
+    ar = presets.cppll_19p2m_4p8g().analyze()
+    i = min(range(ar.f.size), key=lambda k: abs(ar.f[k] - xs))
+    assert abs(ar.f[i] - xs) / xs < 1e-4, (ar.f[i], xs)
+    truth = {k: ldbc_from_sphi(s)[i] for k, s in ar.pn_breakdown.items()}
+    seen = {}
+    for row in shown[1:]:
+        name, _, value = row.strip().rpartition(" ")
+        seen[name.strip()] = float(value)
+    assert len(seen) == len(truth), (sorted(seen), sorted(truth))
+    for name, value in seen.items():
+        key = "total" if name.startswith("total") else name
+        assert abs(value - truth[key]) < 0.01, (name, value, truth[key])
+    order = [float(v) for v in seen.values()]
+    assert order == sorted(order, reverse=True), order
+
+    page.click("#lightbox-delta")
+    page.mouse.move(300, 500)
+    page.mouse.down()
+    page.mouse.move(150, 500, steps=6)
+    page.mouse.up()
+    text = page.locator("#lightbox-readout").inner_text()
+    x2 = float(page.locator("#lightbox").get_attribute("data-cursor-x"))
+    j = min(range(ar.f.size), key=lambda k: abs(ar.f[k] - x2))
+    tot = ldbc_from_sphi(ar.pn_breakdown["total"])
+    want_slope = (tot[j] - tot[i]) / math.log10(ar.f[j] / ar.f[i])
+    assert f"{want_slope:+.1f} dB/dec".replace("+", "+") in text or \
+        f"{want_slope:.1f} dB/dec" in text, (text, want_slope)
+
+    page.evaluate("window.onAndroidBack()")
+    page.wait_for_selector("#lightbox", state="hidden", timeout=10_000)
+    print(f"plot cursor: {len(seen)} curves read at {xs:.4g} Hz, all within "
+          f"0.01 dB of analyze(); slope {want_slope:+.1f} dB/dec; "
+          f"pie offers none; X closes")
 
 
 def _spurs(page):

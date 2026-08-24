@@ -93,6 +93,65 @@ details summary { font-weight: 600; font-size: .9em; padding: .3em 0; }
 .note { color: var(--warn); font-size: .85em; margin: .25em 0; }
 .error { color: var(--err); font-size: .85em; white-space: pre-wrap; }
 .edited { border-color: var(--accent); background: #eef3fe; }
+/* ---- full-screen plot viewer -------------------------------------
+   A plot is the one thing on this page that a phone screen genuinely
+   cannot show at a useful size: the PN curves span eight decades in a
+   412 px-wide column.  Tapping one opens it here.
+
+   Not keyed on [data-nav]: the viewer is the same in both shells, and
+   duplicating it per shell is exactly the drift the shared #tabs element
+   was designed to avoid. */
+#lightbox { position: fixed; inset: 0; z-index: 60; background: #000;
+            display: flex; align-items: center; justify-content: center;
+            overflow: hidden; touch-action: none; }
+/* the author `display: flex` above would otherwise beat the UA's
+   [hidden] { display: none } and leave this covering the whole app,
+   invisibly -- which is precisely what the busy overlay did. */
+#lightbox[hidden] { display: none; }
+#lightbox-stage { position: relative; transform-origin: 0 0;
+                  will-change: transform; }
+#lightbox-img { display: block; max-width: 100vw; max-height: 100vh;
+                -webkit-user-select: none; user-select: none;
+                -webkit-user-drag: none; }
+/* exactly over the image, in its own pixel grid: the canvas backing store is
+   sized to the PNG, so the axes rectangle the bridge sends can be used as-is */
+#lightbox-overlay { position: absolute; inset: 0; width: 100%; height: 100%;
+                    pointer-events: none; }
+#lightbox.dragging #lightbox-stage { transition: none; }
+/* outside the stage on purpose: a readout that scaled with the zoom would be
+   unreadable at 8x, which is when you most want to read it */
+/* right margin clears the close button: the readout is pointer-events:none so
+   the X stays tappable either way, but running underneath it looks broken */
+#lightbox-readout { position: fixed; left: .5em; right: 3.4em;
+                    top: calc(.5em + env(safe-area-inset-top)); z-index: 62;
+                    max-height: 42vh; overflow-y: auto;
+                    padding: .5em .6em; border-radius: 8px;
+                    background: rgba(20, 20, 20, .88); color: #eee;
+                    border: 1px solid #555; font-size: .78em;
+                    font-family: ui-monospace, monospace; white-space: pre;
+                    pointer-events: none; }
+#lightbox-readout[hidden] { display: none; }
+#lightbox-tools { position: fixed; z-index: 61;
+                  left: .6em; bottom: calc(2.4em + env(safe-area-inset-bottom));
+                  display: flex; gap: .4em; }
+#lightbox-tools button { font-size: .85em; padding: .35em .7em;
+                         border-radius: 6px; border: 1px solid #555;
+                         background: rgba(0, 0, 0, .55); color: #fff; }
+#lightbox-tools button[hidden] { display: none; }
+#lightbox-tools button.on { background: var(--accent); border-color: var(--accent); }
+#lightbox-close { position: fixed; top: calc(.4em + env(safe-area-inset-top));
+                  right: .6em; z-index: 61; font-size: 1.3em; line-height: 1;
+                  padding: .25em .55em; border-radius: 6px;
+                  border: 1px solid #555; background: rgba(0, 0, 0, .55);
+                  color: #fff; }
+#lightbox-hint { position: fixed; left: 0; right: 0;
+                 bottom: calc(.6em + env(safe-area-inset-bottom));
+                 margin: 0; text-align: center; color: #bbb;
+                 font-size: .8em; pointer-events: none; }
+#lightbox.zoomed #lightbox-hint { opacity: 0; }
+/* the affordance has to be visible or nobody taps the plot */
+img.plot { cursor: zoom-in; }
+
 img.plot { width: 100%; height: auto; border: 1px solid var(--line);
            border-radius: 6px; margin-top: .5em; }
 pre.spurs { background: var(--bg); padding: .5em; border-radius: 6px;

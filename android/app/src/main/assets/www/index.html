@@ -17,6 +17,25 @@
 
 <div id="scrim" hidden></div>
 
+<!-- Full-screen plot viewer.  Outside #app so it survives the boot
+     state and sits above both navigation shells. -->
+<div id="lightbox" hidden>
+  <!-- the zoom transform lives on #lightbox-stage, so the overlay scales with
+       the image while the readout, outside it, stays legible at any zoom -->
+  <div id="lightbox-stage">
+    <img id="lightbox-img" alt="">
+    <canvas id="lightbox-overlay"></canvas>
+  </div>
+  <div id="lightbox-readout" hidden></div>
+  <button id="lightbox-close" aria-label="close">&#10005;</button>
+  <div id="lightbox-tools">
+    <button id="lightbox-cursor" data-zh="游标" data-en="cursor">游标</button>
+    <button id="lightbox-delta" hidden data-zh="Δ 参考" data-en="Δ ref">Δ 参考</button>
+  </div>
+  <p id="lightbox-hint" data-zh="双指缩放 / 双击放大 / 拖动平移"
+     data-en="pinch to zoom / double-tap to magnify / drag to pan">双指缩放 / 双击放大 / 拖动平移</p>
+</div>
+
 <div id="boot" class="card">
   <p data-zh="正在启动 Python 运行时（首次约数秒）…"
      data-en="Starting the Python runtime (a few seconds on first launch)…">
