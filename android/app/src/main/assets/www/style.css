@@ -108,11 +108,37 @@ details summary { font-weight: 600; font-size: .9em; padding: .3em 0; }
    [hidden] { display: none } and leave this covering the whole app,
    invisibly -- which is precisely what the busy overlay did. */
 #lightbox[hidden] { display: none; }
-#lightbox-img { max-width: 100%; max-height: 100%;
-                transform-origin: 0 0; will-change: transform;
+#lightbox-stage { position: relative; transform-origin: 0 0;
+                  will-change: transform; }
+#lightbox-img { display: block; max-width: 100vw; max-height: 100vh;
                 -webkit-user-select: none; user-select: none;
                 -webkit-user-drag: none; }
-#lightbox.dragging #lightbox-img { transition: none; }
+/* exactly over the image, in its own pixel grid: the canvas backing store is
+   sized to the PNG, so the axes rectangle the bridge sends can be used as-is */
+#lightbox-overlay { position: absolute; inset: 0; width: 100%; height: 100%;
+                    pointer-events: none; }
+#lightbox.dragging #lightbox-stage { transition: none; }
+/* outside the stage on purpose: a readout that scaled with the zoom would be
+   unreadable at 8x, which is when you most want to read it */
+/* right margin clears the close button: the readout is pointer-events:none so
+   the X stays tappable either way, but running underneath it looks broken */
+#lightbox-readout { position: fixed; left: .5em; right: 3.4em;
+                    top: calc(.5em + env(safe-area-inset-top)); z-index: 62;
+                    max-height: 42vh; overflow-y: auto;
+                    padding: .5em .6em; border-radius: 8px;
+                    background: rgba(20, 20, 20, .88); color: #eee;
+                    border: 1px solid #555; font-size: .78em;
+                    font-family: ui-monospace, monospace; white-space: pre;
+                    pointer-events: none; }
+#lightbox-readout[hidden] { display: none; }
+#lightbox-tools { position: fixed; z-index: 61;
+                  left: .6em; bottom: calc(2.4em + env(safe-area-inset-bottom));
+                  display: flex; gap: .4em; }
+#lightbox-tools button { font-size: .85em; padding: .35em .7em;
+                         border-radius: 6px; border: 1px solid #555;
+                         background: rgba(0, 0, 0, .55); color: #fff; }
+#lightbox-tools button[hidden] { display: none; }
+#lightbox-tools button.on { background: var(--accent); border-color: var(--accent); }
 #lightbox-close { position: fixed; top: calc(.4em + env(safe-area-inset-top));
                   right: .6em; z-index: 61; font-size: 1.3em; line-height: 1;
                   padding: .25em .55em; border-radius: 6px;

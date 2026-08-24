@@ -47,6 +47,8 @@ def test_the_page_calls_nothing_the_bridge_does_not_expose():
     "mod-sps", "dr-rate", "bench-out",
     "drawer", "scrim", "menu-btn", "section-title",
     "lightbox", "lightbox-img", "lightbox-close",
+    "lightbox-stage", "lightbox-overlay", "lightbox-readout",
+    "lightbox-cursor", "lightbox-delta",
 ])
 def test_ids_app_js_drives_exist_in_the_page(element_id):
     """app.js addresses the DOM by id; a renamed id in index.html turns a
@@ -135,6 +137,47 @@ def test_plots_are_bound_to_the_viewer_by_delegation():
         "back does not close the plot viewer; it would exit the app instead"
     assert body.index("closeLightbox()") < body.index("setDrawer(false)"), \
         "back closes the drawer before the viewer, but the viewer is on top"
+
+
+def test_a_control_inside_the_viewer_keeps_its_own_taps():
+    """setPointerCapture does not merely retarget pointer events -- it moves
+    the click target to the capturing element too.  Capturing on #lightbox
+    therefore swallowed the close button entirely: tapping the X did nothing
+    at all for a release, and no test had ever tapped it.
+
+    Mutation: delete the guard and this goes red; the browser harness catches
+    the same thing by actually pressing the button.
+    """
+    js = APP_JS.read_text()
+    import re
+    body = re.search(r'lb\.addEventListener\("pointerdown".*?\n\}\);', js, re.S)
+    assert body, "the viewer lost its pointerdown handler"
+    guard = 'if (ev.target.closest("button")) return;'
+    assert guard in body.group(0), \
+        "the viewer captures taps meant for its own buttons"
+    # the *call*, not the word: the first match was inside the comment that
+    # explains the call, so this compared the guard against its own docstring
+    assert body.group(0).index(guard) < body.group(0).index("lb.setPointerCapture("), \
+        "the guard runs after the capture, which is too late"
+
+
+def test_the_cursor_map_reaches_the_page_from_every_plot():
+    """A plot rendered without its map is a plot whose cursor silently is not
+    there.  Both halves have to be wired: the bridge spreads _plot() into the
+    reply, and the page hands r.cursor to pngHtml.
+    """
+    import re
+    js = APP_JS.read_text()
+    # single-argument calls: those are the plots rendered with no map.  The
+    # pie is the only legitimate one -- a wedge has no coordinate system.
+    bare = re.findall(r"pngHtml\(([a-z_]+\.[a-z_]+)\)", js)
+    assert bare == ["r.pie_png"], \
+        f"these plots render without their cursor map: {bare}"
+    # the module's own file, not path arithmetic from WWW: counting parents
+    # got it wrong and pointed at android/src/, which does not exist
+    text = Path(appbridge.__file__).read_text()
+    assert '"png": _png(fig)' not in text, \
+        "a bridge plot still ships the image without its cursor map"
 
 
 def test_the_gradle_flavors_match_the_shells():

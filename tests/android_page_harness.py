@@ -178,6 +178,7 @@ def drive(browser, nav: str, shot: str | None) -> None:
     _nav_shell(page, nav)
     _workbench(page)
     _plot_viewer(page)
+    _plot_cursor(page)
     _spurs(page)
     _hop(page)
     _selector_and_handoff(page)
@@ -311,13 +312,13 @@ def _plot_viewer(page):
 
     # and a drag moves it, but only while zoomed in
     before = page.evaluate(
-        "getComputedStyle(document.getElementById('lightbox-img')).transform")
+        "getComputedStyle(document.getElementById('lightbox-stage')).transform")
     page.mouse.move(206, 450)
     page.mouse.down()
     page.mouse.move(120, 380, steps=10)
     page.mouse.up()
     after = page.evaluate(
-        "getComputedStyle(document.getElementById('lightbox-img')).transform")
+        "getComputedStyle(document.getElementById('lightbox-stage')).transform")
     assert before != after, "a zoomed plot did not pan"
 
     # rotating the phone relayouts the image; the anchor has to be re-measured
@@ -332,6 +333,114 @@ def _plot_viewer(page):
     page.wait_for_selector("#lightbox", state="hidden", timeout=10_000)
     print(f"plot viewer: opens at 1.0, double-tap -> {native:.2f} (native), "
           f"pinch -> {want:.2f}, pan + rotate + back all work")
+
+
+def _plot_cursor(page):
+    """The readout, checked against the model rather than against itself.
+
+    The whole promise of a cursor is that the number under it is the number
+    on the curve, so the rows are compared with a fresh `analyze()` in this
+    process -- the same check a reader would do by hand, and the only one
+    that can catch the transfer quietly rounding the value away.
+    """
+    import math
+
+    from pllsim import presets
+    from pllsim.core.jitter import ldbc_from_sphi
+
+    # _workbench left osc.pn_dbchz at -90 and a varactor range on the form,
+    # so the plot on screen is NOT the stock preset.  Comparing its readout
+    # against presets.cppll_19p2m_4p8g() reported vco as -111.12 where the
+    # preset says -142.84 and looked exactly like a broken cursor -- it was a
+    # broken assertion.  Re-select the preset (which clears the overrides) so
+    # the page and the reference are the same configuration.
+    page.select_option("#preset", "cppll_19p2m_4p8g")
+    page.wait_for_selector("#form input[data-path]", timeout=60_000)
+    page.click("#run-analyze")
+    page.wait_for_selector("#analyze-out img.plot", timeout=180_000)
+    assert page.locator("#edited").is_hidden(), "the form still carries edits"
+
+    # the pie has no coordinate system, so it must offer no cursor at all
+    page.locator("#analyze-out img.plot").nth(1).click()
+    page.wait_for_selector("#lightbox:not([hidden])", timeout=10_000)
+    assert page.locator("#lightbox-cursor").is_hidden(), \
+        "the IPN pie was offered a cursor"
+    # and the close button must work -- tapping the X did nothing at all for
+    # a release, because pointer capture on #lightbox moved the click target
+    page.click("#lightbox-close")
+    page.wait_for_selector("#lightbox", state="hidden", timeout=10_000)
+
+    # The viewer's box has to agree with the map it is read through, so this
+    # swaps the breakdown (9/6) in over the pie (7.5/5.5) and measures inside
+    # one synchronous block.
+    #
+    # Kept, but read the comment: this was written chasing a "wrong reading"
+    # that looked like an image-load race and was actually the assertion below
+    # comparing against a preset the page was no longer showing.  It is a
+    # cheap invariant, not evidence of a race -- and it does not go red when
+    # the layout defences are removed, because by here the PNG is cached and
+    # Chromium knows its intrinsic size immediately.
+    page.locator("#analyze-out img.plot").nth(1).click()
+    page.wait_for_selector("#lightbox:not([hidden])", timeout=10_000)
+    page.wait_for_function(
+        "document.getElementById('lightbox-img').complete", timeout=10_000)
+    box = page.evaluate(
+        "(() => { const ims = document.querySelectorAll('#analyze-out img.plot');"
+        "  const pn = ims[0], d = plotData.get(pn.dataset.cursor);"
+        "  openLightbox(pn.src, pn.dataset.cursor, pn.dataset.nocursor);"
+        "  const s = document.getElementById('lightbox-stage')"
+        "    .getBoundingClientRect();"
+        "  return [s.width / s.height, d.w / d.h]; })()")
+    assert abs(box[0] - box[1]) < 0.01, (
+        "the viewer's box came from the previous image, so every cursor "
+        f"reading would be at the wrong abscissa: {box}")
+    page.evaluate("closeLightbox()")
+    page.wait_for_selector("#lightbox", state="hidden", timeout=10_000)
+
+    page.locator("#analyze-out img.plot").first.click()
+    page.wait_for_selector("#lightbox:not([hidden])", timeout=10_000)
+    page.click("#lightbox-cursor")
+    page.wait_for_selector("#lightbox-readout:not([hidden])", timeout=10_000)
+    page.mouse.move(206, 500)
+    page.mouse.down()
+    page.mouse.move(300, 500, steps=6)
+    page.mouse.up()
+
+    shown = page.locator("#lightbox-readout").inner_text().splitlines()
+    xs = float(page.locator("#lightbox").get_attribute("data-cursor-x"))
+    ar = presets.cppll_19p2m_4p8g().analyze()
+    i = min(range(ar.f.size), key=lambda k: abs(ar.f[k] - xs))
+    assert abs(ar.f[i] - xs) / xs < 1e-4, (ar.f[i], xs)
+    truth = {k: ldbc_from_sphi(s)[i] for k, s in ar.pn_breakdown.items()}
+    seen = {}
+    for row in shown[1:]:
+        name, _, value = row.strip().rpartition(" ")
+        seen[name.strip()] = float(value)
+    assert len(seen) == len(truth), (sorted(seen), sorted(truth))
+    for name, value in seen.items():
+        key = "total" if name.startswith("total") else name
+        assert abs(value - truth[key]) < 0.01, (name, value, truth[key])
+    order = [float(v) for v in seen.values()]
+    assert order == sorted(order, reverse=True), order
+
+    page.click("#lightbox-delta")
+    page.mouse.move(300, 500)
+    page.mouse.down()
+    page.mouse.move(150, 500, steps=6)
+    page.mouse.up()
+    text = page.locator("#lightbox-readout").inner_text()
+    x2 = float(page.locator("#lightbox").get_attribute("data-cursor-x"))
+    j = min(range(ar.f.size), key=lambda k: abs(ar.f[k] - x2))
+    tot = ldbc_from_sphi(ar.pn_breakdown["total"])
+    want_slope = (tot[j] - tot[i]) / math.log10(ar.f[j] / ar.f[i])
+    assert f"{want_slope:+.1f} dB/dec".replace("+", "+") in text or \
+        f"{want_slope:.1f} dB/dec" in text, (text, want_slope)
+
+    page.evaluate("window.onAndroidBack()")
+    page.wait_for_selector("#lightbox", state="hidden", timeout=10_000)
+    print(f"plot cursor: {len(seen)} curves read at {xs:.4g} Hz, all within "
+          f"0.01 dB of analyze(); slope {want_slope:+.1f} dB/dec; "
+          f"pie offers none; X closes")
 
 
 def _spurs(page):

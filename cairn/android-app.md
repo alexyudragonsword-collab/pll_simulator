@@ -211,6 +211,69 @@ width exceeds the viewport is clipped on the left (the second plot's title
 reads "kdown @ 4.8 GHz"). Verified by screenshotting the same page with the
 toolbar change stashed — identical clipping — so the toolbar did not cause it.
 
+### Cursors: one set of numbers, two readouts
+
+Asked for after the zoom ("结果图上能加 cursor 么"). Both surfaces snap to a
+sample and then report **every** curve at that abscissa, worst first, because
+"what is it at 1 MHz" and "which source is responsible" are two questions and
+a crosshair reporting one (x, y) answers neither. A second cursor gives Δ and,
+on a log axis, dB/dec.
+
+The load-bearing decision is that neither side re-evaluates the model.
+`plotting.figure_cursor_data()` reads `Line2D.get_xdata()` off the **rendered
+figure**, so the readout cannot drift from the line under the finger; Qt reads
+the same artists directly (no transfer, so full precision and no length cap)
+and selects curves with the same `plotting.data_lines` predicate.
+
+Measured, and each one changed the design:
+
+| measurement | consequence |
+|---|---|
+| `bbox_inches="tight"` costs a constant **3.2 px** of x error | the bridge saves untrimmed; the map is then exact to 0.27 × 0.43 px |
+| all 7 breakdown curves share one f grid | send it once — 57 → 28 KiB |
+| the periodogram grid is arithmetic | `start/step/n` rebuilds it with **zero** error — 150 → 67 KiB |
+| 4 significant digits showed −107.45 dBc/Hz as "−107.40" | 5 digits; worst transfer error now 0.0048 dB against a readout printing 0.01 |
+| a 20 000-point transient is 481 KiB against a 131 KiB PNG | refused **by name** rather than thinned — a decimated cursor would read numbers the drawn curve does not show |
+
+**A wrong diagnosis, recorded because the shape repeats.** The harness read
+`vco = -111.12` where the preset says `-142.84` and it looked exactly like a
+broken cursor. It was a broken *assertion*: `_workbench` runs earlier in the
+same session and leaves `osc.pn_dbchz` at −90, so the plot on screen was an
+edited configuration while the reference was the stock preset. −111.12 is
+simply what that curve is with a −90 dBc/Hz oscillator.
+
+Two rounds of defensive code went in before that was noticed — a pinned aspect
+ratio, a `load` re-measure, a decode guard — on the theory that the image had
+not laid out yet. None of them changed the failure, which was the signal that
+the theory was wrong, and two were reverted. What survives is the `load`
+re-measure, kept because a `src` assignment genuinely is asynchronous, and
+labelled in the source as reasoning rather than measurement. The harness now
+re-selects the preset before comparing, so the page and the reference are the
+same configuration.
+
+The lesson is the one this file keeps repeating from the other direction: when
+a fix does not move the failure, the diagnosis is wrong. Adding a second fix on
+top of the first is how three unnecessary defences end up in a file.
+
+**A live bug this uncovered:** the full-screen viewer's ✕ never worked.
+`setPointerCapture` on `#lightbox` does not merely retarget pointer events, it
+moves the *click* target to the capturing element too, so the button's handler
+never ran. It shipped in the drawer release and no test had ever tapped it —
+the harness pressed the scrim and the back button instead. Both a text check
+(the guard exists, and runs before the capture) and a real tap in the harness
+now cover it.
+
+Two mistakes of mine that measurement caught, recorded because the shape
+repeats: curves were selected by label, which dropped the measured periodogram
+(the main curve of the spur plot, which carries no legend entry) — the
+transform is what separates a trace from an `axvline`; and grid uniformity was
+tested on the *rounded* abscissa, where 6 significant digits at 100 MHz is
+±100 Hz against a 2560 Hz step.
+
+**Parity, deliberate:** the web GUI still has neither zoom nor cursor. Same
+reason as before — Streamlit offers no matplotlib interaction short of
+swapping the plotting backend.
+
 ### Correction to the earlier "not portable" judgment
 
 The first assessment (2026-08-22, earlier the same day) said Fit needs

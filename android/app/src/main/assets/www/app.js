@@ -68,8 +68,25 @@ function notesHtml(notes) {
   return (notes || []).map(n => `<p class="note">note: ${esc(n)}</p>`).join("");
 }
 
-function pngHtml(b64) {
-  return `<img class="plot" src="data:image/png;base64,${b64}">`;
+/* Plots and their cursor maps.  The map is kept beside the image rather than
+ * inlined into the markup because it is tens of KiB of numbers: a data-
+ * attribute would be re-parsed on every render, and the DOM is not a place to
+ * store a 7500-point periodogram. */
+const plotData = new Map();
+let plotSeq = 0;
+
+function pngHtml(b64, cursor) {
+  let attr = "";
+  if (cursor && cursor.axes && cursor.axes.length) {
+    const id = "p" + (++plotSeq);
+    plotData.set(id, cursor);
+    attr = ` data-cursor="${id}"`;
+  } else if (cursor && cursor.dropped && cursor.dropped.length) {
+    // say why rather than leaving the reader to wonder: a plot that silently
+    // has no cursor is indistinguishable from one that is broken
+    attr = ` data-nocursor="${esc(cursor.dropped.join(", "))}"`;
+  }
+  return `<img class="plot"${attr} src="data:image/png;base64,${b64}">`;
 }
 
 function errHtml(e) {
@@ -181,7 +198,7 @@ async function runAnalyze() {
     if (Object.keys(r.spurs_analytic).length) {
       html += `<pre class="spurs">${esc(JSON.stringify(r.spurs_analytic, null, 1))}</pre>`;
     }
-    html += pngHtml(r.png);
+    html += pngHtml(r.png, r.cursor);
     // the curve says what shape the noise is; the pie says what to fix
     html += pngHtml(r.pie_png) + tableHtml(r.ipn_rows.map(x => ({
       source: x.source,
@@ -240,7 +257,7 @@ async function runSimulate() {
       ["f_end", r.f_end_ghz.toFixed(6) + " GHz"],
     ]);
     html += notesHtml(r.notes);
-    r.pngs.forEach(p => { html += `<p class="muted">${esc(p.title)}</p>` + pngHtml(p.png); });
+    r.pngs.forEach(p => { html += `<p class="muted">${esc(p.title)}</p>` + pngHtml(p.png, p.cursor); });
     if (r.spurs_fft.length) {
       const rows = r.spurs_fft.map(s =>
         `${(s.offset_hz / 1e3).toFixed(1)} kHz: ` +
@@ -378,7 +395,7 @@ function lbNativeScale() {
 }
 
 function lbApply() {
-  const el = $("lightbox-img");
+  const el = $("lightbox-stage");
   el.style.transform =
     `translate(${lbView.x}px, ${lbView.y}px) scale(${lbView.s})`;
   const lb = $("lightbox");
@@ -389,7 +406,7 @@ function lbApply() {
 function lbClampPan() {
   // keep at least a corner of the image on screen; a plot dragged into the
   // void with no way back is worse than no panning at all
-  const el = $("lightbox-img");
+  const el = $("lightbox-stage");
   const w = el.offsetWidth * lbView.s, h = el.offsetHeight * lbView.s;
   const minX = Math.min(0, innerWidth - lbOrigin - w);
   const minY = Math.min(0, innerHeight - lbOriginY - h);
@@ -408,17 +425,34 @@ function lbZoomTo(scale, qx, qy) {
   lbApply();
 }
 
-function openLightbox(src) {
-  const lb = $("lightbox"), el = $("lightbox-img");
-  el.src = src;
-  lbView = { s: 1, x: 0, y: 0 };
-  el.style.transform = "";
-  lb.hidden = false;
-  // the untransformed box, measured after the viewer is laid out -- every
-  // anchor calculation is relative to it
-  const r = el.getBoundingClientRect();
+function lbMeasure() {
+  const r = $("lightbox-stage").getBoundingClientRect();
   lbOrigin = r.left; lbOriginY = r.top;
+}
+
+function openLightbox(src, cursorId, noCursorWhy) {
+  const lb = $("lightbox"), stage = $("lightbox-stage");
+  const img = $("lightbox-img");
+  img.src = src;
+  lbView = { s: 1, x: 0, y: 0 };
+  stage.style.transform = "";
+  lb.hidden = false;
+
+  lbMeasure();
+  lbCursorSetup(cursorId, noCursorWhy);
   lbApply();
+  // A src assignment does not lay out synchronously, so the eager measure
+  // above can describe the previous image.  Re-measure once the new one is
+  // there.  (This was originally written to fix a wrong cursor reading; that
+  // turned out to be a harness bug comparing against an edited config, not a
+  // race.  Kept because the asynchrony is real, not because it was measured.)
+  if (!img.complete) {
+    img.addEventListener("load", () => {
+      lbMeasure();
+      lbApply();
+      if (lbCur && lbCur.on && lbCur.i >= 0) { lbDrawCursor(); lbRenderReadout(); }
+    }, { once: true });
+  }
 }
 
 function closeLightbox() {
@@ -426,14 +460,223 @@ function closeLightbox() {
   lb.hidden = true;
   lb.classList.remove("zoomed", "dragging");
   lbPointers.clear(); lbPinch = null; lbDrag = null;
+  lbCursorOff();
   $("lightbox-img").src = "";
 }
+
+/* ------------------------------------------------------- the plot cursor
+ * The same contract as the desktop: snap to a sample, then read *every*
+ * curve at that abscissa, worst first.  "What is it at 1 MHz" and "which
+ * source is responsible" are two questions, and a crosshair reporting one
+ * (x, y) answers neither.
+ *
+ * The numbers are the ones the figure was drawn from -- pllsim.plotting
+ * hands over Line2D.get_xdata(), not a second evaluation of the model -- so
+ * the readout cannot drift from the curve under the finger.  The axes
+ * rectangle arrives in the PNG's own pixels, which is why the overlay
+ * canvas is sized to the PNG rather than to its on-screen box.
+ */
+let lbCur = null;          // {data, ax, i, ref, on}
+
+function lbCursorSetup(cursorId, noCursorWhy) {
+  const btn = $("lightbox-cursor"), dbtn = $("lightbox-delta");
+  lbCur = null;
+  dbtn.hidden = true;
+  btn.classList.remove("on");
+  $("lightbox-readout").hidden = true;
+  const data = cursorId ? plotData.get(cursorId) : null;
+  if (!data) {
+    btn.hidden = true;
+    if (noCursorWhy) {
+      // a plot that silently has no cursor reads as broken; say which curves
+      // were too long to send rather than leaving it blank
+      const r = $("lightbox-readout");
+      r.textContent = (lang === "zh"
+        ? "此图无游标：曲线点数超出传输上限\n" : "no cursor here: trace too long to send\n")
+        + "  " + noCursorWhy;
+      r.hidden = false;
+    }
+    return;
+  }
+  btn.hidden = false;
+  lbCur = { data, ax: data.axes[0], i: -1, ref: null, on: false };
+}
+
+function lbCursorOff() {
+  lbCur = null;
+  $("lightbox-readout").hidden = true;
+  $("lightbox-cursor").classList.remove("on");
+  $("lightbox-delta").hidden = true;
+  const c = $("lightbox-overlay");
+  const g = c.getContext("2d");
+  if (g) g.clearRect(0, 0, c.width, c.height);
+}
+
+function lbGridOf(t) {
+  // x lives on the trace, or on the axes when every curve shares one, and
+  // either may be an arithmetic grid sent as start/step/n
+  const u = t.x_uniform || lbCur.ax.x_uniform;
+  if (u) return { n: u.n, at: k => u.start + k * u.step };
+  const arr = t.x || lbCur.ax.x;
+  return { n: arr.length, at: k => arr[k] };
+}
+
+function lbAxisToPx(v, lo, hi, a, b, log) {
+  const f = log ? Math.log10 : (z => z);
+  return a + (f(v) - f(lo)) / (f(hi) - f(lo)) * (b - a);
+}
+
+function lbPxToAxis(p, lo, hi, a, b, log) {
+  const f = log ? Math.log10 : (z => z);
+  const t = (p - a) / (b - a);
+  const v = f(lo) + t * (f(hi) - f(lo));
+  return log ? Math.pow(10, v) : v;
+}
+
+/** Nearest sample index on the longest trace, given an x in PNG pixels. */
+function lbIndexAt(pxImage) {
+  const A = lbCur.ax, [x0, , x1] = [A.box[0], A.box[1], A.box[2]];
+  const xd = lbPxToAxis(pxImage, A.xlim[0], A.xlim[1], x0, x1, A.xlog);
+  let best = null;
+  for (const t of A.traces) {
+    const g = lbGridOf(t);
+    // binary search on a monotonic abscissa; these run to 7500 points and
+    // this happens on every pointer move
+    let lo = 0, hi = g.n - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (g.at(mid) <= xd) lo = mid; else hi = mid;
+    }
+    const k = Math.abs(g.at(lo) - xd) <= Math.abs(g.at(hi) - xd) ? lo : hi;
+    const d = Math.abs(g.at(k) - xd);
+    if (best === null || d < best.d) best = { d, k, x: g.at(k) };
+  }
+  return best;
+}
+
+function lbRowsAt(xd) {
+  const rows = [];
+  for (const t of A_traces()) {
+    const g = lbGridOf(t);
+    if (xd < Math.min(g.at(0), g.at(g.n - 1)) ||
+        xd > Math.max(g.at(0), g.at(g.n - 1))) continue;
+    let lo = 0, hi = g.n - 1;
+    while (hi - lo > 1) {
+      const mid = (lo + hi) >> 1;
+      if (g.at(mid) <= xd) lo = mid; else hi = mid;
+    }
+    const k = Math.abs(g.at(lo) - xd) <= Math.abs(g.at(hi) - xd) ? lo : hi;
+    rows.push({ label: t.label, y: t.y[k], color: t.color });
+  }
+  return rows.sort((p, q) => q.y - p.y);
+}
+function A_traces() { return lbCur.ax.traces; }
+
+function lbEng(v) {
+  if (!isFinite(v) || v === 0) return String(v);
+  const a = Math.abs(v);
+  const u = [[1e9, "G"], [1e6, "M"], [1e3, "k"], [1, ""], [1e-3, "m"],
+             [1e-6, "µ"], [1e-9, "n"]];
+  for (const [lim, suf] of u) {
+    if (a >= lim) return (v / lim).toPrecision(4).replace(/\.?0+$/, "") + suf;
+  }
+  return v.toExponential(3);
+}
+
+function lbDrawCursor() {
+  const c = $("lightbox-overlay"), A = lbCur.ax;
+  const g = c.getContext("2d");
+  c.width = lbCur.data.w; c.height = lbCur.data.h;
+  g.clearRect(0, 0, c.width, c.height);
+  if (lbCur.i < 0) return;
+  const draw = (xv, style, width) => {
+    const px = lbAxisToPx(xv, A.xlim[0], A.xlim[1], A.box[0], A.box[2], A.xlog);
+    g.save();
+    g.strokeStyle = style; g.lineWidth = width; g.setLineDash([6, 4]);
+    g.beginPath(); g.moveTo(px, A.box[1]); g.lineTo(px, A.box[3]); g.stroke();
+    g.restore();
+  };
+  if (lbCur.ref !== null) draw(lbCur.ref.x, "#d32f2f", 2);
+  draw(lbCur.x, "#111", 2);
+}
+
+function lbRenderReadout() {
+  const out = $("lightbox-readout"), A = lbCur.ax;
+  if (lbCur.i < 0) { out.hidden = true; return; }
+  const rows = lbRowsAt(lbCur.x);
+  const xname = (A.xlabel || "x").split("[")[0].trim();
+  const lines = [`${xname} = ${lbEng(lbCur.x)}`];
+  if (lbCur.ref === null) {
+    for (const r of rows) {
+      lines.push("  " + r.label.padEnd(20).slice(0, 20) +
+                 r.y.toFixed(2).padStart(9));
+    }
+  } else {
+    const top = rows.length ? rows[0].label : "";
+    const now = rows.length ? rows[0].y : NaN;
+    const dy = now - lbCur.ref.y;
+    lines.push(`ref = ${lbEng(lbCur.ref.x)}`);
+    lines.push(`Δ   = ${lbEng(lbCur.x - lbCur.ref.x)}`);
+    lines.push(`Δ${top} = ${dy >= 0 ? "+" : ""}${dy.toFixed(2)} dB`);
+    if (A.xlog && lbCur.x > 0 && lbCur.ref.x > 0 && lbCur.x !== lbCur.ref.x) {
+      const dec = Math.log10(lbCur.x / lbCur.ref.x);
+      const sl = dy / dec;
+      lines.push(`slope = ${sl >= 0 ? "+" : ""}${sl.toFixed(1)} dB/dec`);
+    }
+  }
+  out.textContent = lines.join("\n");
+  out.hidden = false;
+  $("lightbox").dataset.cursorX = String(lbCur.x);
+}
+
+/** Move the cursor to a client-space point. */
+function lbCursorTo(clientX) {
+  const c = $("lightbox-overlay");
+  const r = c.getBoundingClientRect();       // includes the zoom transform
+  if (!r.width) return;                      // not laid out yet
+  const pxImage = (clientX - r.left) / r.width * lbCur.data.w;
+  const hit = lbIndexAt(pxImage);
+  if (!hit) return;
+  lbCur.i = hit.k; lbCur.x = hit.x;
+  lbDrawCursor();
+  lbRenderReadout();
+}
+
+$("lightbox-cursor").addEventListener("click", ev => {
+  ev.stopPropagation();
+  if (!lbCur) return;
+  lbCur.on = !lbCur.on;
+  $("lightbox-cursor").classList.toggle("on", lbCur.on);
+  $("lightbox-delta").hidden = !lbCur.on;
+  if (!lbCur.on) {
+    lbCur.i = -1; lbCur.ref = null;
+    lbDrawCursor();
+    $("lightbox-readout").hidden = true;
+  } else if (lbCur.i < 0) {
+    lbCursorTo(innerWidth / 2);
+  }
+});
+
+$("lightbox-delta").addEventListener("click", ev => {
+  ev.stopPropagation();
+  if (!lbCur || !lbCur.on) return;
+  if (lbCur.ref !== null) { lbCur.ref = null; }
+  else if (lbCur.i >= 0) {
+    const rows = lbRowsAt(lbCur.x);
+    if (!rows.length) return;
+    lbCur.ref = { x: lbCur.x, y: rows[0].y };
+  }
+  lbDrawCursor();
+  lbRenderReadout();
+});
 
 // delegated: plots are injected into a dozen different output containers,
 // and a per-render binding is a binding somebody forgets on the next tab
 document.addEventListener("click", ev => {
   const img = ev.target.closest && ev.target.closest("img.plot");
-  if (img && !lightboxOpen()) { openLightbox(img.src); }
+  if (img && !lightboxOpen()) {
+    openLightbox(img.src, img.dataset.cursor, img.dataset.nocursor);
+  }
 });
 
 $("lightbox-close").addEventListener("click", ev => {
@@ -444,6 +687,11 @@ $("lightbox-close").addEventListener("click", ev => {
 const lb = $("lightbox");
 
 lb.addEventListener("pointerdown", ev => {
+  // Controls own their own taps.  setPointerCapture does not merely retarget
+  // pointer events -- it moves the *click* target to the capturing element
+  // too, so capturing here swallowed the close button entirely: tapping the
+  // X did nothing at all, and no test had ever tapped it.
+  if (ev.target.closest("button")) return;
   // before setPointerCapture: capture retargets every later pointer event to
   // the capturing element, so ev.target at pointerup is always #lightbox and
   // "did this gesture start on the image" has to be answered here
@@ -473,6 +721,13 @@ lb.addEventListener("pointermove", ev => {
     if (lbPinch.d0 > 0) {
       lbZoomTo(lbPinch.s0 * (d / lbPinch.d0), lbPinch.cx, lbPinch.cy);
     }
+    return;
+  }
+  // with the cursor armed, one finger drives it and two still pinch: the
+  // alternative is a drag that both pans and reads, which does neither well
+  if (lbCur && lbCur.on && lbPointers.size === 1) {
+    if (lbDrag) lbDrag.moved = true;
+    lbCursorTo(ev.clientX);
     return;
   }
   if (lbDrag && lbView.s > 1) {
@@ -518,12 +773,13 @@ lb.addEventListener("pointercancel", lbEndPointer);
  * is wrong.  Re-measure and go back to fit. */
 addEventListener("resize", () => {
   if (!lightboxOpen()) return;
-  const el = $("lightbox-img");
+  const el = $("lightbox-stage");     // the element the transform lives on
   lbView = { s: 1, x: 0, y: 0 };
   el.style.transform = "";
   const r = el.getBoundingClientRect();
   lbOrigin = r.left; lbOriginY = r.top;
   lbApply();
+  if (lbCur && lbCur.on) { lbDrawCursor(); }
 });
 
 function tableHtml(rows) {
@@ -603,7 +859,7 @@ $("sp-measure").addEventListener("click", () => runInto(
         ? "该架构没有周期内记录，M 已忽略"
         : "this architecture has no intra-period record; M was ignored"}</p>`;
     }
-    return head + notesHtml(r.notes) + pngHtml(r.png);
+    return head + notesHtml(r.notes) + pngHtml(r.png, r.cursor);
   }, "时域仿真中…", "simulating…"));
 
 $("sp-ref").addEventListener("click", () => runInto(
@@ -619,7 +875,7 @@ $("sp-ref").addEventListener("click", () => runInto(
 $("sp-sweep").addEventListener("click", () => runInto(
   "sp-sweep-out", async () => {
     const r = await call("spur_sweep", spurArgs());
-    return pngHtml(r.png);
+    return pngHtml(r.png, r.cursor);
   }, "扫描 8 个通道中…", "sweeping 8 channels…"));
 
 /* ---------------------------------------------------------- hop tab */
@@ -659,7 +915,7 @@ $("hop-run").addEventListener("click", () => runInto(
       ["t_phase", r.t_phase_us === null ? ns : r.t_phase_us.toFixed(1) + " us"],
       ["FLL", r.fll_us === null ? "-" : r.fll_us.toFixed(1) + " us"],
       ["jitter", r.jitter_fs === null ? "-" : r.jitter_fs.toFixed(0) + " fs"],
-    ]) + pngHtml(r.png);
+    ]) + pngHtml(r.png, r.cursor);
   }, "跳频仿真中…", "hopping…"));
 
 $("hop-stats").addEventListener("click", () => runInto(
@@ -674,7 +930,7 @@ $("hop-stats").addEventListener("click", () => runInto(
       [lang === "zh" ? "最差" : "worst",
        r.worst_us === null ? "-" : r.worst_us.toFixed(0) + " us"],
       [lang === "zh" ? "未建立" : "failed", r.fail_pct.toFixed(0) + " %"],
-    ]) + pngHtml(r.png);
+    ]) + pngHtml(r.png, r.cursor);
   }, "多种子跳频中…", "hopping (all seeds)…"));
 
 /* ------------------------------------------------- selector tab */
@@ -789,7 +1045,7 @@ $("sw-run").addEventListener("click", () => runInto(
         ? `${r.n_requested} 个带宽点中 ${r.jitter_fs.length} 个可综合，其余跳过`
         : `${r.jitter_fs.length} of ${r.n_requested} UGB targets were synthesizable; the rest were skipped`}</p>`;
     }
-    return html + pngHtml(r.png);
+    return html + pngHtml(r.png, r.cursor);
   }, "带宽扫描中…", "sweeping…"));
 
 /* ------------------------------------------------- modulation tab */
@@ -821,7 +1077,7 @@ $("mod-run").addEventListener("click", () => runInto(
       ["EVM", r.evm_db.toFixed(1) + " dB"],
       [lang === "zh" ? "相位误差" : "phase err",
        r.phase_err_rms_deg.toFixed(2) + " deg rms"],
-    ]) + pngHtml(r.png);
+    ]) + pngHtml(r.png, r.cursor);
   }, "调制仿真中…", "modulating…"));
 
 /* ------------------------------------------------- drift tab */
@@ -860,7 +1116,7 @@ $("dr-run").addEventListener("click", () => runInto(
       ["jitter", r.jitter_fs === null ? "-" : r.jitter_fs.toFixed(0) + " fs"],
       [lang === "zh" ? "滞后杂散" : "lag spur",
        r.lag_spur_dbc === null ? "-" : r.lag_spur_dbc.toFixed(1) + " dBc"],
-    ]) + notesHtml(r.notes) + pngHtml(r.png);
+    ]) + notesHtml(r.notes) + pngHtml(r.png, r.cursor);
   }, "斜坡仿真中…", "ramping…"));
 
 /* ------------------------------------------------- benchmarks tab */
@@ -892,7 +1148,7 @@ $("pie-run").addEventListener("click", () => runInto(
       ["jitter", r.jitter_fs.toFixed(1) + " fs"],
       ["IPN", r.ipn_dbc.toFixed(1) + " dBc"],
       [lang === "zh" ? "主导源" : "dominant", r.dominant],
-    ]) + pngHtml(r.png) + tableHtml(r.rows.map(x => ({
+    ]) + pngHtml(r.png, r.cursor) + tableHtml(r.rows.map(x => ({
       source: x.source,
       "share [%]": x.share_pct.toFixed(1),
       "jitter [fs]": x.jitter_fs.toFixed(1),

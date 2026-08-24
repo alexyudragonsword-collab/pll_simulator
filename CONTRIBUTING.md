@@ -69,13 +69,22 @@ Where the surfaces differ on purpose — phone defaults, unit choices — record
 it in `cairn/android-app.md` so the next reader can tell a decision from a
 gap.
 
-Plot zoom is one of those places, and the three surfaces do it differently
-because they have to: Qt figures carry matplotlib's own
-`NavigationToolbar2QT` (added in `widgets.FigList`, so every page gets it),
-Android has no matplotlib in its WebView and instead opens a tapped plot in a
-full-screen pinch/double-tap viewer, and the web GUI keeps static
+Plot zoom and the readout cursor are two of those places, and the surfaces do
+them differently because they have to: Qt figures carry matplotlib's own
+`NavigationToolbar2QT` plus a `PlotCursor` (both added in `widgets.FigList`, so
+every page gets them), Android has no matplotlib in its WebView and instead
+opens a tapped plot in a full-screen pinch/double-tap viewer whose cursor is
+driven by data the bridge ships beside the image, and the web GUI keeps static
 `st.pyplot()` PNGs on purpose. Do not "fix" the web GUI's difference without
 reading the Parity note first.
+
+The cursor has one rule worth stating separately: **neither surface
+re-evaluates the model.** `plotting.figure_cursor_data()` reads the curves off
+the rendered figure's `Line2D`s, and Qt reads the same artists directly, so a
+readout cannot drift from the line the reader is pointing at. If you add a
+plot, it inherits a cursor for free — and if its traces are too long to ship,
+the bridge refuses them by name rather than thinning them, because a decimated
+cursor would report numbers the drawn curve does not show.
 
 ## What CI enforces
 

@@ -193,7 +193,13 @@ def figure_cursor_data(fig, dpi: float,
                 "label": label,
                 "color": matplotlib.colors.to_hex(ln.get_color()),
                 "_x": x[ok],                     # raw, dropped before return
-                "y": [float(f"{v:.4g}") for v in y[ok]],
+                # 5 significant digits, not 4: the readouts print two
+                # decimals, and at 4 digits a -107.45 dBc/Hz sample arrived as
+                # -107.4 and was displayed as "-107.40" -- a claim of
+                # precision the transfer had already destroyed.  Five digits
+                # cost about 1 byte per sample and make the second decimal
+                # true across the whole dBc/Hz range these plots use.
+                "y": [float(f"{v:.5g}") for v in y[ok]],
             })
         if not traces:
             continue

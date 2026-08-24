@@ -2,6 +2,30 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-24 · Readout cursors on Qt and Android: every curve at once, plus Δ
+
+- `plotting.figure_cursor_data()` extracts the axes rectangle in PNG pixels
+  plus the curves, **from the rendered figure**, so no surface re-evaluates
+  the model and no readout can drift from the drawn line.
+- Qt: `PlotCursor` in `widgets.FigList`, on every data axes of every page.
+  Android: the bridge ships the map with every plot and the full-screen
+  viewer draws it.
+- Measurements that changed the design, not decorated it: the tight crop
+  costs 3.2 px of x (dropped it — map now exact to 0.3 px); the shared f grid
+  and the arithmetic periodogram grid cut payloads 57→28 and 150→67 KiB; 4
+  significant digits displayed −107.45 dBc/Hz as "−107.40", so 5.
+- **Found a shipped bug:** the viewer's ✕ never worked. `setPointerCapture`
+  moves the *click* target too, so the button's handler never ran. It went
+  out in the drawer release because the harness tapped the scrim and the
+  back button, never the ✕.
+- Four of my own mistakes, all caught by measurement: a Qt slope test using a
+  pair exactly one decade apart (where the division is invisible); a parity
+  regex matching `setPointerCapture` inside its own explaining comment; path
+  arithmetic pointing at a directory that does not exist; and a harness
+  assertion comparing the readout against a preset the page was no longer
+  showing, which I first mistook for an image-load race and "fixed" twice
+  before noticing the failure never moved. See `cairn/android-app.md`.
+
 ## 2026-08-24 · Plots become zoomable: Qt gets its toolbar, Android a full-screen viewer
 
 - Qt was missing `NavigationToolbar2QT` outright — `FigureCanvasQTAgg` had
