@@ -362,3 +362,142 @@ def test_the_toolbar_offers_the_controls_zooming_actually_needs(app):
     bar.pan()
     assert str(bar.mode) == ""
     fl.deleteLater()
+
+
+def _drive(fl, fx, click=False):
+    """Move (and optionally click) the real mouse-event path at abscissa fx."""
+    import numpy as np
+    from matplotlib.backend_bases import MouseButton, MouseEvent
+    cur = fl.cursors()[0]
+    line = max(cur.lines, key=lambda ln: len(ln.get_xdata()))
+    x = np.asarray(line.get_xdata(), float)
+    y = np.asarray(line.get_ydata(), float)
+    i = int(np.argmin(np.abs(x - fx)))
+    px, py = cur.ax.transData.transform((x[i], y[i]))
+    name = "button_press_event" if click else "motion_notify_event"
+    args = (MouseButton.LEFT,) if click else ()
+    MouseEvent(name, cur.canvas, px, py, *args)._process()
+    return cur, float(x[i])
+
+
+def _pn_figlist():
+    from pllsim import presets
+    from pllsim.guiqt.widgets import FigList
+    from pllsim.plotting import plot_pn_breakdown
+    ar = presets.cppll_19p2m_4p8g().analyze()
+    fl = FigList()
+    fl.set_figs([plot_pn_breakdown(ar, None)])
+    fl.resize(1100, 700)
+    return fl, ar
+
+
+def test_the_cursor_reads_the_curves_not_a_recomputation(app):
+    """Every row must be the artist's own number at the cursor's abscissa.
+
+    A readout that recomputes can drift from the drawn line by a little, which
+    is unfalsifiable by eye and exactly the failure this project keeps paying
+    for.  Mutation: have _values_at interpolate instead of taking the sample,
+    or offset any row, and this goes red.
+    """
+    import numpy as np
+    fl, ar = _pn_figlist()
+    assert len(fl.cursors()) == 1
+    cur, xs = _drive(fl, 1e6)
+    rows = cur._values_at(xs)
+    assert len(rows) == len(ar.pn_breakdown), [k for k, _ in rows]
+    for label, value in rows:
+        line = next(ln for ln in cur.lines if ln.get_label() == label)
+        x = np.asarray(line.get_xdata(), float)
+        y = np.asarray(line.get_ydata(), float)
+        assert value == pytest.approx(y[int(np.argmin(np.abs(x - xs)))], abs=1e-9)
+    assert [v for _k, v in rows] == sorted((v for _k, v in rows), reverse=True)
+    fl.deleteLater()
+
+
+def test_the_cursor_snaps_to_a_real_sample(app):
+    """Halfway between two samples the crosshair must sit on one of them, not
+    between: a readout at an abscissa the model never evaluated is a number
+    nobody can reproduce.
+    """
+    import numpy as np
+    fl, _ar = _pn_figlist()
+    cur, _xs = _drive(fl, 3.3e5)
+    drawn = float(cur._vline.get_xdata()[0])
+    grid = np.asarray(cur.lines[0].get_xdata(), float)
+    assert np.min(np.abs(grid - drawn)) == 0.0, drawn
+    fl.deleteLater()
+
+
+def test_a_reference_cursor_gives_delta_and_slope(app):
+    """The slope is the point of the second cursor: -20 vs -30 dB/dec is how
+    a flicker region is told from a thermal one, and by eye on a squeezed log
+    axis that is a coin toss.
+    """
+    import numpy as np
+    fl, _ar = _pn_figlist()
+    cur, x_ref = _drive(fl, 1e6, click=True)
+    assert cur.ref is not None and cur._rline.get_visible()
+    # deliberately *not* a decade apart: with log10(x_now / x_ref) == 1 the
+    # division by the decade span is invisible, and dropping it passed this
+    # test until the pair was changed
+    cur, x_now = _drive(fl, 3e6)
+    text = cur._text.get_text()
+    assert abs(np.log10(x_now / x_ref) - 1.0) > 0.3, "back to a decade apart"
+
+    total = next(ln for ln in cur.lines if ln.get_label().startswith("total"))
+    x = np.asarray(total.get_xdata(), float)
+    y = np.asarray(total.get_ydata(), float)
+    a = y[int(np.argmin(np.abs(x - x_ref)))]
+    b = y[int(np.argmin(np.abs(x - x_now)))]
+    want_slope = (b - a) / np.log10(x_now / x_ref)
+    assert f"{b - a:+.2f} dB" in text, text
+    assert f"{want_slope:+.1f} dB/dec" in text, (text, want_slope)
+
+    # clicking again clears it, so the reference cannot be stranded
+    _drive(fl, 3e6, click=True)
+    assert cur.ref is None and not cur._rline.get_visible()
+    fl.deleteLater()
+
+
+def test_the_cursor_yields_to_the_toolbar(app):
+    """While zoom is armed the drag belongs to the rubber band.  A cursor that
+    also tracked it would repaint over the selection every mouse move.
+    """
+    fl, _ar = _pn_figlist()
+    cur, _ = _drive(fl, 1e6)
+    assert cur._text.get_visible()
+    cur._text.set_visible(False)
+    fl.toolbars()[0].zoom()                      # arm zoom-to-rect
+    _drive(fl, 1e4)
+    assert not cur._text.get_visible(), "the cursor drew while zoom was armed"
+    fl.toolbars()[0].zoom()
+    fl.deleteLater()
+
+
+def test_a_pie_gets_no_cursor_and_the_stack_still_works(app):
+    """A wedge has no coordinate system.  The workbench stacks the breakdown
+    and its pie in one FigList, so this is the real arrangement, not a
+    contrived one.
+    """
+    from pllsim import presets
+    from pllsim.guiqt.widgets import FigList
+    from pllsim.plotting import plot_ipn_pie, plot_pn_breakdown
+    ar = presets.cppll_19p2m_4p8g().analyze()
+    fl = FigList()
+    fl.set_figs([plot_pn_breakdown(ar, None), plot_ipn_pie(ar)])
+    assert len(fl.canvases()) == 2
+    assert len(fl.cursors()) == 1, "the pie was given a cursor"
+    fl.deleteLater()
+
+
+def test_the_cursor_survives_the_function_that_made_it(app):
+    """It is referenced only by its own matplotlib callbacks otherwise, and
+    those are weak: the cursor would be collected the moment set_figs moved
+    on, and then silently never fire again.
+    """
+    import gc
+    fl, _ar = _pn_figlist()
+    gc.collect()
+    cur, _ = _drive(fl, 1e6)
+    assert cur._text.get_text(), "the cursor was collected before it drew"
+    fl.deleteLater()

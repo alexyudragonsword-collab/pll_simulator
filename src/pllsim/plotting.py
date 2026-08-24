@@ -176,7 +176,7 @@ def figure_cursor_data(fig, dpi: float,
     dropped: list[str] = []
     for ax in fig.axes:
         traces = []
-        for i, ln in enumerate(_data_lines(ax)):
+        for i, ln in enumerate(data_lines(ax)):
             x = np.asarray(ln.get_xdata(), dtype=float)
             y = np.asarray(ln.get_ydata(), dtype=float)
             label = ln.get_label()
@@ -259,8 +259,13 @@ def _encode_grid(x: np.ndarray) -> dict:
     return {"x": [float(f"{v:.6g}") for v in x]}
 
 
-def _data_lines(ax):
+def data_lines(ax):
     """The ``Line2D``s that carry data, not decoration.
+
+    Public because the Qt cursor selects curves with it too: the desktop reads
+    the artists directly (no transfer, so no rounding and no length cap) but
+    it must agree with the remote surfaces about *which* artists are curves.
+    Two selectors would be two answers to that question.
 
     Not "the label does not start with an underscore": that dropped the
     measured periodogram, which is the main curve of the spur plot and simply
