@@ -42,11 +42,7 @@ class MainActivity : Activity() {
         web.settings.javaScriptEnabled = true
         web.addJavascriptInterface(HostBridge(), "host")
         setContentView(web)
-        // the flavor decides which navigation shell the page renders; it
-        // travels as a query parameter so the browser harness can select it
-        // the same way, without Gradle
-        web.loadUrl("file:///android_asset/www/index.html?nav="
-                    + BuildConfig.NAV_MODE)
+        web.loadUrl("file:///android_asset/www/index.html")
     }
 
     /** Back closes the drawer before it leaves the app.

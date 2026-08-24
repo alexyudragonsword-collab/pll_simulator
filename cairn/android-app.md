@@ -118,24 +118,11 @@ few off-screen behind a horizontal scroll — **an entry you cannot see does not
 exist**. Since 2026-08-24 the page carries two shells and the APK picks one at
 build time:
 
-| shell | flavor | what it is |
-|---|---|---|
-| `tabs` | `:app:assembleTabsDebug` | the original horizontal bar |
-| `drawer` | `:app:assembleDrawerDebug` | left drawer, opens by horizontal slide, closes on choose |
-
-The two are **one shell over one set of buttons**: the same `#tabs` element,
-the same `<button data-tab="…">` markup, the same `showTab()`. Only the CSS
-(keyed on `html[data-nav]`) and ~60 lines of pointer-drag differ. That was the
-governing constraint — two independent navs would be two things to maintain,
-and this repository has paid for that twice already (the two GUIs that drifted
-for several releases, the group labels that lived in three places). It is also
-why every `#tabs button` selector in `app.js` and both regexes in
-`test_android_parity.py` kept working unchanged.
-
-The mode travels as `?nav=tabs|drawer` in the page URL rather than as a
-compile-time constant, so `tests/android_page_harness.py` drives **both** in
-one run. Without that, whichever shell the flavor did not build would rot
-unobserved.
+The drawer lists the eight entries vertically, opens by an edge swipe or the
+hamburger, and closes on choosing one. It reuses `#tabs`, every
+`<button data-tab="…">` and `showTab()` — that sharing was chosen so a second
+shell would cost CSS rather than a parallel code path, and it is what made the
+bar removable in one afternoon.
 
 Two things that carried over from earlier lessons rather than being
 rediscovered: the drawer scrim has an explicit `#scrim[hidden] { display:
@@ -152,9 +139,21 @@ Not reachable from the harness, so device-only: the hardware back button
 cutouts, and whether the two `applicationIdSuffix`-separated APKs really
 co-install.
 
-**Both shells exist in order to be compared.** Once the comparison is
-settled on a real phone, deleting the losing flavor is the finishing move —
-"kept for comparison" stops being a reason the day you have compared.
+**Settled 2026-08-24: the drawer won, the bar is gone.** With it went the
+`?nav=` switch, both Gradle flavors, `BuildConfig.NAV_MODE`, the workflow's
+`variant` input and the harness's two-shell loop — `assembleDebug` is once
+again the only build. The whole apparatus existed to make one comparison
+possible; keeping it afterwards would have been permanent maintenance surface
+bought for a decision already made.
+
+Two things made the removal cheap, and both were deliberate when the drawer
+landed: the shells shared `#tabs`, every `data-tab` button and `showTab()`, so
+deleting one shell was deleting CSS rather than a code path; and the mode was
+a page-level query parameter rather than a compile-time constant, so nothing
+in the JS had branched on it beyond three guards.
+
+The table above still describes the drawer's design; only the *choice* between
+shells is gone.
 
 ### Plot zoom: matplotlib's toolbar on Qt, a full-screen viewer on Android
 

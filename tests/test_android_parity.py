@@ -67,26 +67,25 @@ def test_every_tab_button_has_a_panel():
     assert len(tabs) == 8, tabs
 
 
-def test_both_navigation_shells_are_wired():
-    """The bar is kept only so it can be compared with the drawer, and a
-    shell with no styling is a shell that renders as nothing.  Both modes
-    must exist in the CSS and app.js must know how to pick one.
+def test_the_drawer_has_its_slide_rule():
+    """A shell with no styling renders as nothing.  The drawer is #drawer
+    translated off-screen and slid back; that rule is the shell.
 
-    Mutation: delete either `[data-nav="..."]` block from style.css, or the
-    `?nav=` read from app.js, and this goes red.
+    Mutation: delete the transform from style.css and this goes red.  The
+    horizontal-bar shell that used to sit beside it was removed once the two
+    had been compared on a device -- see cairn/android-app.md.
     """
     css = (WWW / "style.css").read_text()
-    # the load-bearing rule of each shell, not merely "the selector appears
-    # somewhere": the bar is #tabs laid out as a row, the drawer is #drawer
-    # translated off-screen.  Matching the selector alone passed while one
-    # shell's layout rule was renamed away.
-    assert '[data-nav="tabs"] #tabs { display: flex' in css, \
-        "the bar shell has no layout rule"
-    assert '[data-nav="drawer"] #drawer {' in css and \
-        "translateX(-100%)" in css, "the drawer shell has no slide rule"
+    assert "#drawer {" in css and "translateX(-100%)" in css, \
+        "the drawer has no slide rule"
+    assert "#drawer.open { transform: translateX(0); }" in css, \
+        "the drawer never slides back in"
+    # the code, not the prose: "?nav=" also appears in the comment recording
+    # that the switch was removed, which is how this first failed
     js = APP_JS.read_text()
-    assert '"nav"' in js and "documentElement.dataset.nav" in js, \
-        "app.js no longer selects a shell from the ?nav= parameter"
+    for gone in ("URLSearchParams", "dataset.nav", 'dataset["nav"]'):
+        assert gone not in js, \
+            f"app.js still reads a navigation mode via {gone}"
 
 
 def test_the_scrim_cannot_swallow_taps_while_hidden():
@@ -180,12 +179,17 @@ def test_the_cursor_map_reaches_the_page_from_every_plot():
         "a bridge plot still ships the image without its cursor map"
 
 
-def test_the_gradle_flavors_match_the_shells():
-    """Build-time selection and page-time selection have to name the same
-    two shells, or an APK ships a mode the page does not implement."""
-    import re
+def test_the_android_build_has_no_navigation_flavors_left():
+    """Removing the bar means removing what selected it.  A leftover flavor
+    would ship an APK whose page has no such mode, and `assembleDebug` would
+    stop being a valid task name again.
+    """
     gradle = (WWW.parents[3] / "build.gradle.kts").read_text()
-    flavors = set(re.findall(r'create\("([a-z]+)"\)', gradle))
-    assert flavors == {"tabs", "drawer"}, flavors
-    for mode in flavors:
-        assert f'"{mode}"' in gradle, mode
+    for gone in ("flavorDimensions", "productFlavors", "NAV_MODE",
+                 "applicationIdSuffix"):
+        assert gone not in gradle, f"{gone} outlived the shell it selected"
+    # parents[1] is android/app/src/main -- parents[2] pointed a level up at
+    # android/app/src, which has no java/ under it
+    kt = (WWW.parents[1] / "java/com/pllsim/app/MainActivity.kt").read_text()
+    assert "BuildConfig" not in kt and "?nav=" not in kt, \
+        "MainActivity still passes a navigation mode to the page"

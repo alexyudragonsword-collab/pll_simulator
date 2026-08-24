@@ -143,8 +143,8 @@ drift this project has had was invisible from the source.
 | web | `QT_QPA_PLATFORM=offscreen pytest tests/test_gui_smoke.py tests/test_gui_compute.py -q` — Streamlit `AppTest` execs each page |
 | Qt | `QT_QPA_PLATFORM=offscreen pytest tests/test_guiqt_smoke.py -q`, then **read the count**: these tests *skip* without PySide6 and the system GL libs (`libegl1 libgl1 libxkbcommon0 libdbus-1-3`) instead of failing, and that silence is how the two GUIs drifted for several releases |
 | Android bridge | `pytest tests/test_appbridge.py -q` — pure Python, no SDK needed |
-| Android page | `python tests/android_page_harness.py` — starts its own shim for `window.host` and drives every tab in real Chromium against the real bridge, **in both navigation shells**, including the plot viewer's pinch (real multi-touch, through CDP).  Needs `pip install playwright`; not in CI.  The overlay that swallowed every tap, and the ADPLL crash in the measured spectrum, were both found this way and by nothing else |
-| Android build | Actions → *Android APK* → Run workflow (input `variant`: `both`/`tabs`/`drawer`).  Manual only; it does not run on push.  Locally there is no `assembleDebug` — the flavors make it `:app:assembleTabsDebug` / `:app:assembleDrawerDebug` |
+| Android page | `python tests/android_page_harness.py` — starts its own shim for `window.host` and drives every tab in real Chromium against the real bridge, including the plot viewer's pinch (real multi-touch, through CDP).  Needs `pip install playwright`; not in CI.  The overlay that swallowed every tap, and the ADPLL crash in the measured spectrum, were both found this way and by nothing else |
+| Android build | Actions → *Android APK* → Run workflow, or locally `gradle -p android :app:assembleDebug`.  Manual only; it does not run on push |
 
 Two rules that follow from the same lesson:
 
@@ -156,11 +156,12 @@ Two rules that follow from the same lesson:
   legitimately differ (phone defaults, unit choices, the phone's navigation),
   record it in `cairn/android-app.md` under Parity so the next reader can tell
   a decision from a gap.
-- **Two navigation shells now coexist in `android/`**, on purpose and
-  temporarily: they share `#tabs`, every `data-tab` button and `showTab()`,
-  and differ only in CSS plus the drawer gesture.  A change to the page has to
-  be driven in both (`--nav tabs`, `--nav drawer`) — a shell nobody exercises
-  is a shell that rots, which is exactly how the two desktop GUIs drifted.
+- **The phone navigates by a left drawer**, not by the page list either
+  desktop GUI uses.  A horizontal bar coexisted with it for one release so the
+  two could be compared on a device; the comparison settled on the drawer and
+  the bar was deleted the same day, along with the `?nav=` switch and the
+  Gradle flavors.  Keeping a shell nobody chose is how the two desktop GUIs
+  drifted.
 
 ## Do not hand-edit these
 

@@ -272,27 +272,18 @@ async function runSimulate() {
   }
 }
 
-/* --------------------------------------------------- navigation shell
- * Two shells over ONE nav element: #tabs, its buttons and showTab() are
- * shared, and only the presentation differs.  Keeping them shared is the
- * whole point -- two independent navs would be two things to maintain, and
- * this project has already paid for that twice (the two GUIs that drifted,
- * the group labels that lived in three places).
- *
- * The mode arrives as ?nav=tabs|drawer so the browser harness can drive
- * both in one run; the app passes BuildConfig.NAV_MODE through the same
- * query string.  Anything unrecognized falls back to the bar.
+/* --------------------------------------------------- navigation drawer
+ * The left drawer is the phone's navigation: entries listed vertically,
+ * opened by an edge swipe or the hamburger, closed by choosing one.  A
+ * horizontal bar was carried alongside it for one release so the two could
+ * be compared on a real device; that comparison is settled and the bar is
+ * gone, along with the ?nav= switch and the Gradle flavors that selected it.
  */
-const NAV = new URLSearchParams(location.search).get("nav") === "drawer"
-  ? "drawer" : "tabs";
-document.documentElement.dataset.nav = NAV;
-
 function drawerOpen() {
-  return NAV === "drawer" && $("drawer").classList.contains("open");
+  return $("drawer").classList.contains("open");
 }
 
 function setDrawer(open) {
-  if (NAV !== "drawer") return;
   const d = $("drawer");
   d.classList.remove("dragging");
   d.style.transform = "";            // hand control back to the class
@@ -323,7 +314,6 @@ const EDGE_PX = 20;
 let drag = null;
 
 document.addEventListener("pointerdown", ev => {
-  if (NAV !== "drawer") return;
   if (lightboxOpen()) return;      // the viewer is on top and owns the drag
   const open = drawerOpen();
   if (!open && ev.clientX > EDGE_PX) return;      // not an edge pull
