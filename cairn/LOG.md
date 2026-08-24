@@ -2,6 +2,25 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-23 · IPN breakdown pie on the benchmark pages (all three surfaces)
+
+- `AnalysisResult.ipn_shares()` + `plotting.plot_ipn_pie()`; `dominant_source`
+  now derives from the former, so there is one ranking, not two.
+- The pie's premise was checked before it was drawn: per-source integrated
+  powers sum to `total` to 1e-9 on all five benchmarks, and the per-source
+  jitters recombine in quadrature to the reported total (80.9 fs both ways
+  on Wu'19). Both are tests, parametrized over every benchmark preset.
+- Labels carry each source's own RMS jitter alongside its percentage,
+  because a share of power is not a share of jitter — halving a 50%
+  contributor buys 29% of the total, not 25%.
+- Wired into Qt, web and the Android tab in the same change (the rule), and
+  driven on each. 4 mutations verified red.
+- Then extended from the 5 benchmark presets to **every** analyze(): the
+  workbench carries it on all three surfaces, so it covers all 15 presets
+  plus edited configs and selector candidates. Checked on each of the 15 —
+  shares sum to 100.0000% including the degenerate ILCM case (3 sources,
+  one at 97.9%), which is where a pie routine would fall over.
+
 ## 2026-08-22 · All five parity gaps closed, plus a Qt crash the audit surfaced
 
 - The five app/Qt differences are fixed and each verified in Chromium; see

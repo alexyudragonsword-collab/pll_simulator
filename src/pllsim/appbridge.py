@@ -52,7 +52,7 @@ from .guiutil import (
     supports_fine,
 )
 from .modulation import evm, gmsk_trajectory, prbs, two_point_presets
-from .plotting import plot_pn_breakdown, plot_spur_spectrum
+from .plotting import plot_ipn_pie, plot_pn_breakdown, plot_spur_spectrum
 from .selector import Requirement, select
 from .settling import fll_stability, hop_settling, hop_statistics
 from .synth import (
@@ -165,6 +165,12 @@ def _analyze(preset: str = "", overrides: dict[str, str] | None = None,
                            for k, v in ar.spurs_analytic.items()},
         "notes": list(ar.notes),
         "png": _png(plot_pn_breakdown(ar, None)),
+        # the same decomposition the benchmark tab shows, for whatever is in
+        # the workbench: any preset, a selector candidate, an edited config.
+        # The curve says what shape the noise is; this says what to fix.
+        "pie_png": _png(plot_ipn_pie(ar)),
+        "ipn_rows": [{"source": k, "share_pct": share * 100.0,
+                      "jitter_fs": j} for k, share, j in ar.ipn_shares()],
     }
 
 
@@ -384,7 +390,28 @@ def _hop_stats(preset: str, hop_hz: float = -100e6, n_cycles: int = 100_000,
 def _benchmarks() -> dict:
     """The literature anchor, linear column computed live (same table both
     desktop GUIs render)."""
-    return {"rows": presets.benchmark_table()}
+    return {"rows": presets.benchmark_table(),
+            "presets": [b["preset"] for b in presets.BENCHMARKS]}
+
+
+def _benchmark_ipn(preset: str) -> dict:
+    """Where a benchmark's integrated phase noise comes from.
+
+    The table says whether the model agrees with the paper; this says which
+    source to attack first.  Shares are of integrated phase *power* (the
+    sources are uncorrelated and sum to the total exactly), and each row also
+    carries that source's own RMS jitter, because a share of power is not a
+    share of jitter.
+    """
+    ar = make_pll(preset, {}).analyze()
+    return {
+        "rows": [{"source": k, "share_pct": share * 100.0, "jitter_fs": j}
+                 for k, share, j in ar.ipn_shares()],
+        "jitter_fs": ar.jitter_fs,
+        "ipn_dbc": ar.ipn_dbc,
+        "dominant": ar.dominant_source(),
+        "png": _png(plot_ipn_pie(ar, title=f"{preset} — IPN breakdown")),
+    }
 
 
 def _select(fref_hz: float, fout_hz: float, jitter_fs_max: float,
@@ -590,6 +617,7 @@ _METHODS: dict[str, Callable[..., Any]] = {
     "spur_sweep": _spur_sweep,
     "ref_spur": _ref_spur,
     "benchmarks": _benchmarks,
+    "benchmark_ipn": _benchmark_ipn,
     "select": _select,
     "synth_cp": _synth_cp,
     "synth_sspll": _synth_sspll,

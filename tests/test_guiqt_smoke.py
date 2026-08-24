@@ -42,6 +42,18 @@ def test_workbench_analyze_and_render(app):
     page.deleteLater()
 
 
+def test_workbench_analyze_shows_the_ipn_breakdown(app):
+    """Every preset's linear model gets the pie, not only the benchmarks."""
+    from pllsim.guiqt.page_workbench import WorkbenchPage
+    page = WorkbenchPage()
+    page.preset.setCurrentText("ilcm_250m_12g")   # only three sources
+    ar = page.compute_analyze()
+    page.render_analyze(ar)
+    assert sum(s for _k, s, _j in ar.ipn_shares()) == pytest.approx(1.0)
+    assert page._a_lay.count() >= 2, "curve, pie and share table expected"
+    page.deleteLater()
+
+
 def test_workbench_form_overrides_flow(app):
     from pllsim.guiqt.page_workbench import WorkbenchPage
     page = WorkbenchPage()
@@ -249,6 +261,22 @@ def test_drift_page_computes_a_tracking_lag(app):
     assert lag.size == 50_000
     assert lag[-1] > 0.0, "a drifting gain must leave a tracking lag"
     page.render(res)
+    page.deleteLater()
+
+
+def test_benchmarks_page_plots_an_ipn_pie(app):
+    """The table says whether the model matches the paper; the pie says
+    which source to attack first.  Both live on this page now."""
+    from pllsim.guiqt.page_analysis import BenchmarksPage
+    page = BenchmarksPage()
+    names = [page.pie_preset.itemText(i)
+             for i in range(page.pie_preset.count())]
+    assert len(names) == 5, names
+    page.pie_preset.setCurrentText("bench_wu19_spll_frac_52m_6p253g")
+    name, ar = page.compute_pie()             # same fn the worker runs
+    assert name == "bench_wu19_spll_frac_52m_6p253g"
+    assert sum(s for _k, s, _j in ar.ipn_shares()) == pytest.approx(1.0)
+    page.render_pie((name, ar))               # renders without raising
     page.deleteLater()
 
 

@@ -3,8 +3,8 @@
   "architectures": 6,
   "presets": 15,
   "examples": 21,
-  "tests": 452,
-  "releases": 13,
+  "tests": 537,
+  "releases": 14,
   "benchmarks": [
     {
       "paper": "Gao'09 SSPLL 2.21G int-N (10k-100M)",

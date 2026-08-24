@@ -6,9 +6,10 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # repo root
 
 import streamlit as st
-from _common import L, sidebar_lang_toggle
+from _common import L, show_fig, sidebar_lang_toggle
 
 from pllsim import presets
+from pllsim.plotting import plot_ipn_pie
 
 st.set_page_config(page_title="Benchmarks", layout="wide")
 sidebar_lang_toggle()
@@ -46,3 +47,26 @@ if st.button("Re-run linear models", type="primary"):
     st.dataframe(rows, use_container_width=True)
     st.caption(L("时域数字请跑 examples/ex14（约 23 s）。",
                  "for the time-domain numbers run examples/ex14 (~23 s)."))
+
+st.subheader(L("IPN 分解（线性模型）", "IPN breakdown (linear model)"))
+st.caption(L("表格回答“我们的数字和论文对不对得上”；饼图回答“先改哪一个”——"
+             "两个不同的问题。份额是积分相位功率占比（各源不相关，加起来正好是"
+             "总数）；图例里同时给出每个源自己的 RMS jitter，因为功率份额和抖动"
+             "份额不是一回事。",
+             "the table answers whether our number matches the paper; the pie "
+             "answers which source to attack first — a different question.  "
+             "Slices are shares of integrated phase power (the sources are "
+             "uncorrelated and sum to the total); each label also carries "
+             "that source's own RMS jitter, because a share of power is not "
+             "a share of jitter."))
+pie_preset = st.selectbox(L("对标预设", "benchmark preset"),
+                          [b["preset"] for b in presets.BENCHMARKS],
+                          key="pie_preset")
+if st.button(L("画 IPN 饼图", "Plot IPN breakdown"), key="pie"):
+    with st.spinner("analyze..."):
+        ar = presets.ALL_PRESETS[pie_preset]().analyze()
+    show_fig(plot_ipn_pie(ar, title=f"{pie_preset} — IPN breakdown"))
+    st.dataframe([{"source": k, "share [%]": round(share * 100, 1),
+                   "jitter [fs]": round(j, 1)}
+                  for k, share, j in ar.ipn_shares()],
+                 use_container_width=True)
