@@ -2,6 +2,33 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-24 · Plots become zoomable: Qt gets its toolbar, Android a full-screen viewer
+
+- Qt was missing `NavigationToolbar2QT` outright — `FigureCanvasQTAgg` had
+  been there since the GUI was written, the toolbar never was. One change in
+  `widgets.FigList` covers all 13 `set_figs()` call sites; one toolbar per
+  figure, since a stack often holds two unrelated plots.
+- Android cannot have a matplotlib widget at all (it is a PNG in a WebView),
+  so: tap a plot → full-screen viewer, pinch / double-tap / drag / back.
+- Double-tap goes to `naturalWidth / offsetWidth`, not a round number. The
+  bridge renders 1153 px wide at dpi=130, which in a 412 px column is 2.80×
+  native — a fixed 3× was already upscaling and softening the detail.
+- Two old lessons re-applied without being re-learned: the viewer carries an
+  explicit `[hidden] { display: none }` (it is `display: flex` over the whole
+  screen — the busy-overlay bug would have been much worse here), and the
+  plot click is delegated rather than bound per render.
+- One defect found by thinking about the device, not the browser: the
+  activity handles orientation itself, so rotating relayouts the image while
+  the anchor origin still describes the old box. A `resize` listener
+  re-measures.
+- Two weak assertions caught by mutation and fixed: `findChildren` finds a Qt
+  toolbar that was never added to a layout (invisible to the user), and
+  `"closeLightbox()" in js` passed with the back-button branch deleted
+  because the string also lives in the close button. Both now pin the
+  load-bearing structure.
+- web GUI deliberately unchanged; recorded under Parity in
+  `cairn/android-app.md` so it reads as a decision, not drift.
+
 ## 2026-08-24 · Android gets a second navigation shell; both ship, build-time choice
 
 - A left drawer that opens by horizontal slide, alongside the original tab

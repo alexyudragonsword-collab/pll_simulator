@@ -5,7 +5,10 @@ import matplotlib
 
 matplotlib.use("Agg")            # pyplot figures are re-parented onto Qt
 import matplotlib.pyplot as plt  # noqa: E402
-from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+from matplotlib.backends.backend_qtagg import (
+    FigureCanvasQTAgg,
+    NavigationToolbar2QT,
+)
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import (
     QFormLayout,
@@ -132,7 +135,16 @@ class ConfigForm(QWidget):
 
 
 class FigList(QWidget):
-    """Scrollless vertical stack of matplotlib canvases (host in a scroll)."""
+    """Scrollless vertical stack of matplotlib canvases (host in a scroll).
+
+    Every figure carries its own navigation toolbar.  A phase-noise plot
+    spans eight decades and a settling transient hides its ringing in the
+    last 2% of the x axis; without zoom the reader is limited to whatever
+    limits the plotting code chose, which is the wrong place to decide what
+    someone wants to look at.  Per figure rather than one shared toolbar
+    because the toolbar acts on one canvas, and these stacks routinely hold
+    two unrelated plots (the PN breakdown and its IPN pie, say).
+    """
 
     def __init__(self):
         super().__init__()
@@ -146,12 +158,30 @@ class FigList(QWidget):
             if w is not None:
                 w.deleteLater()
         for fig in figs:
+            holder = QWidget()
+            box = QVBoxLayout(holder)
+            box.setContentsMargins(0, 0, 0, 0)
+            box.setSpacing(0)
             canvas = FigureCanvasQTAgg(fig)
             h = int(fig.get_size_inches()[1] * fig.dpi)
             canvas.setMinimumHeight(max(h, 220))
             canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
-            self._lay.addWidget(canvas)
+            # the toolbar must outlive this scope and be found again by the
+            # tests, so it is parented into the holder rather than floated
+            bar = NavigationToolbar2QT(canvas, holder)
+            bar.setIconSize(bar.iconSize() * 0.75)
+            box.addWidget(bar)
+            box.addWidget(canvas)
+            holder.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            self._lay.addWidget(holder)
             plt.close(fig)               # drop the pyplot registry reference
+
+    def canvases(self) -> list[FigureCanvasQTAgg]:
+        """The canvases currently shown, in order -- the seam the tests use."""
+        return self.findChildren(FigureCanvasQTAgg)
+
+    def toolbars(self) -> list[NavigationToolbar2QT]:
+        return self.findChildren(NavigationToolbar2QT)
 
 
 def in_scroll(widget: QWidget) -> QScrollArea:

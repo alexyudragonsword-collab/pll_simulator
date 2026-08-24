@@ -284,3 +284,81 @@ def test_the_desktop_entry_point_is_importable(app):
     """`pllsim-gui` and the exe both go through app.main."""
     from pllsim.guiqt.app import main
     assert callable(main)
+
+
+def test_every_figure_gets_its_own_navigation_toolbar(app):
+    """Zoom is the feature; a toolbar bound to the wrong canvas is the bug.
+
+    These stacks routinely hold two unrelated figures (the PN breakdown and
+    its IPN pie), so "a toolbar exists" is not the property worth checking --
+    "toolbar i drives canvas i, and only canvas i" is.  Mutation: parent both
+    toolbars to the first canvas and the second assertion goes red.
+    """
+    import matplotlib.pyplot as plt
+
+    from pllsim.guiqt.widgets import FigList
+
+    fl = FigList()
+    figs = []
+    for xmax in (10.0, 20.0):
+        fig, ax = plt.subplots()
+        ax.plot([0, xmax], [0, 1])
+        figs.append(fig)
+    fl.set_figs(figs)
+
+    assert len(fl.canvases()) == 2
+    assert len(fl.toolbars()) == 2
+    # constructed is not the same as shown: NavigationToolbar2QT parents
+    # itself to the widget passed in, so findChildren finds a toolbar that
+    # was never added to a layout and that the user cannot see.  Membership
+    # in the parent's layout is what puts it on screen.
+    for bar in fl.toolbars():
+        lay = bar.parentWidget().layout()
+        assert lay is not None and lay.indexOf(bar) >= 0, \
+            "the toolbar exists but is in no layout -- invisible to the user"
+
+    axes = [c.figure.axes[0] for c in fl.canvases()]
+    original = [ax.get_xlim() for ax in axes]
+    # record the home view the way the toolbar does on first interaction
+    for bar in fl.toolbars():
+        bar.push_current()
+
+    # a zoom on the second figure only
+    axes[1].set_xlim(1.0, 2.0)
+    fl.toolbars()[1].home()
+    assert axes[1].get_xlim() == pytest.approx(original[1]), \
+        "toolbar 1 did not restore its own canvas -- it is bound elsewhere"
+
+    # and the first figure must not have been touched by it
+    axes[0].set_xlim(3.0, 4.0)
+    fl.toolbars()[1].home()
+    assert axes[0].get_xlim() == pytest.approx((3.0, 4.0)), \
+        "toolbar 1 reached into canvas 0 -- the toolbars share a canvas"
+
+    fl.deleteLater()
+
+
+def test_the_toolbar_offers_the_controls_zooming_actually_needs(app):
+    """`mode` is what matplotlib's own code reads to decide how a drag is
+    interpreted, so entering the modes is the honest check -- an icon that
+    exists but sets no mode zooms nothing.
+    """
+    import matplotlib.pyplot as plt
+
+    from pllsim.guiqt.widgets import FigList
+
+    fig, ax = plt.subplots()
+    ax.plot([0, 1], [0, 1])
+    fl = FigList()
+    fl.set_figs([fig])
+    bar = fl.toolbars()[0]
+
+    bar.zoom()
+    assert str(bar.mode) == "zoom rect", str(bar.mode)
+    bar.zoom()                                  # toggles back off
+    assert str(bar.mode) == ""
+    bar.pan()
+    assert str(bar.mode) == "pan/zoom", str(bar.mode)
+    bar.pan()
+    assert str(bar.mode) == ""
+    fl.deleteLater()

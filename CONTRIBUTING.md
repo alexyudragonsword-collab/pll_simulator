@@ -69,6 +69,14 @@ Where the surfaces differ on purpose — phone defaults, unit choices — record
 it in `cairn/android-app.md` so the next reader can tell a decision from a
 gap.
 
+Plot zoom is one of those places, and the three surfaces do it differently
+because they have to: Qt figures carry matplotlib's own
+`NavigationToolbar2QT` (added in `widgets.FigList`, so every page gets it),
+Android has no matplotlib in its WebView and instead opens a tapped plot in a
+full-screen pinch/double-tap viewer, and the web GUI keeps static
+`st.pyplot()` PNGs on purpose. Do not "fix" the web GUI's difference without
+reading the Parity note first.
+
 ## What CI enforces
 
 | gate | command |

@@ -307,6 +307,7 @@ let drag = null;
 
 document.addEventListener("pointerdown", ev => {
   if (NAV !== "drawer") return;
+  if (lightboxOpen()) return;      // the viewer is on top and owns the drag
   const open = drawerOpen();
   if (!open && ev.clientX > EDGE_PX) return;      // not an edge pull
   if (open && !$("drawer").contains(ev.target) && ev.target !== $("scrim")) return;
@@ -340,9 +341,190 @@ document.addEventListener("pointerup", ev => {
  * "handled"; anything else lets the activity finish.  Not reachable from the
  * harness -- Chromium has no hardware back -- so it is device-verified. */
 window.onAndroidBack = function () {
+  if (lightboxOpen()) { closeLightbox(); return true; }
   if (drawerOpen()) { setDrawer(false); return true; }
   return false;
 };
+
+/* ------------------------------------------------- full-screen plot viewer
+ * A phase-noise plot spans eight decades; in a 412 px column the reader can
+ * see that a curve exists and nothing else.  Tapping one opens it here, with
+ * pinch / double-tap / drag.
+ *
+ * Pointer events again, and for the same reason as the drawer: the harness
+ * can drive them (multi-touch through CDP), so the gesture is checked rather
+ * than eyeballed.  The scale lands in a data attribute precisely so a test
+ * can read the zoom instead of trusting a screenshot.
+ */
+const MAX_SCALE = 8, DOUBLE_TAP_MS = 320;
+const lbPointers = new Map();
+let lbView = { s: 1, x: 0, y: 0 };   // transform: translate(x,y) scale(s)
+let lbOrigin = 0;                    // untransformed left edge, screen coords
+let lbOriginY = 0;
+let lbPinch = null, lbDrag = null, lbLastTap = 0, lbDownTarget = null;
+
+function lightboxOpen() { return !$("lightbox").hidden; }
+
+/* Double-tap goes to the image's own resolution rather than a round number.
+ * The bridge renders at dpi=130, which for the workbench PN plot is 1153 px
+ * across; in a 412 px column that is 2.80x, so a fixed 3x was already past
+ * native and softening the very detail the zoom exists to show.  Measured,
+ * not guessed -- and it re-measures per image, because the pie and the
+ * spectrum are not the same size. */
+function lbNativeScale() {
+  const el = $("lightbox-img");
+  if (!el.naturalWidth || !el.offsetWidth) return 3;
+  return Math.max(2, Math.min(MAX_SCALE, el.naturalWidth / el.offsetWidth));
+}
+
+function lbApply() {
+  const el = $("lightbox-img");
+  el.style.transform =
+    `translate(${lbView.x}px, ${lbView.y}px) scale(${lbView.s})`;
+  const lb = $("lightbox");
+  lb.dataset.scale = lbView.s.toFixed(3);
+  lb.classList.toggle("zoomed", lbView.s > 1.01);
+}
+
+function lbClampPan() {
+  // keep at least a corner of the image on screen; a plot dragged into the
+  // void with no way back is worse than no panning at all
+  const el = $("lightbox-img");
+  const w = el.offsetWidth * lbView.s, h = el.offsetHeight * lbView.s;
+  const minX = Math.min(0, innerWidth - lbOrigin - w);
+  const minY = Math.min(0, innerHeight - lbOriginY - h);
+  lbView.x = Math.max(minX, Math.min(lbView.x, Math.max(0, -lbOrigin + 0)));
+  lbView.y = Math.max(minY, Math.min(lbView.y, Math.max(0, -lbOriginY + 0)));
+}
+
+function lbZoomTo(scale, qx, qy) {
+  const s1 = Math.max(1, Math.min(MAX_SCALE, scale));
+  const ux = qx - lbOrigin, uy = qy - lbOriginY;
+  lbView.x = ux - (ux - lbView.x) * (s1 / lbView.s);
+  lbView.y = uy - (uy - lbView.y) * (s1 / lbView.s);
+  lbView.s = s1;
+  if (s1 === 1) { lbView.x = 0; lbView.y = 0; }
+  lbClampPan();
+  lbApply();
+}
+
+function openLightbox(src) {
+  const lb = $("lightbox"), el = $("lightbox-img");
+  el.src = src;
+  lbView = { s: 1, x: 0, y: 0 };
+  el.style.transform = "";
+  lb.hidden = false;
+  // the untransformed box, measured after the viewer is laid out -- every
+  // anchor calculation is relative to it
+  const r = el.getBoundingClientRect();
+  lbOrigin = r.left; lbOriginY = r.top;
+  lbApply();
+}
+
+function closeLightbox() {
+  const lb = $("lightbox");
+  lb.hidden = true;
+  lb.classList.remove("zoomed", "dragging");
+  lbPointers.clear(); lbPinch = null; lbDrag = null;
+  $("lightbox-img").src = "";
+}
+
+// delegated: plots are injected into a dozen different output containers,
+// and a per-render binding is a binding somebody forgets on the next tab
+document.addEventListener("click", ev => {
+  const img = ev.target.closest && ev.target.closest("img.plot");
+  if (img && !lightboxOpen()) { openLightbox(img.src); }
+});
+
+$("lightbox-close").addEventListener("click", ev => {
+  ev.stopPropagation();
+  closeLightbox();
+});
+
+const lb = $("lightbox");
+
+lb.addEventListener("pointerdown", ev => {
+  // before setPointerCapture: capture retargets every later pointer event to
+  // the capturing element, so ev.target at pointerup is always #lightbox and
+  // "did this gesture start on the image" has to be answered here
+  lbDownTarget = ev.target;
+  lbPointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+  lb.setPointerCapture(ev.pointerId);
+  if (lbPointers.size === 2) {
+    const [a, b] = [...lbPointers.values()];
+    lbPinch = { d0: Math.hypot(a.x - b.x, a.y - b.y), s0: lbView.s,
+                cx: (a.x + b.x) / 2, cy: (a.y + b.y) / 2 };
+    lbDrag = null;
+    lb.classList.add("dragging");
+    return;
+  }
+  if (lbPointers.size === 1) {
+    lbDrag = { x0: ev.clientX, y0: ev.clientY,
+               vx: lbView.x, vy: lbView.y, moved: false };
+  }
+});
+
+lb.addEventListener("pointermove", ev => {
+  if (!lbPointers.has(ev.pointerId)) return;
+  lbPointers.set(ev.pointerId, { x: ev.clientX, y: ev.clientY });
+  if (lbPinch && lbPointers.size >= 2) {
+    const [a, b] = [...lbPointers.values()];
+    const d = Math.hypot(a.x - b.x, a.y - b.y);
+    if (lbPinch.d0 > 0) {
+      lbZoomTo(lbPinch.s0 * (d / lbPinch.d0), lbPinch.cx, lbPinch.cy);
+    }
+    return;
+  }
+  if (lbDrag && lbView.s > 1) {
+    const dx = ev.clientX - lbDrag.x0, dy = ev.clientY - lbDrag.y0;
+    if (!lbDrag.moved && Math.hypot(dx, dy) < 6) return;  // let taps stay taps
+    lbDrag.moved = true;
+    lb.classList.add("dragging");
+    lbView.x = lbDrag.vx + dx;
+    lbView.y = lbDrag.vy + dy;
+    lbClampPan();
+    lbApply();
+  }
+});
+
+function lbEndPointer(ev) {
+  const had = lbPointers.delete(ev.pointerId);
+  if (lbPointers.size < 2) { lbPinch = null; }
+  if (lbPointers.size === 0) {
+    lb.classList.remove("dragging");
+    const dragged = lbDrag && lbDrag.moved;
+    lbDrag = null;
+    if (!had || dragged) return;
+    const now = Date.now();
+    if (now - lbLastTap < DOUBLE_TAP_MS) {
+      lbLastTap = 0;
+      lbZoomTo(lbView.s > 1.01 ? 1 : lbNativeScale(), ev.clientX, ev.clientY);
+      return;
+    }
+    lbLastTap = now;
+    // a single tap on the backdrop at rest closes; on the image it does not,
+    // because that is where the second tap of a double-tap lands
+    if (lbView.s <= 1.01 && lbDownTarget === lb) {
+      setTimeout(() => { if (lbLastTap) closeLightbox(); }, DOUBLE_TAP_MS);
+    }
+  }
+}
+lb.addEventListener("pointerup", lbEndPointer);
+lb.addEventListener("pointercancel", lbEndPointer);
+
+/* The activity handles orientation itself (configChanges in the manifest),
+ * so the WebView reflows without a reload: the image gets a new box while
+ * lbOrigin still describes the old one, and every anchor computed after that
+ * is wrong.  Re-measure and go back to fit. */
+addEventListener("resize", () => {
+  if (!lightboxOpen()) return;
+  const el = $("lightbox-img");
+  lbView = { s: 1, x: 0, y: 0 };
+  el.style.transform = "";
+  const r = el.getBoundingClientRect();
+  lbOrigin = r.left; lbOriginY = r.top;
+  lbApply();
+});
 
 function tableHtml(rows) {
   if (!rows.length) return "";

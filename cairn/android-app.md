@@ -156,6 +156,61 @@ co-install.
 settled on a real phone, deleting the losing flavor is the finishing move —
 "kept for comparison" stops being a reason the day you have compared.
 
+### Plot zoom: matplotlib's toolbar on Qt, a full-screen viewer on Android
+
+Asked for as "加上 matplotlib 的图片控件". Only one of the three surfaces can
+literally have that, and saying so was the useful part of the answer:
+
+| surface | before | now |
+|---|---|---|
+| Qt | `FigureCanvasQTAgg` with **no** toolbar | `NavigationToolbar2QT` per figure — home / back / forward / pan / zoom-rect / save |
+| Android | base64 PNG in a WebView | tap a plot → full-screen viewer with pinch, double-tap and drag |
+| web | `st.pyplot()` static PNG | **unchanged, deliberately** — see below |
+
+The Qt half was a genuine omission, not a new feature: `FigureCanvasQTAgg`
+was there since the GUI was written and the toolbar that normally accompanies
+it never was. All 13 `set_figs()` call sites go through `widgets.FigList`, so
+one change covers every Qt page. One toolbar **per figure**, because these
+stacks routinely hold two unrelated plots (the PN breakdown and its IPN pie)
+and a toolbar acts on one canvas.
+
+Measured while building the Android side, and worth keeping: the bridge
+renders at `dpi=130`, which for the workbench PN plot is **1153 × 766 px**
+(131 KiB). In a 412 px column that is **2.80×** native. So double-tap zooms to
+`naturalWidth / offsetWidth` rather than to a round number — a fixed 3× was
+already past native and softening the very detail the zoom exists to show.
+The viewer allows up to 8× by pinch; past ~2.8× it is upscaling, which is
+sometimes still what you want.
+
+Two lessons re-applied rather than re-learned:
+
+- `#lightbox` is `display: flex` and covers the whole screen, so it carries an
+  explicit `#lightbox[hidden] { display: none; }`. Without it the app would
+  become an unresponsive black page — the busy-overlay bug, one layer up and
+  much worse.
+- The plot click is **delegated** (`document` → `closest('img.plot')`), not
+  bound per render. Nine render paths inject plots into a dozen containers; a
+  per-render binding is one somebody forgets on the next tab, which is the
+  same shape as the bridge method with no caller.
+
+Found by thinking about the device rather than the browser: the activity
+handles orientation itself (`configChanges` in the manifest), so the WebView
+reflows **without** a reload — the image gets a new box while the anchor
+origin still describes the old one, and every zoom anchor after that is
+wrong. A `resize` listener re-measures and returns to fit.
+
+**Parity, deliberate:** the web GUI keeps its static `st.pyplot()` PNGs. It
+runs on a desktop browser where the OS zoom is adequate and the plots are not
+squeezed into 412 px, and Streamlit offers no matplotlib interaction short of
+swapping the plotting backend — which would change how every figure in the
+project looks. Not a gap; revisit only if someone actually uses the web GUI
+on a phone.
+
+**Known, pre-existing, not fixed here:** in the Qt GUI a figure whose minimum
+width exceeds the viewport is clipped on the left (the second plot's title
+reads "kdown @ 4.8 GHz"). Verified by screenshotting the same page with the
+toolbar change stashed — identical clipping — so the toolbar did not cause it.
+
 ### Correction to the earlier "not portable" judgment
 
 The first assessment (2026-08-22, earlier the same day) said Fit needs

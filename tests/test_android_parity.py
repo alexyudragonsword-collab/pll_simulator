@@ -46,6 +46,7 @@ def test_the_page_calls_nothing_the_bridge_does_not_expose():
     "sp-preset", "sp-mmeas-note", "sp-ref-note", "hop-fll", "sel-out",
     "mod-sps", "dr-rate", "bench-out",
     "drawer", "scrim", "menu-btn", "section-title",
+    "lightbox", "lightbox-img", "lightbox-close",
 ])
 def test_ids_app_js_drives_exist_in_the_page(element_id):
     """app.js addresses the DOM by id; a renamed id in index.html turns a
@@ -95,6 +96,45 @@ def test_the_scrim_cannot_swallow_taps_while_hidden():
     css = (WWW / "style.css").read_text()
     assert "#scrim[hidden] { display: none; }" in css, \
         "the scrim has no explicit hidden rule -- see cairn/android-app.md"
+
+
+def test_the_plot_viewer_cannot_swallow_taps_while_hidden():
+    """Same failure mode as the scrim, one layer higher and far worse: the
+    viewer is `display: flex` and covers the entire screen, so if the author
+    rule ever beats `[hidden]` the app becomes an unresponsive black page.
+    """
+    css = (WWW / "style.css").read_text()
+    assert "#lightbox { position: fixed" in css and "display: flex" in css, \
+        "the viewer lost its layout rule"
+    assert "#lightbox[hidden] { display: none; }" in css, \
+        "the viewer has no explicit hidden rule -- see cairn/android-app.md"
+
+
+def test_plots_are_bound_to_the_viewer_by_delegation():
+    """Plots are injected into a dozen output containers by nine different
+    render paths.  A per-render binding is one somebody forgets on the next
+    tab -- which is the same shape as the bridge method with no caller.
+
+    Mutation: narrow the listener to a single container and this goes red.
+    """
+    js = APP_JS.read_text()
+    assert 'closest("img.plot")' in js, \
+        "app.js no longer opens the viewer from a delegated plot click"
+    assert 'document.addEventListener("click"' in js, \
+        "the plot click is bound per-render rather than delegated"
+    # not `"closeLightbox()" in js`: that string also lives in the close
+    # button's handler, so the check passed with the back branch deleted.
+    # The body of onAndroidBack is what has to contain it, and the viewer is
+    # the topmost layer, so it must be consumed before the drawer.
+    import re
+    body = re.search(r"window\.onAndroidBack = function \(\) \{(.*?)\n\};",
+                     js, re.S)
+    assert body, "window.onAndroidBack is gone -- back would leave the app"
+    body = body.group(1)
+    assert "closeLightbox()" in body, \
+        "back does not close the plot viewer; it would exit the app instead"
+    assert body.index("closeLightbox()") < body.index("setDrawer(false)"), \
+        "back closes the drawer before the viewer, but the viewer is on top"
 
 
 def test_the_gradle_flavors_match_the_shells():
