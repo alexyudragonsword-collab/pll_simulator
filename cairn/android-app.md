@@ -69,6 +69,14 @@ pages have app equivalents. What each would actually cost is measured under
 - A browser test that waits for a selector the *previous* run already
   satisfied reads stale DOM and passes on nothing — clear the output region
   (or wait on a state that cannot pre-exist) before clicking run.
+- **Correction (2026-08-25):** an earlier note here, and the first Android
+  commit message, said Chaquopy 15.0.1 supports "AGP 8.1-8.2". The source says
+  otherwise: `Common.java` sets `MIN_AGP_VERSION = "7.0.0"` and
+  `checkAgpVersion()` tests only `version < minVersion`, so there is a floor
+  and no ceiling. Our AGP 8.1.4 is fine, but not for the stated reason. Also
+  from the same file: Chaquopy's own `MIN_SDK_VERSION` is 21 and
+  `COMPILE_SDK_VERSION` is 34, so our `minSdk = 24` is our choice, not its
+  requirement.
 - **Never `pip install` the repo root from a Gradle project that lives
   inside it.** `install("../..")` made the whole repository an input of
   Chaquopy's pip task; every AGP task's outputs then sat inside that input,
