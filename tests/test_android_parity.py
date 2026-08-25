@@ -64,7 +64,10 @@ def test_every_tab_button_has_a_panel():
     tabs = set(re.findall(r'<button data-tab="([a-z]+)"', html))
     panels = set(re.findall(r'<div id="tab-([a-z]+)"', html))
     assert tabs == panels, f"tab buttons {tabs} vs panels {panels}"
-    assert len(tabs) == 8, tabs
+    # a count, not a set, so adding a tab is a decision someone makes on
+    # purpose -- the drawer holds nine comfortably, a horizontal bar could
+    # not hold eight, which is why the bar is gone
+    assert len(tabs) == 9, tabs
 
 
 def test_the_drawer_has_its_slide_rule():

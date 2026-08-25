@@ -299,3 +299,39 @@ def test_non_finite_floats_become_null():
     # emit a bare NaN.  Drive it directly on the helper.
     assert appbridge._clean(float("nan")) is None
     assert appbridge._clean({"a": [float("inf"), 1.0]}) == {"a": [None, 1.0]}
+
+
+def test_units_convert_matches_the_library_and_carries_both_conventions():
+    """The bridge is a serializer here too: no arithmetic of its own."""
+    from pllsim.core.jitter import HALF_POWER_DB, convert_phase_noise
+    r = call("units_convert", f0_hz=10e9, kind="deg", value=0.5)
+    u = convert_phase_noise(10e9, deg=0.5)
+    assert r["jitter_fs"] == pytest.approx(u.jitter_fs, rel=1e-12)
+    assert r["ipn_dbc_dsb"] == pytest.approx(u.ipn_dbc_dsb, rel=1e-12)
+    # both, every time: the page cannot label a figure it was not sent
+    assert r["ipn_dbc_dsb"] - r["ipn_dbc_ssb"] == pytest.approx(
+        HALF_POWER_DB, rel=1e-12)
+    assert r["half_power_db"] == pytest.approx(HALF_POWER_DB, rel=1e-12)
+    assert r["small_angle"] is True
+
+
+def test_units_convert_round_trips_through_every_kind():
+    ref = call("units_convert", f0_hz=6e9, kind="deg", value=0.42)
+    for kind in ("deg", "jitter_fs", "ipn_dbc_dsb", "ipn_dbc_ssb"):
+        again = call("units_convert", f0_hz=6e9, kind=kind, value=ref[kind])
+        assert again["deg"] == pytest.approx(ref["deg"], rel=1e-9), kind
+
+
+def test_units_convert_reports_bad_input_in_the_envelope():
+    """A converter is the one page users will feed nonsense to."""
+    for kwargs in ({"f0_hz": 0.0, "kind": "deg", "value": 1.0},
+                   {"f0_hz": 1e9, "kind": "deg", "value": -1.0},
+                   {"f0_hz": 1e9, "kind": "nonsense", "value": 1.0}):
+        reply = json.loads(appbridge.call("units_convert", json.dumps(kwargs)))
+        assert reply["ok"] is False, kwargs
+        assert reply["error"]
+
+
+def test_units_convert_flags_the_large_angle_case():
+    r = call("units_convert", f0_hz=1e9, kind="deg", value=30.0)
+    assert r["small_angle"] is False

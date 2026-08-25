@@ -1,4 +1,4 @@
-"""Tool pages: Monte Carlo yield and the Verilog-AMS export."""
+"""Tool pages: phase-noise unit conversion, Monte Carlo yield, VAMS export."""
 from __future__ import annotations
 
 from functools import partial
@@ -6,6 +6,7 @@ from functools import partial
 from PySide6.QtWidgets import (
     QAbstractItemView,
     QFileDialog,
+    QGridLayout,
     QHBoxLayout,
     QLabel,
     QListWidget,
@@ -15,10 +16,134 @@ from PySide6.QtWidgets import (
 )
 
 from .. import presets
+from ..core.jitter import HALF_POWER_DB, convert_phase_noise
 from ..guiutil import mc_build_frac_cppll
 from ..montecarlo import monte_carlo, plot_mc
 from .i18n import L, tr
 from .widgets import FigList, MetricRow, Page, float_edit
+
+
+class UnitsPage(Page):
+    """Degrees <-> jitter <-> integrated dBc, at one carrier.
+
+    Three fields that drive each other.  The re-entrancy that usually plagues
+    such a form is avoided by construction rather than by a guard flag: Qt's
+    `textEdited` fires only for typing, never for `setText`, so writing the
+    other two fields cannot bounce back.
+
+    Both dBc conventions are shown, always.  A converter that reported one of
+    them would be the very trap it exists to remove -- and the SSB column is
+    the one that lines up with `ipn_dbc` on every other page here, so a reader
+    can carry a number between them without a silent 3 dB.
+    """
+
+    title = "PN units"
+    title_zh = "相噪单位换算"
+
+    #: field key -> the convert_phase_noise keyword it supplies
+    _SOURCES = {"deg": "deg", "jit": "jitter_fs", "dsb": "ipn_dbc_dsb"}
+
+    def __init__(self):
+        super().__init__()
+        lay = QVBoxLayout(self)
+        lay.addWidget(tr(
+            QLabel(),
+            "同一个 RMS 相位的三种写法。填任意一个，另外两个立即跟着算。\n"
+            "dBc 有两种约定，相差 10log10(2) = 3.0103 dB —— 用错约定，由它"
+            "推出的抖动就差 √2 倍，所以两个都列出来。",
+            "One RMS phase deviation, three ways of writing it.  Fill in any "
+            "one and the other two follow.\ndBc comes in two conventions "
+            "10*log10(2) = 3.0103 dB apart; read a figure under the wrong one "
+            "and every jitter from it is off by sqrt(2), so both are shown."))
+
+        top = QHBoxLayout()
+        self.f0 = float_edit("10e9", width=130)
+        top.addWidget(tr(QLabel(), "载波 f0 [Hz]", "carrier f0 [Hz]"))
+        top.addWidget(self.f0)
+        top.addStretch(1)
+        lay.addLayout(top)
+
+        grid = QGridLayout()
+        self.deg = float_edit("0.5", width=150)
+        self.jit = float_edit("", width=150)
+        self.dsb = float_edit("", width=150)
+        rows = [
+            (self.deg, "RMS 相位 [deg]", "RMS phase [deg]"),
+            (self.jit, "RMS 抖动 [fs]", "RMS jitter [fs]"),
+            (self.dsb, "IPN [dBc] 双边带", "IPN [dBc] double-sideband"),
+        ]
+        for r, (w, zh, en) in enumerate(rows):
+            grid.addWidget(tr(QLabel(), zh, en), r, 0)
+            grid.addWidget(w, r, 1)
+        grid.setColumnStretch(2, 1)
+        lay.addLayout(grid)
+
+        self.metrics = MetricRow()
+        lay.addWidget(self.metrics)
+        self.note = QLabel()
+        self.note.setWordWrap(True)
+        lay.addWidget(self.note)
+        lay.addStretch(1)
+
+        self._source = "deg"
+        for key in self._SOURCES:
+            edit = getattr(self, key)
+            edit.textEdited.connect(partial(self._on_edit, key))
+        # f0 moves the jitter but not the other two, so it recomputes from
+        # whichever field the user last typed in rather than from a fixed one
+        self.f0.textEdited.connect(lambda _t: self._recompute())
+        self._recompute()
+
+    def _on_edit(self, key: str, _text: str):
+        self._source = key
+        self._recompute()
+
+    def _recompute(self):
+        src = self._source
+        try:
+            f0 = float(self.f0.text())
+            value = float(getattr(self, src).text())
+            u = convert_phase_noise(f0, **{self._SOURCES[src]: value})
+        except (ValueError, ZeroDivisionError) as exc:
+            self.metrics.set_metrics([])
+            self._blank_except(src)
+            self.note.setText(
+                f"<span style='color:#b3261e'>{exc}</span>")
+            return
+
+        pairs = {"deg": f"{u.deg:.6g}", "jit": f"{u.jitter_fs:.6g}",
+                 "dsb": f"{u.ipn_dbc_dsb:.6g}"}
+        for key, text in pairs.items():
+            if key != src:
+                getattr(self, key).setText(text)
+
+        self.metrics.set_metrics([
+            (L("IPN 单边带 [dBc]", "IPN single-sideband [dBc]"),
+             f"{u.ipn_dbc_ssb:.4f}"),
+            (L("RMS 相位 [rad]", "RMS phase [rad]"), f"{u.rad:.4e}"),
+            (L("RMS 抖动 [ps]", "RMS jitter [ps]"), f"{u.jitter_ps:.4g}"),
+        ])
+        ssb = L("单边带值就是本包各页 <code>ipn_dbc</code> 报的那个数，"
+                f"比双边带低 {HALF_POWER_DB:.4f} dB。",
+                "The single-sideband value is what <code>ipn_dbc</code> "
+                "reports on every other page here — "
+                f"{HALF_POWER_DB:.4f} dB below the double-sideband one.")
+        if not u.small_angle:
+            self.note.setText(
+                "<span style='color:#a15c00'>" +
+                L(f"{u.deg:.3g}° 已超出小角度近似：载波被明显压低，dBc 与相位"
+                  "功率不再是同一句话，这里的换算只能当量级看。",
+                  f"{u.deg:.3g}° is outside the small-angle picture: the "
+                  "carrier is measurably depressed, so dBc and phase power "
+                  "are no longer the same statement and these numbers are "
+                  "order-of-magnitude only.") + "</span><br>" + ssb)
+        else:
+            self.note.setText(f"<span style='color:#666'>{ssb}</span>")
+
+    def _blank_except(self, src: str):
+        for key in self._SOURCES:
+            if key != src:
+                getattr(self, key).setText("")
 
 
 class MonteCarloPage(Page):

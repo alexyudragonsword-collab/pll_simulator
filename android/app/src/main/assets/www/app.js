@@ -1145,6 +1145,61 @@ $("pie-run").addEventListener("click", () => runInto(
     })));
   }, "analyze…", "analyze…"));
 
+/* ------------------------------------------------- PN units tab */
+/* Recomputes on every keystroke as well as on the button: this is a
+   converter, and a converter that makes you press something has already
+   lost to the calculator app.  The button stays because the phone keyboard
+   covers the readout while you type, and dismissing it needs somewhere to
+   tap. */
+let unSeq = 0;
+async function runUnits() {
+  /* Every keystroke fires a call, so replies can land out of order and an
+     older, slower one would overwrite a newer answer -- the field would show
+     the conversion of what you typed two characters ago.  Stamp each request
+     and drop any reply that a newer one has overtaken.  `dataset.seq` is the
+     rendered stamp; when it equals `unSeq` the readout is current, which is
+     also how the browser harness knows it is looking at this input and not
+     the previous one. */
+  const mine = ++unSeq;
+  const out = $("un-out");
+  const settle = html => {
+    if (mine !== unSeq) return;
+    out.innerHTML = html;
+    out.dataset.seq = String(mine);
+  };
+  try {
+    const r = await call("units_convert", {
+      f0_hz: Number($("un-f0").value),
+      kind: $("un-kind").value,
+      value: Number($("un-value").value),
+    });
+    const warn = r.small_angle ? "" :
+      `<p class="note">${r.deg.toPrecision(3)}\u00b0 ` + (lang === "zh"
+        ? "已超出小角度近似：载波被明显压低，dBc 与相位功率不再是同一句话。"
+        : "is outside the small-angle picture: the carrier is measurably "
+          + "depressed, so dBc and phase power are no longer the same "
+          + "statement.") + "</p>";
+    settle(metricsHtml([
+      [lang === "zh" ? "RMS 相位" : "RMS phase", r.deg.toPrecision(6) + " deg"],
+      [lang === "zh" ? "RMS 抖动" : "RMS jitter", r.jitter_fs.toPrecision(6) + " fs"],
+      ["IPN DSB", r.ipn_dbc_dsb.toFixed(4) + " dBc"],
+      ["IPN SSB", r.ipn_dbc_ssb.toFixed(4) + " dBc"],
+      [lang === "zh" ? "相位 [rad]" : "phase [rad]", r.rad.toExponential(4)],
+      [lang === "zh" ? "抖动 [ps]" : "jitter [ps]", r.jitter_ps.toPrecision(4)],
+    ]) + warn + `<p class="muted">` + (lang === "zh"
+      ? `单边带就是别处 ipn_dbc 报的数，比双边带低 ${r.half_power_db.toFixed(4)} dB。载波只影响抖动。`
+      : `SSB is what ipn_dbc reports elsewhere, ${r.half_power_db.toFixed(4)} dB below DSB.  Only the jitter depends on the carrier.`)
+      + `</p>`);
+  } catch (e) {
+    settle(errHtml(e));
+  }
+}
+$("un-run").addEventListener("click", runUnits);
+["un-f0", "un-kind", "un-value"].forEach(id =>
+  $(id).addEventListener("input", runUnits));
+document.querySelector('#tabs button[data-tab="units"]')
+  .addEventListener("click", runUnits);
+
 /* ---------------------------------------------------------- boot */
 async function boot() {
   applyLang();

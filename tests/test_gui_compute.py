@@ -249,3 +249,40 @@ def test_fit_page_fits_a_synthetic_measurement(tmp_path):
     f = np.logspace(3, 8, 200)
     got = fit_leeson(f, ldbc_from_sphi(truth.psd(f)))
     assert got is not None
+
+
+def test_pn_units_page_converts_and_shows_both_conventions():
+    """The page has no button: it converts on render, so a broken compute
+    path shows up as an exception or as an empty metric row, not as a button
+    that does nothing."""
+    from pllsim.core.jitter import HALF_POWER_DB, convert_phase_noise
+
+    at = _run("12_PNUnits.py", timeout=60)
+    want = convert_phase_noise(10e9, deg=0.5)          # the page defaults
+    shown = " ".join(m.value for m in at.metric)
+    assert shown, "the page rendered no metrics"
+    assert f"{want.jitter_fs:.6g}" in shown, shown
+    assert f"{want.ipn_dbc_dsb:.4f}" in shown, shown
+    # both conventions, side by side -- the page's entire reason to exist
+    assert f"{want.ipn_dbc_ssb:.4f}" in shown, shown
+    assert want.ipn_dbc_dsb - want.ipn_dbc_ssb == pytest.approx(HALF_POWER_DB)
+
+
+def test_pn_units_page_switches_which_quantity_is_supplied():
+    from pllsim.core.jitter import convert_phase_noise
+
+    at = _run("12_PNUnits.py", timeout=60)
+    at.selectbox[0].set_value("ipn_dbc_dsb").run()
+    at.text_input[-1].set_value("-40").run()
+    assert not at.exception, at.exception
+    want = convert_phase_noise(10e9, ipn_dbc_dsb=-40.0)
+    shown = " ".join(m.value for m in at.metric)
+    assert f"{want.deg:.6g}" in shown, shown
+    assert f"{want.jitter_fs:.6g}" in shown, shown
+
+
+def test_pn_units_page_reports_bad_input_instead_of_crashing():
+    at = _run("12_PNUnits.py", timeout=60)
+    at.text_input[0].set_value("0").run()              # f0 = 0
+    assert not at.exception, at.exception
+    assert at.error, "a zero carrier produced no visible error"

@@ -2,6 +2,26 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-25 · A phase-noise unit converter, on all three surfaces
+
+- `core.jitter.convert_phase_noise` turns any one of degrees / RMS jitter /
+  integrated dBc into the other two at a given carrier. One pivot, sigma in
+  radians; nothing here integrates anything.
+- It returns **both** dBc conventions every time. They sit `HALF_POWER_DB` =
+  3.0103 dB apart and the number alone does not say which one a source meant;
+  reading a figure under the wrong one costs a factor of sqrt(2) in jitter.
+  The SSB field is the one `AnalysisResult.ipn_dbc` carries, and a test ties
+  the two together on every preset so they cannot drift apart.
+- Exactly one input is accepted, by design: a three-field form that let two be
+  "given" would quietly resolve contradictions in whichever branch ran first.
+- Three surfaces, three form shapes, same numbers — see the Parity section of
+  `cairn/android-app.md` for why Qt binds three live fields and the other two
+  use a selector.
+- The phone's version had a real out-of-order-reply race (every keystroke
+  fires a call); each render is now stamped, and the browser harness waits on
+  that stamp. The first version of that harness check passed against a stale
+  readout, which is why it waits on a stamp rather than on text.
+
 ## 2026-08-25 · The compiled Android build becomes normal: two APKs per run
 
 - `android.yml` now builds both packagings from one source tree — interpreted

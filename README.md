@@ -80,7 +80,9 @@ pllsim-gui                # or: python -m pllsim.guiqt
 Pages (both flavors): architecture workbench (preset -> edit every Config
 field -> analyze/simulate with plots), loop synthesis, architecture
 selector, spur prediction, measured-PN fitting, two-point modulation, hop
-settling, drift tracking, Monte Carlo, VAMS export, benchmarks.
+settling, drift tracking, Monte Carlo, VAMS export, benchmarks, and a
+phase-noise unit converter (degrees / RMS jitter / integrated dBc at a
+carrier — showing both dBc conventions, which sit 3.0103 dB apart).
 
 **Windows executables** (no Python needed): two GitHub Actions workflows
 build ONEFILE exes for both GUIs and smoke-test them on the runner before

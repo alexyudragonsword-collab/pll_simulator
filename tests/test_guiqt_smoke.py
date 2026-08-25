@@ -24,7 +24,7 @@ def app():
 def test_main_window_builds_all_pages(app):
     from pllsim.guiqt.app import PAGES, MainWindow
     win = MainWindow()
-    assert win.stack.count() == len(PAGES) == 11
+    assert win.stack.count() == len(PAGES) == 12
     for i in range(win.stack.count()):
         win.nav.setCurrentRow(i)
         assert win.stack.currentIndex() == i
@@ -542,4 +542,103 @@ def test_no_plot_title_runs_off_its_canvas(app, window_width):
         assert bb.x1 <= canvas.width() + 0.5, (
             f"figure {i} title ends at x={bb.x1:.0f} past a {canvas.width()} px "
             f"canvas: {title.get_text()[:40]!r}")
+    page.deleteLater()
+
+
+def _type(qtest, edit, text):
+    """Type into a QLineEdit the way a user does.
+
+    Not `setText`: the page binds to `textEdited`, which Qt raises only for
+    real input.  That distinction is the whole re-entrancy defence, so a test
+    that used `setText` would be testing a different program -- and would
+    still pass if the binding were switched to `textChanged`, which recurses.
+    """
+    edit.clear()
+    qtest.keyClicks(edit, text)
+
+
+def test_units_page_converts_in_every_direction(app):
+    from PySide6.QtTest import QTest
+
+    from pllsim.core.jitter import convert_phase_noise
+    from pllsim.guiqt.page_tools import UnitsPage
+
+    page = UnitsPage()
+    _type(QTest, page.f0, "10e9")
+
+    _type(QTest, page.deg, "0.5")
+    want = convert_phase_noise(10e9, deg=0.5)
+    assert float(page.jit.text()) == pytest.approx(want.jitter_fs, rel=1e-4)
+    assert float(page.dsb.text()) == pytest.approx(want.ipn_dbc_dsb, rel=1e-4)
+
+    # and back the other way: typing jitter must drive degrees, not sit there
+    _type(QTest, page.jit, "225")
+    want = convert_phase_noise(10e9, jitter_fs=225.0)
+    assert float(page.deg.text()) == pytest.approx(want.deg, rel=1e-4)
+
+    _type(QTest, page.dsb, "-40")
+    want = convert_phase_noise(10e9, ipn_dbc_dsb=-40.0)
+    assert float(page.deg.text()) == pytest.approx(want.deg, rel=1e-4)
+    assert float(page.jit.text()) == pytest.approx(want.jitter_fs, rel=1e-4)
+    page.deleteLater()
+
+
+def test_units_page_shows_both_dbc_conventions(app):
+    """The page's reason to exist: a reader must be able to see which
+    convention a number is in without doing the 3 dB in their head."""
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QLabel
+
+    from pllsim.core.jitter import HALF_POWER_DB
+    from pllsim.guiqt.page_tools import UnitsPage
+
+    page = UnitsPage()
+    _type(QTest, page.deg, "0.5")
+    shown = " ".join(lab.text() for lab in page.metrics.findChildren(QLabel))
+    assert "dBc" in shown, shown
+    ssb = float(page.dsb.text()) - HALF_POWER_DB
+    assert f"{ssb:.4f}" in shown, (
+        f"the SSB value {ssb:.4f} is not on the page: {shown!r}")
+    page.deleteLater()
+
+
+def test_units_page_recomputes_the_jitter_when_the_carrier_moves(app):
+    """Degrees and dBc do not depend on f0; jitter does.  A page that left a
+    stale jitter beside a new carrier would be worse than one that cleared
+    it."""
+    from PySide6.QtTest import QTest
+
+    from pllsim.guiqt.page_tools import UnitsPage
+    page = UnitsPage()
+    _type(QTest, page.f0, "1e9")
+    _type(QTest, page.deg, "0.5")
+    at_1g = float(page.jit.text())
+    _type(QTest, page.f0, "10e9")
+    assert float(page.deg.text()) == pytest.approx(0.5, rel=1e-9)
+    assert float(page.jit.text()) == pytest.approx(at_1g / 10.0, rel=1e-6)
+    page.deleteLater()
+
+
+def test_units_page_says_so_instead_of_showing_a_stale_number(app):
+    from PySide6.QtTest import QTest
+
+    from pllsim.guiqt.page_tools import UnitsPage
+    page = UnitsPage()
+    _type(QTest, page.deg, "0.5")
+    assert page.jit.text()
+    _type(QTest, page.deg, "-1")           # refused by the library
+    assert page.jit.text() == "", "a rejected input left the old jitter up"
+    assert "b3261e" in page.note.text(), page.note.text()
+    page.deleteLater()
+
+
+def test_units_page_warns_outside_the_small_angle_picture(app):
+    from PySide6.QtTest import QTest
+
+    from pllsim.guiqt.page_tools import UnitsPage
+    page = UnitsPage()
+    _type(QTest, page.deg, "0.5")
+    assert "a15c00" not in page.note.text()
+    _type(QTest, page.deg, "30")
+    assert "a15c00" in page.note.text(), page.note.text()
     page.deleteLater()

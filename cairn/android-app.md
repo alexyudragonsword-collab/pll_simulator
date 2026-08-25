@@ -112,6 +112,30 @@ disappears from `index.html`, at no browser cost; and
 AGENTS.md rule names. `guiqt/widgets.py` no longer keeps its own group
 labels — it derives the English half from `guiutil.GROUP_LABELS`.
 
+**The unit converter's interaction differs by toolkit, on purpose.** All
+three surfaces convert degrees / jitter / integrated dBc through the same
+`core.jitter.convert_phase_noise`, but the form around it is not the same
+shape: Qt binds three fields that drive each other, because Qt's `textEdited`
+fires only for typing and never for `setText`, so the feedback loop cannot
+form. Streamlit reruns the whole script on any widget change, so three
+mutually writing inputs would need session-state bookkeeping to work out
+which one the user touched — it uses a "known quantity" selector instead, and
+the phone follows the web form because a selector is a better phone control
+than three fields fighting a soft keyboard. Same numbers, three forms; this
+is a toolkit difference, not a gap.
+
+Two things are the same everywhere and must stay so: **both dBc conventions
+are always shown**, and the single-sideband one is labelled as the figure
+`ipn_dbc` reports elsewhere in the package. A converter that displayed one
+dBc number would be the exact 3.0103 dB error it exists to prevent.
+
+The phone's converter also stamps each render with the request that produced
+it (`#un-out` `dataset.seq`). Every keystroke fires a bridge call, so replies
+can land out of order and an older one would overwrite a newer answer — the
+readout would show the conversion of what you typed two characters ago. The
+browser harness waits on that stamp; waiting for text to appear instead read
+a *stale* readout and asserted against it, which passed and was wrong.
+
 Deliberate, not gaps: workbench cycle default (50k app vs 150k Qt — phone),
 start offset in MHz (app follows the web GUI; Qt uses Hz), analytic spurs as
 JSON rather than a table, and no "re-run live" button on Benchmarks (Qt's is

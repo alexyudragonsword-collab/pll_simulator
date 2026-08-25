@@ -54,6 +54,7 @@
   <button data-tab="mod" data-zh="调制" data-en="Mod">调制</button>
   <button data-tab="drift" data-zh="温漂" data-en="Drift">温漂</button>
   <button data-tab="bench" data-zh="对标" data-en="Papers">对标</button>
+  <button data-tab="units" data-zh="单位换算" data-en="PN units">单位换算</button>
 </nav>
 </div>
 
@@ -354,6 +355,28 @@
   </section>
 </div>
 </main>
+
+<div id="tab-units" class="tab" hidden>
+  <section class="card">
+    <h2 data-zh="相噪单位换算" data-en="Phase-noise units">相噪单位换算</h2>
+    <p class="muted"
+       data-zh="同一个 RMS 相位的三种写法。选一个填进去，其他的跟着算。dBc 有两种约定，差 3.0103 dB；用错约定，抖动就差 √2 倍，所以两个都列。"
+       data-en="One RMS phase deviation, three ways of writing it. Supply one and the rest follow. dBc comes in two conventions 3.0103 dB apart; the wrong one costs a factor of sqrt(2) in the jitter, so both are shown.">同一个 RMS 相位的三种写法。选一个填进去，其他的跟着算。dBc 有两种约定，差 3.0103 dB；用错约定，抖动就差 √2 倍，所以两个都列。</p>
+    <label><span data-zh="载波 f0 [Hz]" data-en="carrier f0 [Hz]">载波 f0 [Hz]</span>
+      <input id="un-f0" type="text" value="10e9"></label>
+    <label><span data-zh="已知量" data-en="known quantity">已知量</span>
+      <select id="un-kind">
+        <option value="deg" data-zh="RMS 相位 [deg]" data-en="RMS phase [deg]">RMS 相位 [deg]</option>
+        <option value="jitter_fs" data-zh="RMS 抖动 [fs]" data-en="RMS jitter [fs]">RMS 抖动 [fs]</option>
+        <option value="ipn_dbc_dsb" data-zh="IPN [dBc] 双边带" data-en="IPN [dBc] DSB">IPN [dBc] 双边带</option>
+        <option value="ipn_dbc_ssb" data-zh="IPN [dBc] 单边带" data-en="IPN [dBc] SSB">IPN [dBc] 单边带</option>
+      </select></label>
+    <label><span data-zh="数值" data-en="value">数值</span>
+      <input id="un-value" type="text" value="0.5"></label>
+    <button id="un-run" class="primary" data-zh="换算" data-en="Convert">换算</button>
+    <div id="un-out"></div>
+  </section>
+</div>
 
 <div id="busy" hidden><div class="spinner"></div><p id="busy-text"></p></div>
 
