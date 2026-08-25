@@ -2,6 +2,27 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-24 · The drawer wins; the tab bar and everything selecting it are deleted
+
+- Comparison settled on a device: the phone keeps the left drawer. Removed
+  the bar, the `?nav=` switch, both Gradle flavors, `BuildConfig.NAV_MODE`,
+  the workflow's `variant` input, and the harness's two-shell loop.
+  `:app:assembleDebug` is the only build again.
+- Cheap to remove because both were deliberate a week ago: one set of buttons
+  shared between shells (so deleting one was deleting CSS), and a page-level
+  `?nav=` rather than a compile-time constant (so only three JS guards
+  branched on it).
+- Also fixed the Qt title clipping, which was **not** what I had assumed. The
+  canvas does not crop: matplotlib resizes the figure to the widget. The IPN
+  pie anchors its legend outside the wedges, so `tight_layout` leaves the
+  axes on the left ~70% — and a title centred on *that* started at x = −77 px
+  on a 666 px canvas. Font sizes are absolute points, so it only shows once
+  the figure is drawn narrower than it is laid out for. Centred on the figure
+  instead, and 4 window widths are now pinned by a test.
+- Two more of my assertions matched my own comments rather than code (`?nav=`
+  in the prose recording its removal) and mis-counted path parents. Same
+  shape as the `setPointerCapture` one yesterday; both fixed to pin code.
+
 ## 2026-08-24 · Readout cursors on Qt and Android: every curve at once, plus Δ
 
 - `plotting.figure_cursor_data()` extracts the axes rectangle in PNG pixels

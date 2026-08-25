@@ -11,24 +11,12 @@ header { display: flex; align-items: baseline; gap: .6em;
 header h1 { font-size: 1.15em; margin: 0; flex: 1; }
 header #version { color: var(--muted); font-weight: normal; font-size: .8em; }
 main, #boot { padding: .7em; max-width: 720px; margin: 0 auto; }
-/* ---- navigation: two shells over one nav element ------------------
-   #tabs, its buttons and showTab() are shared; only the presentation differs.
-   Everything below is keyed on html[data-nav], set from ?nav= at boot. */
-
-#tabs button.active { background: var(--accent); border-color: var(--accent);
-                      color: #fff; }
-
-/* --- shell 1: the horizontal bar (default) --- */
-[data-nav="tabs"] #tabs { display: flex; gap: .4em; margin-bottom: .7em;
-        overflow-x: auto; -webkit-overflow-scrolling: touch; }
-[data-nav="tabs"] #tabs button { flex: 1 0 auto; min-width: 4em;
-               padding: .5em .4em; white-space: nowrap; }
-[data-nav="tabs"] #menu-btn,
-[data-nav="tabs"] #section-title { display: none; }
-[data-nav="tabs"] #scrim { display: none; }
-
-/* --- shell 2: the left drawer --- */
-[data-nav="drawer"] #drawer {
+/* ---- navigation: the left drawer ----------------------------------
+   412 px could not hold eight entries as a horizontal bar; they came out as
+   two-character stubs with the last few behind a scroll, and an entry you
+   cannot see does not exist.  The bar was kept alongside this for one
+   release so the two could be compared on a device.  That is settled. */
+#drawer {
   position: fixed; top: 0; left: 0; bottom: 0; z-index: 30;
   width: min(78vw, 300px); background: var(--card);
   border-right: 1px solid var(--line);
@@ -39,25 +27,22 @@ main, #boot { padding: .7em; max-width: 720px; margin: 0 auto; }
   transition: transform .22s ease;
   will-change: transform;
 }
-[data-nav="drawer"] #drawer.open { transform: translateX(0); }
+#drawer.open { transform: translateX(0); }
 /* while a finger is dragging, the inline transform leads and the
    transition must not fight it */
-[data-nav="drawer"] #drawer.dragging { transition: none; }
-[data-nav="drawer"] #tabs { display: flex; flex-direction: column;
-                            gap: .25em; }
-[data-nav="drawer"] #tabs button { text-align: left; padding: .7em .8em;
-                                   border: none; background: none;
-                                   font-size: 1.02em; }
-[data-nav="drawer"] #tabs button.active { background: var(--accent);
-                                          color: #fff; border-radius: 8px; }
-[data-nav="drawer"] #scrim { position: fixed; inset: 0; z-index: 20;
-                             background: rgba(0, 0, 0, .38); }
+#drawer.dragging { transition: none; }
+#tabs { display: flex; flex-direction: column; gap: .25em; }
+#tabs button { text-align: left; padding: .7em .8em; border: none;
+               background: none; font-size: 1.02em; }
+#tabs button.active { background: var(--accent); color: #fff;
+                      border-radius: 8px; }
+#scrim { position: fixed; inset: 0; z-index: 20;
+         background: rgba(0, 0, 0, .38); }
 /* an author display beats the UA's [hidden]{display:none}: the busy overlay
    swallowed every tap for exactly this reason.  Not twice. */
-[data-nav="drawer"] #scrim[hidden] { display: none; }
-[data-nav="drawer"] #menu-btn { font-size: 1.25em; line-height: 1;
-                                padding: .1em .45em; }
-[data-nav="drawer"] #section-title { color: var(--muted); font-size: .9em; }
+#scrim[hidden] { display: none; }
+#menu-btn { font-size: 1.25em; line-height: 1; padding: .1em .45em; }
+#section-title { color: var(--muted); font-size: .9em; }
 .tab[hidden] { display: none; }
 table.rows { border-collapse: collapse; width: 100%; margin: .5em 0;
              font-size: .85em; }
@@ -98,9 +83,7 @@ details summary { font-weight: 600; font-size: .9em; padding: .3em 0; }
    cannot show at a useful size: the PN curves span eight decades in a
    412 px-wide column.  Tapping one opens it here.
 
-   Not keyed on [data-nav]: the viewer is the same in both shells, and
-   duplicating it per shell is exactly the drift the shared #tabs element
-   was designed to avoid. */
+   The viewer is navigation-independent; it sits above the drawer. */
 #lightbox { position: fixed; inset: 0; z-index: 60; background: #000;
             display: flex; align-items: center; justify-content: center;
             overflow: hidden; touch-action: none; }

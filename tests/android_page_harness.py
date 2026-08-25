@@ -7,12 +7,7 @@ sideloading an APK, which is why `AGENTS.md` names it as the required check
 for `android/app/src/main/assets/www/`.
 
     pip install playwright
-    python tests/android_page_harness.py [screenshot.png] [--nav tabs|drawer]
-
-Both navigation shells are driven by default.  That is deliberate: the
-horizontal bar is kept only so it can be compared against the drawer on a
-real phone, and a shell nobody exercises is a shell that rots -- which is
-exactly how the two desktop GUIs drifted apart.
+    python tests/android_page_harness.py [screenshot.png]
 
 The only thing faked is `window.host`: the Kotlin bridge is replaced by a
 small HTTP shim that forwards to `pllsim.appbridge.call` in this process, so
@@ -91,32 +86,27 @@ def run_into(page, out_id: str, button_id: str, timeout: int = 300_000):
 
 
 def open_section(page, name: str):
-    """Reach a section the way a user would, in whichever shell is loaded.
-
-    In the bar the entry is always on screen; in the drawer it has to be
-    opened first, and the drawer must close again afterwards -- an entry that
-    leaves the drawer covering the content is the bug this checks for.
+    """Reach a section the way a user would: open the drawer, pick, and let
+    it close.  An entry that leaves the drawer covering the content is the
+    bug this checks for.
     """
-    nav = page.evaluate("document.documentElement.dataset.nav")
-    if nav == "drawer" and not page.locator("#drawer.open").count():
+    if not page.locator("#drawer.open").count():
         # only when closed: an open drawer covers the hamburger, and
         # clicking through it lands on whatever entry sits there
         page.click("#menu-btn")
         page.wait_for_selector("#drawer.open", timeout=10_000)
     page.click(f'#tabs button[data-tab="{name}"]')
-    if nav == "drawer":
-        page.wait_for_selector("#drawer:not(.open)", timeout=10_000)
-        # state="hidden", not a `[hidden]` selector: wait_for_selector defaults
-        # to state="visible", so waiting for `#scrim[hidden]` waits for a
-        # display:none element to become visible -- which never happens, and
-        # cost a 10 s timeout before it was read carefully
-        page.wait_for_selector("#scrim", state="hidden", timeout=10_000)
+    page.wait_for_selector("#drawer:not(.open)", timeout=10_000)
+    # state="hidden", not a `[hidden]` selector: wait_for_selector defaults
+    # to state="visible", so waiting for `#scrim[hidden]` waits for a
+    # display:none element to become visible -- which never happens, and
+    # cost a 10 s timeout before it was read carefully
+    page.wait_for_selector("#scrim", state="hidden", timeout=10_000)
 
 
-def _nav_shell(page, nav: str):
-    """Whatever the shell, the same eight sections must be reachable, and
-    nothing invisible may be sitting on top of the content."""
-    assert page.evaluate("document.documentElement.dataset.nav") == nav
+def _nav_shell(page):
+    """All eight sections must be reachable, and nothing invisible may be
+    sitting on top of the content."""
     # the scrim must never intercept taps while closed -- the busy overlay
     # swallowed every tap for exactly this reason, and hit-testing the point
     # is the only way to see it
@@ -127,12 +117,6 @@ def _nav_shell(page, nav: str):
         "  if (e.closest('#lightbox')) return 'lightbox';"
         "  return 'content'; })()")
     assert hit == "content", f"something invisible is covering the page: {hit}"
-
-    if nav == "tabs":
-        assert page.locator("#menu-btn").is_hidden()
-        assert page.locator("#scrim").is_hidden()
-        print("nav[tabs]: bar visible, no hamburger, scrim inert")
-        return
 
     assert page.locator("#menu-btn").is_visible()
     # open, pick, and confirm the header now names where we are
@@ -156,10 +140,10 @@ def _nav_shell(page, nav: str):
     page.mouse.up()
     page.wait_for_selector("#drawer:not(.open)", timeout=10_000)
     open_section(page, "workbench")
-    print("nav[drawer]: hamburger, scrim, edge-drag open and drag-close all work")
+    print("nav: hamburger, scrim, edge-drag open and drag-close all work")
 
 
-def drive(browser, nav: str, shot: str | None) -> None:
+def drive(browser, shot: str | None) -> None:
     # has_touch: the plot viewer's pinch and double-tap are touch
     # gestures, and a mouse-only context never dispatches them
     page = browser.new_page(viewport={"width": 412, "height": 915},
@@ -167,7 +151,7 @@ def drive(browser, nav: str, shot: str | None) -> None:
     errors: list[str] = []
     page.on("pageerror", lambda e: errors.append(str(e)))
     page.add_init_script(SHIM)
-    page.goto(f"http://127.0.0.1:{PORT}/index.html?nav={nav}")
+    page.goto(f"http://127.0.0.1:{PORT}/index.html")
     page.wait_for_selector("#app:not([hidden])", timeout=60_000)
     page.wait_for_selector("#form input[data-path]", timeout=60_000)
     # the page boots in Chinese; one toggle so assertions below can
@@ -175,7 +159,7 @@ def drive(browser, nav: str, shot: str | None) -> None:
     page.click("#lang")
     page.wait_for_selector("#form input[data-path]", timeout=60_000)
 
-    _nav_shell(page, nav)
+    _nav_shell(page)
     _workbench(page)
     _plot_viewer(page)
     _plot_cursor(page)
@@ -187,11 +171,11 @@ def drive(browser, nav: str, shot: str | None) -> None:
     if shot:
         page.screenshot(path=shot, full_page=True)
     assert not errors, errors
-    print(f"OK [{nav}] — every section driven, no page errors")
+    print("OK — every section driven, no page errors")
     page.close()
 
 
-def main(shot: str | None = None, navs=("tabs", "drawer")) -> int:
+def main(shot: str | None = None) -> int:
     from playwright.sync_api import sync_playwright
 
     srv = serve()
@@ -199,11 +183,7 @@ def main(shot: str | None = None, navs=("tabs", "drawer")) -> int:
         with sync_playwright() as p:
             browser = p.chromium.launch(
                 executable_path="/opt/pw-browsers/chromium")
-            for nav in navs:
-                out = None if shot is None else (
-                    shot if len(navs) == 1
-                    else shot.replace(".png", f"-{nav}.png"))
-                drive(browser, nav, out)
+            drive(browser, shot)
             browser.close()
     finally:
         srv.shutdown()
@@ -545,10 +525,4 @@ def _synth_mod_drift_bench(page):
 
 
 if __name__ == "__main__":
-    args = sys.argv[1:]
-    navs = ("tabs", "drawer")
-    if "--nav" in args:
-        i = args.index("--nav")
-        navs = (args[i + 1],)
-        args = args[:i] + args[i + 2:]
-    sys.exit(main(args[0] if args else None, navs))
+    sys.exit(main(sys.argv[1] if len(sys.argv) > 1 else None))

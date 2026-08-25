@@ -21,29 +21,6 @@ android {
             abiFilters += listOf("arm64-v8a", "x86_64")
         }
     }
-    // Two navigation shells, picked at build time.  They are separate
-    // flavors rather than a -P switch so both APKs can sit on one phone at
-    // once -- comparing them side by side is the entire reason the bar was
-    // kept when the drawer landed.  The page itself takes the mode from
-    // ?nav=, so the browser harness can drive both without Gradle.
-    flavorDimensions += "nav"
-    productFlavors {
-        create("tabs") {
-            dimension = "nav"
-            applicationIdSuffix = ".tabs"
-            buildConfigField("String", "NAV_MODE", "\"tabs\"")
-            resValue("string", "app_name", "pllsim (tabs)")
-        }
-        create("drawer") {
-            dimension = "nav"
-            applicationIdSuffix = ".drawer"
-            buildConfigField("String", "NAV_MODE", "\"drawer\"")
-            resValue("string", "app_name", "pllsim (drawer)")
-        }
-    }
-    buildFeatures {
-        buildConfig = true          // NAV_MODE above is read by MainActivity
-    }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

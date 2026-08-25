@@ -501,3 +501,45 @@ def test_the_cursor_survives_the_function_that_made_it(app):
     cur, _ = _drive(fl, 1e6)
     assert cur._text.get_text(), "the cursor was collected before it drew"
     fl.deleteLater()
+
+
+@pytest.mark.parametrize("window_width", [1400, 1100, 900, 760])
+def test_no_plot_title_runs_off_its_canvas(app, window_width):
+    """Titles must fit the canvas at every width the workbench is usable at.
+
+    The IPN pie anchors its legend outside the wedges, so tight_layout leaves
+    the axes on the left ~70% of the figure -- and a title centred on *that*
+    started at x = -77 px on a 666 px canvas, which the reader saw as
+    "kdown @ 4.8 GHz".  Font sizes are absolute points, so this appears only
+    once the figure is drawn narrower than the size it is laid out for, which
+    is exactly what a Qt canvas does.
+
+    Mutation: drop the `ax.title.set_x(...)` line in plot_ipn_pie and the
+    1100 and 900 cases go red.
+    """
+    from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+
+    from pllsim.guiqt.page_workbench import WorkbenchPage
+    page = WorkbenchPage()
+    page.preset.setCurrentText("cppll_19p2m_4p8g")
+    page.render_analyze(page.compute_analyze())
+    page.resize(window_width, 900)
+    page.show()
+    app.processEvents()
+
+    canvases = page.findChildren(FigureCanvasQTAgg)
+    assert canvases, "the workbench rendered no figures"
+    for i, canvas in enumerate(canvases):
+        fig = canvas.figure
+        fig.canvas.draw()
+        title = fig.axes[0].title
+        if not title.get_text():
+            continue
+        bb = title.get_window_extent(fig.canvas.get_renderer())
+        assert bb.x0 >= -0.5, (
+            f"figure {i} title starts at x={bb.x0:.0f} on a {canvas.width()} px "
+            f"canvas -- its left end is cut off: {title.get_text()[:40]!r}")
+        assert bb.x1 <= canvas.width() + 0.5, (
+            f"figure {i} title ends at x={bb.x1:.0f} past a {canvas.width()} px "
+            f"canvas: {title.get_text()[:40]!r}")
+    page.deleteLater()

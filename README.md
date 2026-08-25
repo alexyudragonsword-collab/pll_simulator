@@ -108,14 +108,11 @@ running `python -m build --sdist --outdir android/app/pysrc .` from the
 repo root, which produces the pllsim archive the app embeds (the Gradle
 config refuses to guess and says exactly this if it is missing).
 
-The navigation shell is a build-time choice between two product flavors, so
-there is no plain `assembleDebug`: `gradle -p android :app:assembleTabsDebug`
-builds the horizontal tab bar, `:app:assembleDrawerDebug` the Claude-style
-left drawer that slides in horizontally.  They carry different application
-ids, so both install on one phone at once and can be compared side by side;
-the CI workflow takes a `variant` input of `both` (default), `tabs` or
-`drawer`.  The page itself reads the mode from `?nav=`, which is how the
-browser harness drives both.  The app pins
+Navigation is a left drawer: entries listed vertically, opened by an edge
+swipe or the hamburger, closed by choosing one.  A horizontal tab bar was
+carried alongside it for one release so the two could be compared on a real
+device; that is settled, so `gradle -p android :app:assembleDebug` is once
+again the only build.  The app pins
 Python 3.10 because Chaquopy's package repository has no scipy wheel for
 anything newer — the pyproject dependency floors are verified against that
 stack, and `cairn/android-app.md` records the constraints before you change
