@@ -115,8 +115,12 @@ jobs:
       - name: Build compiled APK
         run: gradle -p android :app:assembleDebug
       - name: Set the compiled APK aside
-        run: mv android/app/build/outputs/apk/debug/app-debug.apk \
-                out/pllsim-compiled-debug.apk
+        # block scalar, not a plain one: YAML folds a plain scalar onto one
+        # line and keeps the backslash, so bash saw "\ " and escaped the space
+        # instead of continuing the line
+        run: |
+          mv android/app/build/outputs/apk/debug/app-debug.apk \
+             out/pllsim-compiled-debug.apk
       - uses: actions/upload-artifact@v4
         with:
           name: pllsim-debug-apk-compiled
