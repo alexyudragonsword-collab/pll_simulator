@@ -2,6 +2,28 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-25 · Cython cross-compile spike: the core ships as .so in a real APK
+
+- Asked how reverse-engineerable the APK is. It is trivially so: `strings` on
+  a compiled module prints the whole DSB convention docstring, and bytecode
+  keeps line numbers and variable names.
+- Built the answer rather than argued it. CI cross-compiled `core/` for both
+  ABIs, checked the ELF machine type against the wheel tag, and the APK now
+  carries 11 `.so` and no `.py` under `pllsim/core/`.
+- The reason it was tractable: Android CPython is on **Maven Central**, the
+  compiler is plain NDK clang, and cythonised pure-Python needs **only
+  Python.h** — so nothing rebuilds numpy/scipy. All read from Chaquopy's
+  source, since chaquo.com is unreachable here.
+- Behaviour unchanged, by the project's own suite: 564 passed / 13 skipped
+  with every `.py` deleted, `analyze()` still 258.3043 fs.
+- Size was never the obstacle: 4.7 MB per ABI, ~11% of the APK. My first
+  estimate was wrong by having guessed instead of compiling.
+- Two traps: `--no-index` would have cut numpy/scipy/matplotlib off from
+  Chaquopy's index, and installing a wheel by path puts the arm64 build into
+  the x86_64 variant. Both in `cairn/android-app.md`.
+- Bounds worth repeating: `app.js` stays plain text and presets are one
+  `fields()` call away, so this protects formulas only.
+
 ## 2026-08-24 · The drawer wins; the tab bar and everything selecting it are deleted
 
 - Comparison settled on a device: the phone keeps the left drawer. Removed

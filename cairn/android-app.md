@@ -291,6 +291,75 @@ were measured afterwards and both were too pessimistic:
 - Export remains the genuinely poor fit: its product is a file tree for EDA
   tools, and the phone has no consumer for one.
 
+## Native compilation of the modelling core (spike, 2026-08-25)
+
+Asked as "反编译能力如何". Measured first, then built.
+
+**How exposed it is today.** The APK is a zip, Chaquopy's payload inside it is
+a zip, and neither is encrypted. `assets/www/` ships verbatim. On a compiled
+Python module, `strings` prints back function names, line numbers *and
+docstrings* — the entire double-sideband PSD convention note came out of
+`core/jitter` in plain text. Bytecode keeps original line numbers and local
+variable names, so reconstruction is mechanical.
+
+**The path that works.** Cython, not Nuitka: Nuitka drives the host C compiler
+and does not cross-compile, while Cython emits `.c` and leaves the compiler
+choice open. `packaging/android_wheel.py` builds one wheel per ABI;
+`android/app/build.gradle.kts` takes wheels from `pysrc/` when present and the
+sdist otherwise.
+
+Everything it needs is public and standard, which is why it is ~300 lines:
+
+| input | where |
+|---|---|
+| Android CPython (headers + `libpython3.10.so`) | **Maven Central**, `com.chaquo.python:target` — not behind chaquo.com |
+| which target | Chaquopy 15.0.1 resolves `"3.10"` to **3.10.13-0** (`Common.java` at tag 15.0.1) |
+| compiler | plain NDK clang; `target/android-env.sh` does nothing exotic |
+| wheel tag | `cp310-cp310-android_21_arm64_v8a` (`server/pypi/build-wheel.py:124`) |
+| headers needed | **only `Python.h`** — verified by compiling with no numpy include path. numpy/scipy/matplotlib stay as Chaquopy's prebuilt wheels |
+
+**Measured**
+
+- Cython handles all 31 modules of `core`/`arch`/`blocks`/`calibration`
+  unchanged; 5003 lines of Python → 472k lines of C.
+- The full suite passes against the compiled package with every `.py` deleted:
+  **564 passed, 13 skipped, 0 failed**, `analyze()` bit-identical at
+  **258.3043 fs**.
+- 4.7 MB per ABI — about 11% on top of an 84 MB APK. Size is not the obstacle,
+  contrary to the first guess.
+- CI cross-compiled both ABIs, checked the ELF `e_machine` against the tag
+  rather than trusting it, and the APK carries 11 `.so` and no `.py` under
+  `pllsim/core/`.
+
+**`--no-docstrings` is load-bearing, not cosmetic.** Without it the PSD note is
+still readable in the `.so`. (`-X docstrings=False` is not a real Cython
+option and fails outright — the first attempt used it and silently proved
+nothing because the `.so` was never built and the test imported the `.py`.)
+
+**Two traps avoided.** `--no-index` would have scoped pip to the local wheels
+— and taken numpy, scipy and matplotlib down with it, since they resolve from
+Chaquopy's index in the same pass. And the wheels must be found by *tag*
+(`--find-links`), not installed by path: a path would put the arm64 wheel into
+the x86_64 variant too.
+
+**What it does not buy, and this bounds the whole exercise.** `app.js` stays
+plain text, so the bridge's method names, arguments and the entire UI flow
+remain readable; preset values are one `fields()` call away at runtime. This
+raises the cost of reading the *formulas* and nothing else. If the valuable
+thing is the calibration data and the benchmark conclusions, compilation does
+not protect it.
+
+**Still device-only.** The APK builds and contains the right objects, but
+nothing has yet *loaded* a compiled module on a phone. That is the one
+remaining unknown.
+
+**Adjacent finding, not acted on.** We pin Chaquopy 15.0.1; upstream is
+17.0.1, supporting Python 3.10–3.14, and its README now recommends
+`cibuildwheel` (which has official Android support) for 3.13+. Whether scipy is
+published for newer Python in their wheel repository could not be checked —
+chaquo.com is blocked from this network — so the "3.10 is load-bearing" note
+above may be stale. It needs a build to settle.
+
 ## Open Questions
 
 1. ~~Which numpy/scipy/matplotlib versions Chaquopy serves for 3.10~~ —
