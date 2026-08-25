@@ -51,15 +51,36 @@ chaquopy {
             // Gradle 8's validation fails the build (seen on the first CI
             // run).  The sdist is produced by, from the repo root:
             //     python -m build --sdist --outdir android/app/pysrc .
-            val sdists = file("pysrc")
-                .listFiles { f -> f.name.matches(Regex("pllsim-.*\\.tar\\.gz")) }
-                ?.toList() ?: emptyList()
-            require(sdists.size == 1) {
-                "expected exactly one pllsim sdist in android/app/pysrc/ " +
-                    "(found ${sdists.size}); from the repo root run: " +
-                    "python -m build --sdist --outdir android/app/pysrc ."
+            // Two ways in, and the wheels win when they are there.
+            //
+            // Normally pysrc/ holds one sdist and pllsim ships as .py.  When
+            // packaging/android_wheel.py has been run it holds one wheel per
+            // ABI instead, with the modelling core compiled to .so -- and
+            // those must be resolved by *tag*, not by path, or the arm64
+            // wheel would be installed into the x86_64 variant as well.
+            // --find-links lets pip pick per ABI.
+            //
+            // Deliberately NOT --no-index: that is a global pip option, and
+            // numpy, scipy and matplotlib all come from Chaquopy's own index
+            // in the same resolve.  Cutting the index to scope one package
+            // would have taken those three down with it.
+            val pysrc = file("pysrc")
+            val wheels = pysrc.listFiles { f ->
+                f.name.matches(Regex("pllsim-.*\\.whl")) }?.toList() ?: emptyList()
+            if (wheels.isNotEmpty()) {
+                options("--find-links", pysrc.absolutePath)
+                install("pllsim")
+            } else {
+                val sdists = pysrc
+                    .listFiles { f -> f.name.matches(Regex("pllsim-.*\\.tar\\.gz")) }
+                    ?.toList() ?: emptyList()
+                require(sdists.size == 1) {
+                    "expected exactly one pllsim sdist in android/app/pysrc/ " +
+                        "(found ${sdists.size}); from the repo root run: " +
+                        "python -m build --sdist --outdir android/app/pysrc ."
+                }
+                install(sdists[0].absolutePath)
             }
-            install(sdists[0].absolutePath)
         }
     }
 }

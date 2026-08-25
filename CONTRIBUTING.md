@@ -46,12 +46,71 @@ and everything that selected the bar went with it.  That is the pattern worth
 copying — "kept so they can be compared" stops being a reason the day you have
 compared, and a shell nobody chose is a shell that rots.
 
-The APK builds from Actions → *Android APK* → Run workflow, which is manual
-and deliberately off the push path, or locally with:
+### Building the APK
+
+From Actions → *Android APK* → Run workflow, which is manual and deliberately
+off the push path.  Locally, the interpreted build is two commands:
 
 ```bash
+python -m build --sdist --outdir android/app/pysrc .   # from the repo root
 gradle -p android :app:assembleDebug
 ```
+
+The first is not optional.  Chaquopy installs pllsim from `android/app/pysrc/`,
+and the Gradle config refuses to guess: with nothing there it fails with that
+exact command in the message.  It is an sdist rather than
+`install("../..")` because a directory install makes the whole repository an
+input of Chaquopy's pip task — and this Gradle project lives inside that
+repository, so every AGP task's output lands inside the pip task's input and
+Gradle 8's validation rejects the build.  That was the first CI run's failure.
+
+`assembleDebug` builds whichever pllsim `pysrc/` holds: an sdist gives the
+interpreted APK, wheels give the compiled one.  For the compiled build,
+replace the first command with
+
+```bash
+python packaging/android_wheel.py --abi arm64-v8a --ndk $ANDROID_NDK_HOME
+python packaging/android_wheel.py --abi x86_64   --ndk $ANDROID_NDK_HOME
+```
+
+and delete any sdist from `pysrc/` first — with both present Chaquopy still has
+a pure-Python pllsim to resolve, and you would get the interpreted APK under
+the impression it was compiled.  CI does both builds in one run and uploads
+both.
+
+The toolchain versions are pinned and several of them are load-bearing:
+
+| what | version | why this one |
+|---|---|---|
+| `buildPython` / `setup-python` | **3.10** | must match `version` in `android/app/build.gradle.kts`; Chaquopy's repository has no scipy wheel past 3.10 (chaquo/chaquopy#1237) |
+| Chaquopy plugin | 15.0.1 | resolves `"3.10"` to CPython target 3.10.13-0 |
+| AGP (`com.android.application`) | 8.1.4 | Chaquopy 15.0.1 enforces a **minimum** of AGP 7.0.0 and no maximum (`Common.java: MIN_AGP_VERSION`) — an earlier note here claimed a supported 8.1–8.2 *range*, which the source does not say |
+| Gradle | 8.2 | pairs with that AGP |
+| Java | 17 | what AGP 8.x requires |
+| `compileSdk` / `minSdk` | 34 / 24 | Chaquopy's own floors are `COMPILE_SDK_VERSION = 34` and `MIN_SDK_VERSION = 21`, so 24 is ours, not its |
+| `abiFilters` | arm64-v8a, x86_64 | phones and the emulator.  Each ABI carries its own CPython plus numpy/scipy, so a third costs about 40 MB |
+
+One runtime detail that is easy to lose and fatal when lost: `MPLCONFIGDIR`
+must be set **before** `Python.start()` (`MainActivity`, via `Os.setenv`).
+matplotlib writes its font cache on first import and dies on a read-only
+default.
+
+The compiled build exists because `strings` on an interpreted module prints
+back function names, line numbers and whole docstrings; `packaging/android_wheel.py`
+cythonises `core`, `arch`, `blocks` and `calibration` and cross-compiles them
+against Chaquopy's Android CPython (headers from Maven Central, plain NDK
+clang).  Run it with `--host` to exercise the whole path without an NDK.
+
+Two things about it are easy to get wrong and are commented where they live:
+the wheels must be resolved by tag (`--find-links`), never installed by path,
+or the arm64 wheel lands in the x86_64 variant too; and `--no-index` must stay
+off, because it is global and would cut numpy, scipy and matplotlib off from
+Chaquopy's index in the same resolve.
+
+`presets.py` is deliberately not compiled.  Its calibration values end up as
+IEEE-754 doubles in the constant pool, where a four-line script finds each one
+exactly — compiling it would buy the appearance of protection and nothing
+else.
 
 A bridge method with no caller is half a feature: `appbridge._METHODS`
 gaining an entry that no page renders looks tested and does nothing.  Wire

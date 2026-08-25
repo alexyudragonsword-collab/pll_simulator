@@ -4,6 +4,22 @@ name: Android APK
 # Chaquopy build (SDK + three native wheels per ABI) costs real runner
 # minutes on a private repo's monthly budget -- so it runs when a human asks,
 # not on every push.
+#
+# Every run produces TWO APKs from the same source:
+#
+#   interpreted -- pllsim ships as .py, installed from an sdist.  The plain
+#                  build; what the app has always been.
+#   compiled    -- the modelling packages (core, arch, blocks, calibration)
+#                  are Cython-compiled to .so and installed from per-ABI
+#                  wheels.  `strings` on the interpreted build prints back
+#                  function names, line numbers and whole docstrings; this one
+#                  gives machine code instead.
+#
+# They are the same application id, so installing one replaces the other on a
+# phone.  If you need them side by side, that is an applicationIdSuffix away
+# -- ask before adding it, since the navigation flavors were removed for
+# exactly the reason that unchosen variants rot.
+
 on:
   workflow_dispatch:
 
@@ -23,23 +39,140 @@ jobs:
         with:
           # Chaquopy's buildPython must match the version in
           # android/app/build.gradle.kts -- 3.10, the newest Python for
-          # which its repository has a scipy wheel (chaquo/chaquopy#1237)
+          # which its repository has a scipy wheel (chaquo/chaquopy#1237).
+          # The compiled wheels are tagged cp310 for the same reason; a
+          # mismatch here yields wheels Chaquopy's pip refuses.
           python-version: "3.10"
+      - name: Install build tools
+        run: pip install build cython
+      - uses: gradle/actions/setup-gradle@v3
+        with:
+          gradle-version: "8.2"
+
+      # ---------------------------------------------------------- interpreted
       - name: Build the pllsim sdist the app embeds
         # not install("../..") in the Gradle config: a directory install
         # makes the whole repo -- including the Gradle project's own build
         # outputs -- an input of the pip task, which Gradle 8's validation
         # rejects as an undeclared dependency on every AGP task
-        run: |
-          pip install build
-          python -m build --sdist --outdir android/app/pysrc .
-      - uses: gradle/actions/setup-gradle@v3
-        with:
-          gradle-version: "8.2"
-      - name: Build debug APK
+        run: python -m build --sdist --outdir android/app/pysrc .
+      - name: Build interpreted APK
         run: gradle -p android :app:assembleDebug
+      - name: Set the interpreted APK aside
+        run: |
+          mkdir -p out
+          mv android/app/build/outputs/apk/debug/app-debug.apk \
+             out/pllsim-interpreted-debug.apk
       - uses: actions/upload-artifact@v4
         with:
-          name: pllsim-debug-apk
-          path: android/app/build/outputs/apk/debug/app-debug.apk
+          name: pllsim-debug-apk-interpreted
+          path: out/pllsim-interpreted-debug.apk
           if-no-files-found: error
+
+      # ------------------------------------------------------------ compiled
+      # Report, do not assume.  If the runner has no NDK the rest of the job
+      # is meaningless, so it fails here rather than silently producing a
+      # second interpreted APK under a name that claims otherwise.
+      - name: Locate the NDK
+        run: |
+          echo "ANDROID_NDK_HOME=$ANDROID_NDK_HOME"
+          echo "ANDROID_NDK_LATEST_HOME=$ANDROID_NDK_LATEST_HOME"
+          ndk="${ANDROID_NDK_HOME:-$ANDROID_NDK_LATEST_HOME}"
+          test -d "$ndk" || { echo "::error::no NDK on this runner"; exit 1; }
+          echo "NDK=$ndk" >> $GITHUB_ENV
+
+      - name: Cross-compile and build one wheel per ABI
+        run: |
+          # the sdist must go: with both present Chaquopy would still have a
+          # pure-Python pllsim to resolve, and the second APK could quietly
+          # be the first one again
+          rm -f android/app/pysrc/pllsim-*.tar.gz
+          for abi in arm64-v8a x86_64; do
+            python packaging/android_wheel.py --abi "$abi" --ndk "$NDK"
+          done
+          ls -la android/app/pysrc/
+
+      - name: Check the wheels are the architecture their tag claims
+        run: |
+          python - <<'PY'
+          import glob, sys, zipfile
+          from pathlib import Path
+          ok = True
+          for whl in sorted(glob.glob("android/app/pysrc/pllsim-*.whl")):
+              with zipfile.ZipFile(whl) as z:
+                  so = next(n for n in z.namelist() if n.endswith(".so"))
+                  data = z.read(so)
+              machine = int.from_bytes(data[18:20], "little")   # ELF e_machine
+              names = {0xB7: "AArch64", 0x3E: "x86-64", 0x28: "ARM"}
+              print(f"{Path(whl).name}: {so} -> "
+                    f"{names.get(machine, hex(machine))}")
+              if machine != (0xB7 if "arm64" in whl else 0x3E):
+                  print(f"::error::{whl} is not the architecture it claims")
+                  ok = False
+          sys.exit(0 if ok else 1)
+          PY
+
+      - name: Build compiled APK
+        run: gradle -p android :app:assembleDebug
+      - name: Set the compiled APK aside
+        # block scalar, not a plain one: YAML folds a plain scalar onto one
+        # line and keeps the backslash, so bash saw "\ " and escaped the space
+        # instead of continuing the line
+        run: |
+          mv android/app/build/outputs/apk/debug/app-debug.apk \
+             out/pllsim-compiled-debug.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pllsim-debug-apk-compiled
+          path: out/pllsim-compiled-debug.apk
+          if-no-files-found: error
+
+      # ---------------------------------------------------------- verify both
+      # The two builds run back to back in one workspace, so the real risk is
+      # that the second reuses the first's pip output and the "compiled" APK
+      # is simply the interpreted one renamed.  Nothing about the build log
+      # would say so.  Look inside instead: one must carry source, the other
+      # must carry objects, and neither may carry both.
+      - name: Prove the two APKs actually differ
+        run: |
+          python - <<'PY'
+          import io, sys, zipfile
+          from pathlib import Path
+
+          PKGS = ("core", "arch", "blocks", "calibration")
+
+          def payload_names(apk):
+              names = []
+              with zipfile.ZipFile(apk) as z:
+                  for entry in z.namelist():
+                      if not entry.endswith(".imy"):
+                          continue
+                      with zipfile.ZipFile(io.BytesIO(z.read(entry))) as p:
+                          names += p.namelist()
+              return names
+
+          def counts(apk):
+              src = obj = 0
+              for n in payload_names(apk):
+                  if not any(f"pllsim/{p}/" in n for p in PKGS):
+                      continue
+                  if n.endswith((".py", ".pyc")):
+                      src += 1
+                  elif n.endswith(".so"):
+                      obj += 1
+              return src, obj
+
+          ok = True
+          interp = counts("out/pllsim-interpreted-debug.apk")
+          comp = counts("out/pllsim-compiled-debug.apk")
+          print(f"interpreted: {interp[0]} source, {interp[1]} native")
+          print(f"compiled   : {comp[0]} source, {comp[1]} native")
+          if interp[1] or not interp[0]:
+              print("::error::the interpreted APK is not carrying source")
+              ok = False
+          if comp[0] or not comp[1]:
+              print("::error::the compiled APK still carries source for the "
+                    "modelling packages -- the second build reused the first")
+              ok = False
+          sys.exit(0 if ok else 1)
+          PY

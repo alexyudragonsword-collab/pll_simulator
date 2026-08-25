@@ -111,8 +111,20 @@ config refuses to guess and says exactly this if it is missing).
 Navigation is a left drawer: entries listed vertically, opened by an edge
 swipe or the hamburger, closed by choosing one.  A horizontal tab bar was
 carried alongside it for one release so the two could be compared on a real
-device; that is settled, so `gradle -p android :app:assembleDebug` is once
-again the only build.  The app pins
+device; that is settled.
+
+Each CI run produces **two APKs** from the same source.  The *interpreted*
+one ships pllsim as `.py`, from an sdist — the plain build.  The *compiled*
+one has the modelling packages (`core`, `arch`, `blocks`, `calibration`)
+Cython-compiled to `.so` and installed from per-ABI wheels built by
+`packaging/android_wheel.py`; `strings` on the interpreted build prints back
+function names, line numbers and whole docstrings, and this one gives machine
+code instead.  Behaviour is identical — the full suite passes against the
+compiled package with every `.py` deleted, and `analyze()` is bit-identical.
+It protects the formulas only: `assets/www/app.js` stays plain text and preset
+values are one `fields()` call away at runtime.  Locally,
+`gradle -p android :app:assembleDebug` builds whichever of the two `pysrc/`
+holds.  The app pins
 Python 3.10 because Chaquopy's package repository has no scipy wheel for
 anything newer — the pyproject dependency floors are verified against that
 stack, and `cairn/android-app.md` records the constraints before you change

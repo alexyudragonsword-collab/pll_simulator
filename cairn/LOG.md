@@ -2,6 +2,46 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-25 · The compiled Android build becomes normal: two APKs per run
+
+- `android.yml` now builds both packagings from one source tree — interpreted
+  (.py from an sdist) and compiled (core/arch/blocks/calibration as .so from
+  per-ABI wheels) — and uploads both.
+- The failure mode that mattered is the second build reusing the first's pip
+  output, which no log would reveal. The job opens both APKs and counts
+  source vs objects under the modelling packages; either being wrong fails it.
+- Scope widened from `core/` to all four modelling packages, the set the
+  suite had already been run against compiled.
+- `presets.py` deliberately left interpreted: its calibration doubles are
+  findable in the constant pool by an eight-byte search, so compiling it would
+  protect nothing. Measured, not assumed.
+- Same application id for both, so they do not co-install. Left alone on
+  purpose — `applicationIdSuffix` is the machinery just removed with the
+  navigation flavors, and it should be asked for rather than reflexively
+  re-added.
+
+## 2026-08-25 · Cython cross-compile spike: the core ships as .so in a real APK
+
+- Asked how reverse-engineerable the APK is. It is trivially so: `strings` on
+  a compiled module prints the whole DSB convention docstring, and bytecode
+  keeps line numbers and variable names.
+- Built the answer rather than argued it. CI cross-compiled `core/` for both
+  ABIs, checked the ELF machine type against the wheel tag, and the APK now
+  carries 11 `.so` and no `.py` under `pllsim/core/`.
+- The reason it was tractable: Android CPython is on **Maven Central**, the
+  compiler is plain NDK clang, and cythonised pure-Python needs **only
+  Python.h** — so nothing rebuilds numpy/scipy. All read from Chaquopy's
+  source, since chaquo.com is unreachable here.
+- Behaviour unchanged, by the project's own suite: 564 passed / 13 skipped
+  with every `.py` deleted, `analyze()` still 258.3043 fs.
+- Size was never the obstacle: 4.7 MB per ABI, ~11% of the APK. My first
+  estimate was wrong by having guessed instead of compiling.
+- Two traps: `--no-index` would have cut numpy/scipy/matplotlib off from
+  Chaquopy's index, and installing a wheel by path puts the arm64 build into
+  the x86_64 variant. Both in `cairn/android-app.md`.
+- Bounds worth repeating: `app.js` stays plain text and presets are one
+  `fields()` call away, so this protects formulas only.
+
 ## 2026-08-24 · The drawer wins; the tab bar and everything selecting it are deleted
 
 - Comparison settled on a device: the phone keeps the left drawer. Removed
