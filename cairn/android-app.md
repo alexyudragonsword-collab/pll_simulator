@@ -410,9 +410,18 @@ Left that way on purpose: `applicationIdSuffix` would make them co-installable
 but is the same machinery just removed with the navigation flavors, and it
 should be added on request rather than by reflex.
 
-**Still device-only.** The APKs build and contain the right objects, but
-nothing has yet *loaded* a compiled module on a phone. That is the one
-remaining unknown.
+**Closed on a device, 2026-08-25.** The compiled APK was sideloaded and the
+workbench's default preset analysed on the phone: **258.3 fs**, the same
+figure the host produces. So the compiled modules load and run on real
+hardware, and the last unknown in that chain is settled.
+
+Provenance, because it matters for a number nothing here can re-derive: this
+was measured by the user on their own device and reported, not produced by
+CI or by any run in this repository. CI proves the objects are in the APK and
+are the architecture they claim; it cannot prove an import succeeds. If the
+target Python ever moves past 3.10 the generated C stops being confined to
+the public API, and this measurement has to be taken again rather than
+assumed to hold.
 
 **Adjacent finding, not acted on.** We pin Chaquopy 15.0.1; upstream is
 17.0.1, supporting Python 3.10–3.14, and its README now recommends

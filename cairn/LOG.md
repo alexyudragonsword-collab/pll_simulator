@@ -2,6 +2,19 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-25 · The compiled APK runs on a phone — 258.3 fs, measured there
+
+- Sideloaded and analysed on a real device: the compiled modules import and
+  produce the same 258.3 fs the host does. The chain from Cython through the
+  NDK to a running phone is now closed end to end.
+- Measured by the user on their device and reported here, not by CI. Recorded
+  with that provenance in `cairn/android-app.md` — CI can show the objects are
+  present and are the right architecture, and can never show an import worked.
+- Not transferable past Python 3.10: above it Cython's generated C leaves the
+  public API, so this has to be re-measured rather than carried forward.
+- APK run #15 (`02938f8`) also produced both APKs carrying the new unit
+  converter — interpreted 84.21 MB, compiled 87.38 MB.
+
 ## 2026-08-25 · A phase-noise unit converter, on all three surfaces
 
 - `core.jitter.convert_phase_noise` turns any one of degrees / RMS jitter /
