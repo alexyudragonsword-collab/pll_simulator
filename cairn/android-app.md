@@ -342,6 +342,13 @@ Chaquopy's index in the same pass. And the wheels must be found by *tag*
 (`--find-links`), not installed by path: a path would put the arm64 wheel into
 the x86_64 variant too.
 
+**Compiling `presets.py` was considered and rejected on measurement.** The
+calibration values survive as IEEE-754 doubles in the constant pool: `-122`,
+`4.8e9` and `1.92e7` were each located exactly by an eight-byte `struct.pack`
+search of a test build, and the preset function names stay in the symbol
+table. They are also one `fields()` call away at runtime. Compiling it would
+be build surface bought for the appearance of protection.
+
 **What it does not buy, and this bounds the whole exercise.** `app.js` stays
 plain text, so the bridge's method names, arguments and the entire UI flow
 remain readable; preset values are one `fields()` call away at runtime. This
@@ -349,7 +356,29 @@ raises the cost of reading the *formulas* and nothing else. If the valuable
 thing is the calibration data and the benchmark conclusions, compilation does
 not protect it.
 
-**Still device-only.** The APK builds and contains the right objects, but
+**Promoted to the normal build (2026-08-25).** `android.yml` now produces
+**two** APKs per run from one source tree: interpreted (sdist, `.py`) and
+compiled (per-ABI wheels, `.so`). Both are wanted permanently, so this is not
+the flavor situation again — those were two *presentations* of the same app
+awaiting a decision, these are two packagings of the same behaviour.
+
+The scope widened from `core/` to all four modelling packages, which is
+exactly the set the suite was run against compiled.
+
+The two builds share one workspace and run back to back, so the real failure
+mode is the second reusing the first's pip output and shipping the interpreted
+APK under the compiled name — with nothing in the log to say so. The workflow
+therefore opens both APKs and counts what is under
+`pllsim/{core,arch,blocks,calibration}/`: one must have source and no objects,
+the other objects and no source, or the job fails. The sdist is also deleted
+before the second build, so Chaquopy has no pure-Python pllsim left to resolve.
+
+They carry the same application id, so one replaces the other on a phone.
+Left that way on purpose: `applicationIdSuffix` would make them co-installable
+but is the same machinery just removed with the navigation flavors, and it
+should be added on request rather than by reflex.
+
+**Still device-only.** The APKs build and contain the right objects, but
 nothing has yet *loaded* a compiled module on a phone. That is the one
 remaining unknown.
 

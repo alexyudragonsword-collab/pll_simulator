@@ -53,6 +53,27 @@ and deliberately off the push path, or locally with:
 gradle -p android :app:assembleDebug
 ```
 
+That one command builds whichever pllsim `android/app/pysrc/` holds — an sdist
+gives the interpreted APK, wheels give the compiled one.  CI does both in one
+run and uploads both.
+
+The compiled build exists because `strings` on an interpreted module prints
+back function names, line numbers and whole docstrings; `packaging/android_wheel.py`
+cythonises `core`, `arch`, `blocks` and `calibration` and cross-compiles them
+against Chaquopy's Android CPython (headers from Maven Central, plain NDK
+clang).  Run it with `--host` to exercise the whole path without an NDK.
+
+Two things about it are easy to get wrong and are commented where they live:
+the wheels must be resolved by tag (`--find-links`), never installed by path,
+or the arm64 wheel lands in the x86_64 variant too; and `--no-index` must stay
+off, because it is global and would cut numpy, scipy and matplotlib off from
+Chaquopy's index in the same resolve.
+
+`presets.py` is deliberately not compiled.  Its calibration values end up as
+IEEE-754 doubles in the constant pool, where a four-line script finds each one
+exactly — compiling it would buy the appearance of protection and nothing
+else.
+
 A bridge method with no caller is half a feature: `appbridge._METHODS`
 gaining an entry that no page renders looks tested and does nothing.  Wire
 the UI in the same change — `tests/test_android_parity.py` checks both

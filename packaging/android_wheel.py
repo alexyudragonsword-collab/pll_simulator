@@ -61,11 +61,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SRC = ROOT / "src" / "pllsim"
 
-#: Compiled to native code.  The spike starts with the modelling core rather
-#: than the whole package: it is where the formulas live, it is 11 modules
-#: instead of 85, and a narrow first target keeps the unknown (cross
-#: compilation) separated from the merely tedious.
-COMPILE_PACKAGES = ["core"]
+#: Compiled to native code: the modelling packages, 31 modules of the 85.
+#:
+#: This is exactly the set the full suite was run against with every `.py`
+#: deleted -- 564 passed, 13 skipped, analyze() unchanged at 258.3043 fs -- so
+#: the boundary is a measured one rather than a guess about what matters.
+#:
+#: `presets.py` is deliberately NOT here, and the reason is worth keeping:
+#: compiling it does not hide the calibration values.  They end up as IEEE-754
+#: doubles in the constant pool, where a four-line script finds each one
+#: exactly (-122, 4.8e9 and 1.92e7 each matched once in a test build), and the
+#: preset function names stay in the symbol table.  They are also one
+#: `fields()` call away at runtime regardless.  Compiling it would be build
+#: surface bought for the appearance of protection.
+COMPILE_PACKAGES = ["core", "arch", "blocks", "calibration"]
 
 #: Chaquopy 15.0.1 resolves `version = "3.10"` to this target build -- read
 #: from Common.java at tag 15.0.1.  Bump both together.
@@ -286,8 +295,10 @@ def main() -> int:
     with zipfile.ZipFile(whl) as z:
         sos = [n for n in z.namelist() if n.endswith(".so")]
         pys = [n for n in z.namelist()
-               if n.endswith(".py") and "/core/" in n]
-    print(f"  {len(sos)} compiled modules, {len(pys)} .py left under core/")
+               if n.endswith(".py")
+               and any(f"/{pkg}/" in n for pkg in COMPILE_PACKAGES)]
+    print(f"  {len(sos)} compiled modules, {len(pys)} .py left in "
+          f"{'/'.join(COMPILE_PACKAGES)}")
     if pys:
         raise SystemExit("a .py survived in a compiled package -- it would "
                          "shadow the .so and this would protect nothing")
