@@ -2,6 +2,18 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-26 · Both calculators read correctly on a phone
+
+- APK run #16 on main (`6f3a76c`) shipped the converter and the FoM tab;
+  sideloaded and read on a device: 118.09 fs / 0.427271° from −45.5587 dBc
+  SSB, and −249.91 dB from 77 fs at 17.2 mW.
+- Measured by the user, not by CI — recorded with that provenance in
+  `cairn/android-app.md`, same as the compiled-module confirmation before it.
+- What it settles is the rendering and the feel, not the arithmetic: the
+  suite already pins those numbers on every preset and against the published
+  triple. A device agreeing with the host is expected; it would only have
+  been news the other way.
+
 ## 2026-08-26 · FoM calculator (PLL jitter + VCO), three surfaces
 
 - `core.fom`: `pll_jitter_fom` and `vco_fom`, plus the FoM_N and FoM_T
