@@ -55,6 +55,7 @@
   <button data-tab="drift" data-zh="温漂" data-en="Drift">温漂</button>
   <button data-tab="bench" data-zh="对标" data-en="Papers">对标</button>
   <button data-tab="units" data-zh="单位换算" data-en="PN units">单位换算</button>
+  <button data-tab="fom" data-zh="FoM" data-en="FoM">FoM</button>
 </nav>
 </div>
 
@@ -375,6 +376,38 @@
       <input id="un-value" type="text" value="0.5"></label>
     <button id="un-run" class="primary" data-zh="换算" data-en="Convert">换算</button>
     <div id="un-out"></div>
+  </section>
+</div>
+
+<div id="tab-fom" class="tab" hidden>
+  <section class="card">
+    <h2 data-zh="PLL 抖动 FoM" data-en="PLL jitter FoM">PLL 抖动 FoM</h2>
+    <p class="muted"
+       data-zh="功耗由你填。本包不建模功耗，任何自称端到端算出的 FoM 都含编造因子。"
+       data-en="Power is yours to supply. pllsim models none, so a FoM it derived end to end would carry a fabricated factor.">功耗由你填。本包不建模功耗，任何自称端到端算出的 FoM 都含编造因子。</p>
+    <pre class="spurs">FoM = 10*log10[ (st/1s)^2 * (P/1mW) ]</pre>
+    <label><span data-zh="RMS 抖动 [fs]" data-en="RMS jitter [fs]">RMS 抖动 [fs]</span>
+      <input id="fom-jit" type="text" value="100"></label>
+    <label><span data-zh="功耗 [mW]" data-en="power [mW]">功耗 [mW]</span>
+      <input id="fom-pwr" type="text" value="10"></label>
+    <label><span data-zh="倍频比 N（选填）" data-en="divide ratio N (optional)">倍频比 N（选填）</span>
+      <input id="fom-n" type="text" value=""></label>
+    <div id="fom-pll-out"></div>
+  </section>
+  <section class="card">
+    <h2 data-zh="VCO FoM" data-en="VCO FoM">VCO FoM</h2>
+    <pre class="spurs">FoM = L(df) - 20*log10(f0/df) + 10*log10(P/1mW)</pre>
+    <label><span data-zh="载波 f0 [Hz]" data-en="carrier f0 [Hz]">载波 f0 [Hz]</span>
+      <input id="fom-f0" type="text" value="10e9"></label>
+    <label><span data-zh="偏移 df [Hz]" data-en="offset df [Hz]">偏移 df [Hz]</span>
+      <input id="fom-off" type="text" value="1e6"></label>
+    <label><span data-zh="L(df) [dBc/Hz] 单边带" data-en="L(df) [dBc/Hz] single-sideband">L(df) [dBc/Hz] 单边带</span>
+      <input id="fom-l" type="text" value="-120"></label>
+    <label><span data-zh="功耗 [mW]" data-en="power [mW]">功耗 [mW]</span>
+      <input id="fom-vpwr" type="text" value="10"></label>
+    <label><span data-zh="调谐范围 [%]（选填）" data-en="tuning range [%] (optional)">调谐范围 [%]（选填）</span>
+      <input id="fom-ftr" type="text" value=""></label>
+    <div id="fom-vco-out"></div>
   </section>
 </div>
 

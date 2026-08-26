@@ -136,6 +136,18 @@ readout would show the conversion of what you typed two characters ago. The
 browser harness waits on that stamp; waiting for text to appear instead read
 a *stale* readout and asserted against it, which passed and was wrong.
 
+The FoM tab follows the converter's pattern: live recompute on every
+keystroke, each render stamped with the request that produced it so a slower
+earlier reply cannot overwrite a newer answer. Two independent forms on one
+tab, so two counters — a single shared one would let the VCO half cancel a
+PLL render that was still in flight.
+
+One thing every surface must keep saying: **power is an input.** This package
+models no current or supply, so a FoM it appeared to derive end to end would
+carry a fabricated factor. The phone says it in the tab's own caption rather
+than only in the docs, because the phone is where someone reads a number
+without the docs open.
+
 Deliberate, not gaps: workbench cycle default (50k app vs 150k Qt — phone),
 start offset in MHz (app follows the web GUI; Qt uses Hz), analytic spurs as
 JSON rather than a table, and no "re-run live" button on Benchmarks (Qt's is

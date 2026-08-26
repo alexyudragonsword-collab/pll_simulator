@@ -255,8 +255,8 @@ All calibrators record `.trace` for convergence plots
 
 ```
 src/pllsim/
-  core/        freqresp, noise, jitter, spectrum, colored, deltasigma, engine,
-               results, dtcspurs, tdcspurs
+  core/        freqresp, noise, jitter, fom, spectrum, colored, deltasigma,
+               engine, results, dtcspurs, tdcspurs
   blocks/      loopfilter, oscillator, chargepump, dtc, tdc, sampler, lockdetect
   calibration/ lms, gain_cal, ftl
   arch/        base, cppll, sspll, spll, adpll, ilcm, mdll

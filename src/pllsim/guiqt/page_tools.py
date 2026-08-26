@@ -16,6 +16,7 @@ from PySide6.QtWidgets import (
 )
 
 from .. import presets
+from ..core.fom import pll_jitter_fom, vco_fom
 from ..core.jitter import HALF_POWER_DB, convert_phase_noise
 from ..guiutil import mc_build_frac_cppll
 from ..montecarlo import monte_carlo, plot_mc
@@ -328,3 +329,146 @@ class ExportPage(Page):
                                   + L(f"\n\n已写入 {path}",
                                       f"\n\nwritten to {path}"))
         self.run_async(fn, done, self.btn, self.btn_zip)
+
+
+class FomPage(Page):
+    """Jitter FoM and VCO FoM, from numbers the caller supplies.
+
+    Power is an input, never a computation.  pllsim models no current or
+    supply anywhere, so a FoM this package derived end to end would have a
+    fabricated factor in it -- the page says so rather than leaving a reader
+    to assume the opposite.
+    """
+
+    title = "FoM"
+    title_zh = "FoM 计算"
+
+    def __init__(self):
+        super().__init__()
+        lay = QVBoxLayout(self)
+        lay.addWidget(tr(QLabel(),
+                         "两个品质因数都把噪声对功耗归一化。功耗由你填 —— "
+                         "本包不建模功耗，任何自称算出来的 FoM 都含有编造的因子。",
+                         "Both figures normalize noise against the power it "
+                         "cost.  Power is yours to supply: pllsim models none, "
+                         "so a FoM it derived end to end would carry a "
+                         "fabricated factor."))
+
+        # ---------------------------------------------------------- PLL
+        lay.addWidget(tr(QLabel(), "<b>PLL 抖动 FoM</b>",
+                         "<b>PLL jitter FoM</b>"))
+        lay.addWidget(QLabel(
+            "<code>FoM = 10·log10[ (σt/1s)² · (P/1mW) ]</code>"))
+        g = QGridLayout()
+        self.p_jit = float_edit("100", width=130)
+        self.p_pwr = float_edit("10", width=130)
+        self.p_n = float_edit("", width=130)
+        for r, (w, zh, en) in enumerate([
+                (self.p_jit, "RMS 抖动 [fs]", "RMS jitter [fs]"),
+                (self.p_pwr, "功耗 [mW]", "power [mW]"),
+                (self.p_n, "倍频比 N（选填）", "divide ratio N (optional)")]):
+            g.addWidget(tr(QLabel(), zh, en), r, 0)
+            g.addWidget(w, r, 1)
+        g.setColumnStretch(2, 1)
+        lay.addLayout(g)
+        self.pll_metrics = MetricRow()
+        lay.addWidget(self.pll_metrics)
+        self.pll_note = QLabel()
+        self.pll_note.setWordWrap(True)
+        lay.addWidget(self.pll_note)
+
+        # ---------------------------------------------------------- VCO
+        lay.addWidget(tr(QLabel(), "<b>VCO FoM</b>", "<b>VCO FoM</b>"))
+        lay.addWidget(QLabel(
+            "<code>FoM = L(Δf) − 20·log10(f0/Δf) "
+            "+ 10·log10(P/1mW)</code>"))
+        g2 = QGridLayout()
+        self.v_f0 = float_edit("10e9", width=130)
+        self.v_off = float_edit("1e6", width=130)
+        self.v_l = float_edit("-120", width=130)
+        self.v_pwr = float_edit("10", width=130)
+        self.v_ftr = float_edit("", width=130)
+        for r, (w, zh, en) in enumerate([
+                (self.v_f0, "载波 f0 [Hz]", "carrier f0 [Hz]"),
+                (self.v_off, "偏移 Δf [Hz]", "offset Δf [Hz]"),
+                (self.v_l, "L(Δf) [dBc/Hz] 单边带",
+                 "L(Δf) [dBc/Hz] single-sideband"),
+                (self.v_pwr, "功耗 [mW]", "power [mW]"),
+                (self.v_ftr, "调谐范围 [%]（选填）",
+                 "tuning range [%] (optional)")]):
+            g2.addWidget(tr(QLabel(), zh, en), r, 0)
+            g2.addWidget(w, r, 1)
+        g2.setColumnStretch(2, 1)
+        lay.addLayout(g2)
+        self.vco_metrics = MetricRow()
+        lay.addWidget(self.vco_metrics)
+        self.vco_note = QLabel()
+        self.vco_note.setWordWrap(True)
+        lay.addWidget(self.vco_note)
+        lay.addStretch(1)
+
+        for w in (self.p_jit, self.p_pwr, self.p_n):
+            w.textEdited.connect(lambda _t: self._pll())
+        for w in (self.v_f0, self.v_off, self.v_l, self.v_pwr, self.v_ftr):
+            w.textEdited.connect(lambda _t: self._vco())
+        self._pll()
+        self._vco()
+
+    @staticmethod
+    def _opt(edit) -> float | None:
+        text = edit.text().strip()
+        return float(text) if text else None
+
+    def _pll(self):
+        try:
+            r = pll_jitter_fom(float(self.p_jit.text()) * 1e-15,
+                               float(self.p_pwr.text()),
+                               n=self._opt(self.p_n))
+        except (ValueError, ZeroDivisionError) as exc:
+            self.pll_metrics.set_metrics([])
+            self.pll_note.setText(f"<span style='color:#b3261e'>{exc}</span>")
+            return
+        items = [("FoM [dB]", f"{r.fom_db:.2f}")]
+        if r.fom_n_db is not None:
+            items.append((L("FoM_N [dB]", "FoM_N [dB]"), f"{r.fom_n_db:.2f}"))
+        self.pll_metrics.set_metrics(items)
+        note = L("抖动减半得 6 dB，功耗减半只得 3 dB —— 这个 2:1 权重正是"
+                 "该指标的内容：堆电流换抖动不会让它变好。",
+                 "Halving jitter gains 6 dB; halving power gains 3 dB.  That "
+                 "2:1 weighting is the content of the figure — spending "
+                 "current to buy jitter does not improve it.")
+        if r.fom_n_db is not None:
+            note += L(" 本包 FoM_N 取 <code>FoM − 10·log10(N)</code>，"
+                      "即奖励更高倍频比；文献里也有写成加号的。",
+                      " FoM_N here is <code>FoM − 10·log10(N)</code>, which "
+                      "rewards a higher ratio; the literature also writes it "
+                      "as an addition.")
+        self.pll_note.setText(f"<span style='color:#666'>{note}</span>")
+
+    def _vco(self):
+        try:
+            r = vco_fom(float(self.v_f0.text()), float(self.v_off.text()),
+                        float(self.v_pwr.text()),
+                        l_dbc_hz=float(self.v_l.text()),
+                        ftr_pct=self._opt(self.v_ftr))
+        except (ValueError, ZeroDivisionError) as exc:
+            self.vco_metrics.set_metrics([])
+            self.vco_note.setText(f"<span style='color:#b3261e'>{exc}</span>")
+            return
+        items = [("FoM [dBc/Hz]", f"{r.fom_dbc_hz:.2f}")]
+        if r.fom_t_dbc_hz is not None:
+            items.append(("FoM_T [dBc/Hz]", f"{r.fom_t_dbc_hz:.2f}"))
+        self.vco_metrics.set_metrics(items)
+        self.vco_note.setText(
+            "<span style='color:#a15c00'>" +
+            L("L(Δf) 按定义是<b>单边带</b>；本包内部存的是双边带 S_φ，"
+              f"两者差 {HALF_POWER_DB:.4f} dB，代错就整体偏 3 dB。"
+              "另外那个 −20log10(f0/Δf) 假设此处按 20 dB/dec 滚降 —— "
+              "在 1/f³ 拐点以内 FoM 会随偏移变化，不同偏移报的数字不可比。",
+              "L(Δf) is <b>single sideband</b> by definition; this "
+              "package stores double-sideband S_phi, "
+              f"{HALF_POWER_DB:.4f} dB away, and the wrong one shifts "
+              "everything by 3 dB.  The −20log10(f0/Δf) term also "
+              "assumes 20 dB/decade here — inside the 1/f³ corner the FoM "
+              "depends on the offset, and figures quoted at different offsets "
+              "are not comparable.") + "</span>")

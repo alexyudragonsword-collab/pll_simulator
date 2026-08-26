@@ -286,3 +286,28 @@ def test_pn_units_page_reports_bad_input_instead_of_crashing():
     at.text_input[0].set_value("0").run()              # f0 = 0
     assert not at.exception, at.exception
     assert at.error, "a zero carrier produced no visible error"
+
+
+def test_fom_page_computes_both_figures():
+    """No button on this page either: it computes on render."""
+    at = _run("13_FoM.py", timeout=60)
+    shown = " ".join(m.value for m in at.metric)
+    assert shown, "the page rendered no metrics"
+    # defaults are 100 fs / 10 mW and -120 dBc/Hz at 1 MHz off 10 GHz / 10 mW
+    assert "-250.00" in shown, shown          # 10*log10((1e-13)^2 * 10)
+    assert "-190.00" in shown, shown
+
+
+def test_fom_page_warns_that_l_is_single_sideband():
+    """This package stores S_phi; the formula wants L. Saying nothing here
+    would hand the reader a silent 3 dB."""
+    at = _run("13_FoM.py", timeout=60)
+    warned = " ".join(w.value for w in at.warning)
+    assert "3.0103" in warned, warned
+
+
+def test_fom_page_reports_bad_power_instead_of_crashing():
+    at = _run("13_FoM.py", timeout=60)
+    at.text_input[1].set_value("0").run()      # PLL power
+    assert not at.exception, at.exception
+    assert at.error, "zero power produced no visible error"

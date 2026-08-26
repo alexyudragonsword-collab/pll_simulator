@@ -67,7 +67,7 @@ def test_every_tab_button_has_a_panel():
     # a count, not a set, so adding a tab is a decision someone makes on
     # purpose -- the drawer holds nine comfortably, a horizontal bar could
     # not hold eight, which is why the bar is gone
-    assert len(tabs) == 9, tabs
+    assert len(tabs) == 10, tabs
 
 
 def test_the_drawer_has_its_slide_rule():

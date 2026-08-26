@@ -2,6 +2,30 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-26 · FoM calculator (PLL jitter + VCO), three surfaces
+
+- `core.fom`: `pll_jitter_fom` and `vco_fom`, plus the FoM_N and FoM_T
+  variants when a ratio or tuning range is supplied.
+- **Power is an input, never a computation.** pllsim models no current or
+  supply anywhere, so nothing here can derive a FoM end to end; every surface
+  says so rather than letting a reader assume the opposite.
+- Anchored on a published triple rather than on arithmetic: Dartizio'23 gives
+  77 fs, 17.2 mW *and* FoM −249.9 dB, all three already in ex14's docstring.
+  Reproducing the third from the first two tests the formula against the
+  literature. A second test asserts ex14 still says that, so the anchor
+  cannot drift away from its source.
+- The VCO FoM takes L (single sideband) and this package stores S_phi, so
+  `vco_fom` accepts either by name and converts — the 3.0103 dB error cannot
+  be made unnamed. Pinned by a test that shows the two paths differ by
+  exactly that when the conversion is skipped.
+- FoM_N has two sign conventions in the literature. We use
+  `FoM − 10·log10(N)` (rewards a higher ratio) and print the formula beside
+  the number on all three surfaces, so no reader has to guess which.
+- Structural anchor for the VCO side, where no published triple was
+  available: inside 1/f² the FoM must not depend on the offset it was
+  evaluated at. That is the figure's whole purpose and it fails for any wrong
+  exponent on the carrier term.
+
 ## 2026-08-25 · The compiled APK runs on a phone — 258.3 fs, measured there
 
 - Sideloaded and analysed on a real device: the compiled modules import and

@@ -105,7 +105,7 @@ def open_section(page, name: str):
 
 
 def _nav_shell(page):
-    """All nine sections must be reachable, and nothing invisible may be
+    """All ten sections must be reachable, and nothing invisible may be
     sitting on top of the content."""
     # the scrim must never intercept taps while closed -- the busy overlay
     # swallowed every tap for exactly this reason, and hit-testing the point
@@ -205,6 +205,56 @@ def _units(page):
           "warns past small angle, rejects bad input")
 
 
+def _fom(page):
+    """The FoM tab, against the numbers the library and the literature give.
+
+    The PLL half is checked with a published triple -- Dartizio'23 reports
+    77 fs, 17.2 mW and FoM -249.9 dB -- so this compares the phone against a
+    paper, not against my arithmetic.  Both halves recompute on typing; the
+    tab has no button at all.
+    """
+    open_section(page, "fom")
+
+    def settled(out_id, fill):
+        before = page.evaluate(
+            f"+(document.getElementById('{out_id}').dataset.seq || 0)")
+        fill()
+        page.wait_for_function(
+            "([id, s]) => +(document.getElementById(id).dataset.seq || 0) > s",
+            arg=[out_id, before], timeout=30_000)
+
+    settled("fom-pll-out", lambda: (page.fill("#fom-jit", "77"),
+                                    page.fill("#fom-pwr", "17.2")))
+    out = page.locator("#fom-pll-out").inner_text()
+    assert "-249.91" in out, out
+    assert "FoM_N" not in out, f"N was blank; FoM_N should not appear: {out}"
+
+    settled("fom-pll-out", lambda: page.fill("#fom-n", "250"))
+    out = page.locator("#fom-pll-out").inner_text()
+    assert "FoM_N" in out, out
+
+    settled("fom-vco-out", lambda: (page.fill("#fom-f0", "10e9"),
+                                    page.fill("#fom-off", "1e6"),
+                                    page.fill("#fom-l", "-120"),
+                                    page.fill("#fom-vpwr", "10")))
+    out = page.locator("#fom-vco-out").inner_text()
+    assert "-190.00" in out, out
+    # the sideband warning is the point of the note, not decoration
+    assert "single sideband" in out, out
+
+    # a blank optional must stay absent rather than become a zero
+    settled("fom-vco-out", lambda: page.fill("#fom-ftr", "10"))
+    out = page.locator("#fom-vco-out").inner_text()
+    assert "FoM_T" in out and "-190.00" in out, out
+
+    settled("fom-pll-out", lambda: page.fill("#fom-pwr", "0"))
+    out = page.locator("#fom-pll-out").inner_text()
+    assert "error" in out.lower() or "ValueError" in out, out
+
+    print("fom: PLL half matches the published -249.9 dB, VCO half -190.00, "
+          "optionals stay optional, bad power rejected")
+
+
 def drive(browser, shot: str | None) -> None:
     # has_touch: the plot viewer's pinch and double-tap are touch
     # gestures, and a mouse-only context never dispatches them
@@ -230,6 +280,7 @@ def drive(browser, shot: str | None) -> None:
     _selector_and_handoff(page)
     _synth_mod_drift_bench(page)
     _units(page)
+    _fom(page)
 
     if shot:
         page.screenshot(path=shot, full_page=True)

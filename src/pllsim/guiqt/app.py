@@ -23,12 +23,12 @@ from .i18n import lang, on_language_change, set_lang
 from .page_analysis import BenchmarksPage, FitPage, SpursPage
 from .page_design import SelectorPage, SynthesisPage
 from .page_dynamics import DriftPage, HopSettlingPage, ModulationPage
-from .page_tools import ExportPage, MonteCarloPage, UnitsPage
+from .page_tools import ExportPage, FomPage, MonteCarloPage, UnitsPage
 from .page_workbench import WorkbenchPage
 
 PAGES = [WorkbenchPage, SynthesisPage, SelectorPage, SpursPage, FitPage,
          ModulationPage, HopSettlingPage, DriftPage, MonteCarloPage,
-         ExportPage, BenchmarksPage, UnitsPage]
+         ExportPage, BenchmarksPage, UnitsPage, FomPage]
 
 
 class MainWindow(QMainWindow):

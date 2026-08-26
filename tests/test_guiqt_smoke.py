@@ -24,7 +24,7 @@ def app():
 def test_main_window_builds_all_pages(app):
     from pllsim.guiqt.app import PAGES, MainWindow
     win = MainWindow()
-    assert win.stack.count() == len(PAGES) == 12
+    assert win.stack.count() == len(PAGES) == 13
     for i in range(win.stack.count()):
         win.nav.setCurrentRow(i)
         assert win.stack.currentIndex() == i
@@ -641,4 +641,73 @@ def test_units_page_warns_outside_the_small_angle_picture(app):
     assert "a15c00" not in page.note.text()
     _type(QTest, page.deg, "30")
     assert "a15c00" in page.note.text(), page.note.text()
+    page.deleteLater()
+
+
+def test_fom_page_computes_both_figures(app):
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QLabel
+
+    from pllsim.guiqt.page_tools import FomPage
+    page = FomPage()
+
+    # the published Dartizio'23 triple: 77 fs at 17.2 mW is -249.9 dB
+    _type(QTest, page.p_jit, "77")
+    _type(QTest, page.p_pwr, "17.2")
+    shown = " ".join(w.text() for w in page.pll_metrics.findChildren(QLabel))
+    assert "-249.9" in shown, shown
+
+    # -120 dBc/Hz at 1 MHz off 10 GHz on 10 mW is exactly -190
+    _type(QTest, page.v_f0, "10e9")
+    _type(QTest, page.v_off, "1e6")
+    _type(QTest, page.v_l, "-120")
+    _type(QTest, page.v_pwr, "10")
+    shown = " ".join(w.text() for w in page.vco_metrics.findChildren(QLabel))
+    assert "-190.00" in shown, shown
+    page.deleteLater()
+
+
+def test_fom_page_optional_fields_stay_optional(app):
+    """N and the tuning range are blank by default, and a blank field must
+    not be read as zero -- which would be a division and a crash."""
+    from PySide6.QtTest import QTest
+    from PySide6.QtWidgets import QLabel
+
+    from pllsim.guiqt.page_tools import FomPage
+    page = FomPage()
+    assert page.p_n.text() == "" and page.v_ftr.text() == ""
+    pll = " ".join(w.text() for w in page.pll_metrics.findChildren(QLabel))
+    assert "FoM_N" not in pll, pll
+
+    _type(QTest, page.p_n, "250")
+    pll = " ".join(w.text() for w in page.pll_metrics.findChildren(QLabel))
+    assert "FoM_N" in pll, pll
+    page.deleteLater()
+
+
+def test_fom_page_warns_about_the_sideband_convention(app):
+    """The VCO FoM takes L, this package stores S_phi, and the gap is 3 dB.
+    A page that did not say so would be handing over a silent error."""
+    from pllsim.guiqt.page_tools import FomPage
+    page = FomPage()
+    note = page.vco_note.text()
+    assert "single sideband" in note or "单边带" in note, note
+    assert "3.0103" in note, note
+    page.deleteLater()
+
+
+def test_fom_page_reports_bad_input_instead_of_a_stale_number(app):
+    from PySide6.QtTest import QTest
+
+    from pllsim.guiqt.page_tools import FomPage
+    page = FomPage()
+    _type(QTest, page.p_pwr, "0")
+    assert "b3261e" in page.pll_note.text(), page.pll_note.text()
+    # read the layout, not findChildren: set_metrics calls deleteLater, and
+    # the widgets stay findable until the event loop runs -- so findChildren
+    # would report a cleared row as still populated
+    lay = page.pll_metrics._lay
+    left = [lay.itemAt(i).widget().text() for i in range(lay.count())
+            if lay.itemAt(i).widget() is not None]
+    assert not left, f"a stale FoM survived: {left}"
     page.deleteLater()

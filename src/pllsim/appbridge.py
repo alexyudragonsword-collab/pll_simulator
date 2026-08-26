@@ -455,6 +455,31 @@ def _benchmark_ipn(preset: str) -> dict:
     }
 
 
+def _fom(kind: str, **kw) -> dict:
+    """PLL jitter FoM or VCO FoM, from numbers the caller supplies.
+
+    Power is an input here and everywhere: pllsim models no current or
+    supply, so nothing in this package can derive a FoM end to end.  The
+    page says so rather than letting a reader assume otherwise.
+    """
+    from .core.fom import pll_jitter_fom, vco_fom
+    from .core.jitter import HALF_POWER_DB
+    if kind == "pll":
+        p = pll_jitter_fom(float(kw["jitter_fs"]) * 1e-15,
+                           float(kw["power_mw"]),
+                           n=float(kw["n"]) if kw.get("n") else None)
+        return {"fom_db": p.fom_db, "fom_n_db": p.fom_n_db,
+                "jitter_fs": p.jitter_fs, "power_mw": p.power_mw, "n": p.n}
+    if kind == "vco":
+        v = vco_fom(float(kw["f0_hz"]), float(kw["offset_hz"]),
+                    float(kw["power_mw"]), l_dbc_hz=float(kw["l_dbc_hz"]),
+                    ftr_pct=float(kw["ftr_pct"]) if kw.get("ftr_pct") else None)
+        return {"fom_dbc_hz": v.fom_dbc_hz, "fom_t_dbc_hz": v.fom_t_dbc_hz,
+                "l_dbc_hz": v.l_dbc_hz, "ftr_pct": v.ftr_pct,
+                "half_power_db": HALF_POWER_DB}
+    raise ValueError(f"kind must be 'pll' or 'vco', got {kind!r}")
+
+
 def _units_convert(f0_hz: float, kind: str, value: float) -> dict:
     """One RMS phase deviation in every unit it gets quoted in.
 
@@ -699,6 +724,7 @@ _METHODS: dict[str, Callable[..., Any]] = {
     "hop": _hop,
     "hop_stats": _hop_stats,
     "units_convert": _units_convert,
+    "fom": _fom,
 }
 
 

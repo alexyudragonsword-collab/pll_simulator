@@ -1200,6 +1200,67 @@ $("un-run").addEventListener("click", runUnits);
 document.querySelector('#tabs button[data-tab="units"]')
   .addEventListener("click", runUnits);
 
+/* ------------------------------------------------------- FoM tab */
+/* Same request-stamp discipline as the unit converter: every keystroke
+   fires a call, so a slower earlier reply must not overwrite a newer one.
+   Two independent forms, two counters. */
+function fomRunner(seqName, outId, build) {
+  let seq = 0;
+  return async function () {
+    const mine = ++seq;
+    const out = $(outId);
+    const settle = html => {
+      if (mine !== seq) return;
+      out.innerHTML = html;
+      out.dataset.seq = String(mine);
+    };
+    try { settle(await build()); }
+    catch (e) { settle(errHtml(e)); }
+  };
+}
+
+const runFomPll = fomRunner("pll", "fom-pll-out", async () => {
+  const r = await call("fom", {
+    kind: "pll",
+    jitter_fs: Number($("fom-jit").value),
+    power_mw: Number($("fom-pwr").value),
+    n: $("fom-n").value.trim() ? Number($("fom-n").value) : null,
+  });
+  const items = [["FoM", r.fom_db.toFixed(2) + " dB"]];
+  if (r.fom_n_db !== null) items.push(["FoM_N", r.fom_n_db.toFixed(2) + " dB"]);
+  return metricsHtml(items) + `<p class="muted">` + (lang === "zh"
+    ? "抖动减半得 6 dB，功耗减半只得 3 dB —— 堆电流换抖动不会让它变好。"
+      + (r.fom_n_db !== null ? " FoM_N 取 FoM − 10*log10(N)，奖励更高倍频比。" : "")
+    : "Halving jitter gains 6 dB; halving power gains 3 dB — spending current to buy jitter does not improve it."
+      + (r.fom_n_db !== null ? " FoM_N here is FoM \u2212 10*log10(N), rewarding a higher ratio." : ""))
+    + `</p>`;
+});
+
+const runFomVco = fomRunner("vco", "fom-vco-out", async () => {
+  const r = await call("fom", {
+    kind: "vco",
+    f0_hz: Number($("fom-f0").value),
+    offset_hz: Number($("fom-off").value),
+    power_mw: Number($("fom-vpwr").value),
+    l_dbc_hz: Number($("fom-l").value),
+    ftr_pct: $("fom-ftr").value.trim() ? Number($("fom-ftr").value) : null,
+  });
+  const items = [["FoM", r.fom_dbc_hz.toFixed(2) + " dBc/Hz"]];
+  if (r.fom_t_dbc_hz !== null)
+    items.push(["FoM_T", r.fom_t_dbc_hz.toFixed(2) + " dBc/Hz"]);
+  return metricsHtml(items) + `<p class="note">` + (lang === "zh"
+    ? `L(df) 按定义是单边带；本包内部存双边带 S_phi，差 ${r.half_power_db.toFixed(4)} dB。−20log10(f0/df) 假设此处按 20 dB/dec 滚降，1/f^3 拐点以内 FoM 随偏移变化，不同偏移不可比。`
+    : `L(df) is single sideband by definition; this package stores double-sideband S_phi, ${r.half_power_db.toFixed(4)} dB away.  The -20log10(f0/df) term assumes 20 dB/decade here; inside the 1/f^3 corner the FoM depends on the offset and figures at different offsets are not comparable.`)
+    + `</p>`;
+});
+
+["fom-jit", "fom-pwr", "fom-n"].forEach(id =>
+  $(id).addEventListener("input", runFomPll));
+["fom-f0", "fom-off", "fom-l", "fom-vpwr", "fom-ftr"].forEach(id =>
+  $(id).addEventListener("input", runFomVco));
+document.querySelector('#tabs button[data-tab="fom"]')
+  .addEventListener("click", () => { runFomPll(); runFomVco(); });
+
 /* ---------------------------------------------------------- boot */
 async function boot() {
   applyLang();
