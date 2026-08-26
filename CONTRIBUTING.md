@@ -168,7 +168,14 @@ blanket ignore reads as "type-checked".
 * **Phase PSDs are double-sideband** `S_φ(f)` in rad²/Hz.  Plots and spot
   numbers are `L(f) = S_φ/2` in dBc/Hz, and `ipn_dbc` sits 3.01 dB below the
   integral of `S_φ` for the same reason.  Mixing the two is a silent 3 dB and
-  has happened more than once.
+  has happened more than once — and 3 dB on an integrated figure is a factor
+  of √2 on every jitter derived from it, which is the difference between
+  meeting a spec and missing it.  `core.jitter.convert_phase_noise` converts
+  between degrees, RMS jitter and integrated dBc and deliberately returns
+  **both** dBc conventions, so a number carried in from a datasheet can be
+  matched against the right one rather than assumed into the wrong one.  All
+  three GUIs expose it; `test_phase_units.py` ties its single-sideband figure
+  to `AnalysisResult.ipn_dbc` on every preset.
 * **Two conventions for noise injection.**  `CurrentNoise(duty=...)` scales a
   continuous current by its duty cycle; a per-cycle *sampled* charge injection
   is `2σ²/fref`.  They differ by exactly 2.  The charge-pump path carries the

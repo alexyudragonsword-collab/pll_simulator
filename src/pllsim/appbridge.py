@@ -455,6 +455,58 @@ def _benchmark_ipn(preset: str) -> dict:
     }
 
 
+def _fom(kind: str, **kw) -> dict:
+    """PLL jitter FoM or VCO FoM, from numbers the caller supplies.
+
+    Power is an input here and everywhere: pllsim models no current or
+    supply, so nothing in this package can derive a FoM end to end.  The
+    page says so rather than letting a reader assume otherwise.
+    """
+    from .core.fom import pll_jitter_fom, vco_fom
+    from .core.jitter import HALF_POWER_DB
+    if kind == "pll":
+        p = pll_jitter_fom(float(kw["jitter_fs"]) * 1e-15,
+                           float(kw["power_mw"]),
+                           n=float(kw["n"]) if kw.get("n") else None)
+        return {"fom_db": p.fom_db, "fom_n_db": p.fom_n_db,
+                "jitter_fs": p.jitter_fs, "power_mw": p.power_mw, "n": p.n}
+    if kind == "vco":
+        v = vco_fom(float(kw["f0_hz"]), float(kw["offset_hz"]),
+                    float(kw["power_mw"]), l_dbc_hz=float(kw["l_dbc_hz"]),
+                    ftr_pct=float(kw["ftr_pct"]) if kw.get("ftr_pct") else None)
+        return {"fom_dbc_hz": v.fom_dbc_hz, "fom_t_dbc_hz": v.fom_t_dbc_hz,
+                "l_dbc_hz": v.l_dbc_hz, "ftr_pct": v.ftr_pct,
+                "half_power_db": HALF_POWER_DB}
+    raise ValueError(f"kind must be 'pll' or 'vco', got {kind!r}")
+
+
+def _units_convert(f0_hz: float, kind: str, value: float) -> dict:
+    """One RMS phase deviation in every unit it gets quoted in.
+
+    `kind` names which of the five the caller is supplying, because the
+    number alone does not say -- and the two dBc conventions sit 3.0103 dB
+    apart, so guessing costs a factor of sqrt(2) in the jitter.  Both are
+    returned every time for the same reason.
+    """
+    from .core.jitter import HALF_POWER_DB, convert_phase_noise
+    u = convert_phase_noise(float(f0_hz), **{kind: float(value)})
+    return {
+        "f0_hz": u.f0,
+        "rad": u.rad,
+        "deg": u.deg,
+        "jitter_s": u.jitter_s,
+        "jitter_fs": u.jitter_fs,
+        "jitter_ps": u.jitter_ps,
+        "ipn_dbc_dsb": u.ipn_dbc_dsb,
+        "ipn_dbc_ssb": u.ipn_dbc_ssb,
+        "half_power_db": HALF_POWER_DB,
+        # the page shows a warning rather than hiding the numbers: outside
+        # small angle they are still the right order, just not the right
+        # statement about a carrier
+        "small_angle": u.small_angle,
+    }
+
+
 def _select(fref_hz: float, fout_hz: float, jitter_fs_max: float,
             band_lo_hz: float = 10e3, band_hi_hz: float = 40e6,
             modulation: bool = False) -> dict:
@@ -671,6 +723,8 @@ _METHODS: dict[str, Callable[..., Any]] = {
     "hop_check": _hop_check,
     "hop": _hop,
     "hop_stats": _hop_stats,
+    "units_convert": _units_convert,
+    "fom": _fom,
 }
 
 

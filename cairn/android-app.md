@@ -112,6 +112,42 @@ disappears from `index.html`, at no browser cost; and
 AGENTS.md rule names. `guiqt/widgets.py` no longer keeps its own group
 labels — it derives the English half from `guiutil.GROUP_LABELS`.
 
+**The unit converter's interaction differs by toolkit, on purpose.** All
+three surfaces convert degrees / jitter / integrated dBc through the same
+`core.jitter.convert_phase_noise`, but the form around it is not the same
+shape: Qt binds three fields that drive each other, because Qt's `textEdited`
+fires only for typing and never for `setText`, so the feedback loop cannot
+form. Streamlit reruns the whole script on any widget change, so three
+mutually writing inputs would need session-state bookkeeping to work out
+which one the user touched — it uses a "known quantity" selector instead, and
+the phone follows the web form because a selector is a better phone control
+than three fields fighting a soft keyboard. Same numbers, three forms; this
+is a toolkit difference, not a gap.
+
+Two things are the same everywhere and must stay so: **both dBc conventions
+are always shown**, and the single-sideband one is labelled as the figure
+`ipn_dbc` reports elsewhere in the package. A converter that displayed one
+dBc number would be the exact 3.0103 dB error it exists to prevent.
+
+The phone's converter also stamps each render with the request that produced
+it (`#un-out` `dataset.seq`). Every keystroke fires a bridge call, so replies
+can land out of order and an older one would overwrite a newer answer — the
+readout would show the conversion of what you typed two characters ago. The
+browser harness waits on that stamp; waiting for text to appear instead read
+a *stale* readout and asserted against it, which passed and was wrong.
+
+The FoM tab follows the converter's pattern: live recompute on every
+keystroke, each render stamped with the request that produced it so a slower
+earlier reply cannot overwrite a newer answer. Two independent forms on one
+tab, so two counters — a single shared one would let the VCO half cancel a
+PLL render that was still in flight.
+
+One thing every surface must keep saying: **power is an input.** This package
+models no current or supply, so a FoM it appeared to derive end to end would
+carry a fabricated factor. The phone says it in the tab's own caption rather
+than only in the docs, because the phone is where someone reads a number
+without the docs open.
+
 Deliberate, not gaps: workbench cycle default (50k app vs 150k Qt — phone),
 start offset in MHz (app follows the web GUI; Qt uses Hz), analytic spurs as
 JSON rather than a table, and no "re-run live" button on Benchmarks (Qt's is
@@ -386,9 +422,18 @@ Left that way on purpose: `applicationIdSuffix` would make them co-installable
 but is the same machinery just removed with the navigation flavors, and it
 should be added on request rather than by reflex.
 
-**Still device-only.** The APKs build and contain the right objects, but
-nothing has yet *loaded* a compiled module on a phone. That is the one
-remaining unknown.
+**Closed on a device, 2026-08-25.** The compiled APK was sideloaded and the
+workbench's default preset analysed on the phone: **258.3 fs**, the same
+figure the host produces. So the compiled modules load and run on real
+hardware, and the last unknown in that chain is settled.
+
+Provenance, because it matters for a number nothing here can re-derive: this
+was measured by the user on their own device and reported, not produced by
+CI or by any run in this repository. CI proves the objects are in the APK and
+are the architecture they claim; it cannot prove an import succeeds. If the
+target Python ever moves past 3.10 the generated C stops being confined to
+the public API, and this measurement has to be taken again rather than
+assumed to hold.
 
 **Adjacent finding, not acted on.** We pin Chaquopy 15.0.1; upstream is
 17.0.1, supporting Python 3.10–3.14, and its README now recommends

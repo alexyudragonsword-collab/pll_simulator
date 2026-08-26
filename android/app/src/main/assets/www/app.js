@@ -1145,6 +1145,122 @@ $("pie-run").addEventListener("click", () => runInto(
     })));
   }, "analyze…", "analyze…"));
 
+/* ------------------------------------------------- PN units tab */
+/* Recomputes on every keystroke as well as on the button: this is a
+   converter, and a converter that makes you press something has already
+   lost to the calculator app.  The button stays because the phone keyboard
+   covers the readout while you type, and dismissing it needs somewhere to
+   tap. */
+let unSeq = 0;
+async function runUnits() {
+  /* Every keystroke fires a call, so replies can land out of order and an
+     older, slower one would overwrite a newer answer -- the field would show
+     the conversion of what you typed two characters ago.  Stamp each request
+     and drop any reply that a newer one has overtaken.  `dataset.seq` is the
+     rendered stamp; when it equals `unSeq` the readout is current, which is
+     also how the browser harness knows it is looking at this input and not
+     the previous one. */
+  const mine = ++unSeq;
+  const out = $("un-out");
+  const settle = html => {
+    if (mine !== unSeq) return;
+    out.innerHTML = html;
+    out.dataset.seq = String(mine);
+  };
+  try {
+    const r = await call("units_convert", {
+      f0_hz: Number($("un-f0").value),
+      kind: $("un-kind").value,
+      value: Number($("un-value").value),
+    });
+    const warn = r.small_angle ? "" :
+      `<p class="note">${r.deg.toPrecision(3)}\u00b0 ` + (lang === "zh"
+        ? "已超出小角度近似：载波被明显压低，dBc 与相位功率不再是同一句话。"
+        : "is outside the small-angle picture: the carrier is measurably "
+          + "depressed, so dBc and phase power are no longer the same "
+          + "statement.") + "</p>";
+    settle(metricsHtml([
+      [lang === "zh" ? "RMS 相位" : "RMS phase", r.deg.toPrecision(6) + " deg"],
+      [lang === "zh" ? "RMS 抖动" : "RMS jitter", r.jitter_fs.toPrecision(6) + " fs"],
+      ["IPN DSB", r.ipn_dbc_dsb.toFixed(4) + " dBc"],
+      ["IPN SSB", r.ipn_dbc_ssb.toFixed(4) + " dBc"],
+      [lang === "zh" ? "相位 [rad]" : "phase [rad]", r.rad.toExponential(4)],
+      [lang === "zh" ? "抖动 [ps]" : "jitter [ps]", r.jitter_ps.toPrecision(4)],
+    ]) + warn + `<p class="muted">` + (lang === "zh"
+      ? `单边带就是别处 ipn_dbc 报的数，比双边带低 ${r.half_power_db.toFixed(4)} dB。载波只影响抖动。`
+      : `SSB is what ipn_dbc reports elsewhere, ${r.half_power_db.toFixed(4)} dB below DSB.  Only the jitter depends on the carrier.`)
+      + `</p>`);
+  } catch (e) {
+    settle(errHtml(e));
+  }
+}
+$("un-run").addEventListener("click", runUnits);
+["un-f0", "un-kind", "un-value"].forEach(id =>
+  $(id).addEventListener("input", runUnits));
+document.querySelector('#tabs button[data-tab="units"]')
+  .addEventListener("click", runUnits);
+
+/* ------------------------------------------------------- FoM tab */
+/* Same request-stamp discipline as the unit converter: every keystroke
+   fires a call, so a slower earlier reply must not overwrite a newer one.
+   Two independent forms, two counters. */
+function fomRunner(seqName, outId, build) {
+  let seq = 0;
+  return async function () {
+    const mine = ++seq;
+    const out = $(outId);
+    const settle = html => {
+      if (mine !== seq) return;
+      out.innerHTML = html;
+      out.dataset.seq = String(mine);
+    };
+    try { settle(await build()); }
+    catch (e) { settle(errHtml(e)); }
+  };
+}
+
+const runFomPll = fomRunner("pll", "fom-pll-out", async () => {
+  const r = await call("fom", {
+    kind: "pll",
+    jitter_fs: Number($("fom-jit").value),
+    power_mw: Number($("fom-pwr").value),
+    n: $("fom-n").value.trim() ? Number($("fom-n").value) : null,
+  });
+  const items = [["FoM", r.fom_db.toFixed(2) + " dB"]];
+  if (r.fom_n_db !== null) items.push(["FoM_N", r.fom_n_db.toFixed(2) + " dB"]);
+  return metricsHtml(items) + `<p class="muted">` + (lang === "zh"
+    ? "抖动减半得 6 dB，功耗减半只得 3 dB —— 堆电流换抖动不会让它变好。"
+      + (r.fom_n_db !== null ? " FoM_N 取 FoM − 10*log10(N)，奖励更高倍频比。" : "")
+    : "Halving jitter gains 6 dB; halving power gains 3 dB — spending current to buy jitter does not improve it."
+      + (r.fom_n_db !== null ? " FoM_N here is FoM \u2212 10*log10(N), rewarding a higher ratio." : ""))
+    + `</p>`;
+});
+
+const runFomVco = fomRunner("vco", "fom-vco-out", async () => {
+  const r = await call("fom", {
+    kind: "vco",
+    f0_hz: Number($("fom-f0").value),
+    offset_hz: Number($("fom-off").value),
+    power_mw: Number($("fom-vpwr").value),
+    l_dbc_hz: Number($("fom-l").value),
+    ftr_pct: $("fom-ftr").value.trim() ? Number($("fom-ftr").value) : null,
+  });
+  const items = [["FoM", r.fom_dbc_hz.toFixed(2) + " dBc/Hz"]];
+  if (r.fom_t_dbc_hz !== null)
+    items.push(["FoM_T", r.fom_t_dbc_hz.toFixed(2) + " dBc/Hz"]);
+  return metricsHtml(items) + `<p class="note">` + (lang === "zh"
+    ? `L(df) 按定义是单边带；本包内部存双边带 S_phi，差 ${r.half_power_db.toFixed(4)} dB。−20log10(f0/df) 假设此处按 20 dB/dec 滚降，1/f^3 拐点以内 FoM 随偏移变化，不同偏移不可比。`
+    : `L(df) is single sideband by definition; this package stores double-sideband S_phi, ${r.half_power_db.toFixed(4)} dB away.  The -20log10(f0/df) term assumes 20 dB/decade here; inside the 1/f^3 corner the FoM depends on the offset and figures at different offsets are not comparable.`)
+    + `</p>`;
+});
+
+["fom-jit", "fom-pwr", "fom-n"].forEach(id =>
+  $(id).addEventListener("input", runFomPll));
+["fom-f0", "fom-off", "fom-l", "fom-vpwr", "fom-ftr"].forEach(id =>
+  $(id).addEventListener("input", runFomVco));
+document.querySelector('#tabs button[data-tab="fom"]')
+  .addEventListener("click", () => { runFomPll(); runFomVco(); });
+
 /* ---------------------------------------------------------- boot */
 async function boot() {
   applyLang();

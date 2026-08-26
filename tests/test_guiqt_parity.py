@@ -310,7 +310,8 @@ def test_both_guis_expose_the_same_page_set(app):
              "fit": "measured-pn fitting", "modulation": "two-point modulation",
              "hopsettling": "hop settling", "drifttracking": "drift tracking",
              "montecarlo": "monte carlo", "export": "vams export",
-             "benchmarks": "benchmarks"}
+             "benchmarks": "benchmarks", "pnunits": "pn units",
+             "fom": "fom"}
     assert web == set(alias), f"a Streamlit page has no entry here: {web}"
     missing = {alias[w] for w in web} - qt
     assert not missing, f"the Qt GUI is missing: {missing}"

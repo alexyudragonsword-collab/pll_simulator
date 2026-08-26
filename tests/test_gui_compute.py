@@ -249,3 +249,65 @@ def test_fit_page_fits_a_synthetic_measurement(tmp_path):
     f = np.logspace(3, 8, 200)
     got = fit_leeson(f, ldbc_from_sphi(truth.psd(f)))
     assert got is not None
+
+
+def test_pn_units_page_converts_and_shows_both_conventions():
+    """The page has no button: it converts on render, so a broken compute
+    path shows up as an exception or as an empty metric row, not as a button
+    that does nothing."""
+    from pllsim.core.jitter import HALF_POWER_DB, convert_phase_noise
+
+    at = _run("12_PNUnits.py", timeout=60)
+    want = convert_phase_noise(10e9, deg=0.5)          # the page defaults
+    shown = " ".join(m.value for m in at.metric)
+    assert shown, "the page rendered no metrics"
+    assert f"{want.jitter_fs:.6g}" in shown, shown
+    assert f"{want.ipn_dbc_dsb:.4f}" in shown, shown
+    # both conventions, side by side -- the page's entire reason to exist
+    assert f"{want.ipn_dbc_ssb:.4f}" in shown, shown
+    assert want.ipn_dbc_dsb - want.ipn_dbc_ssb == pytest.approx(HALF_POWER_DB)
+
+
+def test_pn_units_page_switches_which_quantity_is_supplied():
+    from pllsim.core.jitter import convert_phase_noise
+
+    at = _run("12_PNUnits.py", timeout=60)
+    at.selectbox[0].set_value("ipn_dbc_dsb").run()
+    at.text_input[-1].set_value("-40").run()
+    assert not at.exception, at.exception
+    want = convert_phase_noise(10e9, ipn_dbc_dsb=-40.0)
+    shown = " ".join(m.value for m in at.metric)
+    assert f"{want.deg:.6g}" in shown, shown
+    assert f"{want.jitter_fs:.6g}" in shown, shown
+
+
+def test_pn_units_page_reports_bad_input_instead_of_crashing():
+    at = _run("12_PNUnits.py", timeout=60)
+    at.text_input[0].set_value("0").run()              # f0 = 0
+    assert not at.exception, at.exception
+    assert at.error, "a zero carrier produced no visible error"
+
+
+def test_fom_page_computes_both_figures():
+    """No button on this page either: it computes on render."""
+    at = _run("13_FoM.py", timeout=60)
+    shown = " ".join(m.value for m in at.metric)
+    assert shown, "the page rendered no metrics"
+    # defaults are 100 fs / 10 mW and -120 dBc/Hz at 1 MHz off 10 GHz / 10 mW
+    assert "-250.00" in shown, shown          # 10*log10((1e-13)^2 * 10)
+    assert "-190.00" in shown, shown
+
+
+def test_fom_page_warns_that_l_is_single_sideband():
+    """This package stores S_phi; the formula wants L. Saying nothing here
+    would hand the reader a silent 3 dB."""
+    at = _run("13_FoM.py", timeout=60)
+    warned = " ".join(w.value for w in at.warning)
+    assert "3.0103" in warned, warned
+
+
+def test_fom_page_reports_bad_power_instead_of_crashing():
+    at = _run("13_FoM.py", timeout=60)
+    at.text_input[1].set_value("0").run()      # PLL power
+    assert not at.exception, at.exception
+    assert at.error, "zero power produced no visible error"

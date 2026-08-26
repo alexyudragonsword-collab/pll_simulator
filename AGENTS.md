@@ -210,7 +210,11 @@ silent errors:
 
 - Phase PSDs are **double-sideband** `S_φ` in rad²/Hz; plots and spot figures
   are `L(f) = S_φ/2` in dBc/Hz, and `ipn_dbc` sits 3.01 dB below the integral
-  of `S_φ`.  Mixing them is a silent 3 dB.
+  of `S_φ`.  Mixing them is a silent 3 dB — and a silent √2 in any jitter
+  derived from it.  `core.jitter.convert_phase_noise` is the one place that
+  turns degrees, jitter and integrated dBc into each other; it returns *both*
+  dBc conventions precisely so a caller cannot pick the wrong one by
+  accident.  All three GUIs expose it.
 - A continuous current scaled by duty cycle and a per-cycle sampled charge
   injection differ by exactly **2**.  Say which convention a new noise source
   is in.
