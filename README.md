@@ -63,7 +63,7 @@ Coverage targets: fref = 19.2–250 MHz, fout up to 12 GHz, integrated jitter
 
 ```bash
 pip install -e .          # numpy, scipy, matplotlib
-pytest tests/             # 626 tests: closed-form math + architecture behavior
+pytest tests/             # 663 tests: closed-form math + architecture behavior
 python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 ```
 
@@ -82,7 +82,9 @@ field -> analyze/simulate with plots), loop synthesis, architecture
 selector, spur prediction, measured-PN fitting, two-point modulation, hop
 settling, drift tracking, Monte Carlo, VAMS export, benchmarks, and a
 phase-noise unit converter (degrees / RMS jitter / integrated dBc at a
-carrier — showing both dBc conventions, which sit 3.0103 dB apart).
+carrier — showing both dBc conventions, which sit 3.0103 dB apart) and a
+figure-of-merit calculator (PLL jitter FoM and VCO FoM; power is an input,
+because this package does not model it).
 
 **Windows executables** (no Python needed): two GitHub Actions workflows
 build ONEFILE exes for both GUIs and smoke-test them on the runner before
@@ -100,8 +102,8 @@ bundled; the web exes also carry streamlit).
 
 **Android app** (fully offline; workbench, spur prediction, hop settling,
 architecture selector with candidate handoff, loop synthesis, two-point
-modulation, drift tracking, literature benchmarks and phase-noise unit
-conversion): `android/` is a
+modulation, drift tracking, literature benchmarks, phase-noise unit
+conversion and figures of merit): `android/` is a
 Gradle project embedding CPython via Chaquopy —
 a WebView front end over `pllsim.appbridge`, with the parameter form
 generated from the same `guiutil.FIELD_INFO` as both desktop GUIs.  Build a sideload APK from
