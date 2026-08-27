@@ -4,6 +4,7 @@ import pytest
 
 from pllsim.arch.ilcm import ILCM, ILCMConfig, injection_spur_dbc
 from pllsim.blocks.oscillator import OscConfig
+from pllsim.validation import compare_domains  # noqa: I001
 
 
 @pytest.fixture(scope="module")
@@ -28,18 +29,12 @@ def test_noise_model_and_jitter(pll):
 
 
 def test_cross_domain_psd(pll):
-    ar = pll.analyze()
-    sim = pll.simulate(150_000, seed=1, f_free_error=3e6)
-    m = (sim.f_psd > 1e5) & (sim.f_psd < 60e6)
-    fm, sm = sim.f_psd[m], sim.s_phi_psd[m]
-    tgt = np.interp(np.log10(fm), np.log10(ar.f), ar.pn_breakdown["total"])
-    edges = np.logspace(np.log10(fm[0]), np.log10(fm[-1]), 8)
-    for a, b in zip(edges[:-1], edges[1:]):
-        mm = (fm >= a) & (fm < b)
-        if mm.sum() < 3:
-            continue
-        err = 10 * np.log10(np.mean(sm[mm]) / np.mean(tgt[mm]))
-        assert abs(err) < 2.0, f"band {a:.3g}-{b:.3g} off {err:.2f} dB"
+    c = compare_domains(pll, n_cycles=150_000, seed=1, band=(1e5, 60e6),
+                        psd_source="ref",
+                        sim_kwargs={"f_free_error": 3e6})
+    assert c.skipped == [], c.skipped
+    assert c.worst_db < 2.0, [f"{b.f_lo:.3g}-{b.f_hi:.3g}: {b.err_db:+.2f}"
+                              for b in c.bands]
 
 
 def test_injection_spur_matches_analytic(pll):

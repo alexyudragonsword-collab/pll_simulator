@@ -6,6 +6,7 @@ from pllsim.arch.sspll import SSPLL, SSPLLConfig
 from pllsim.blocks.loopfilter import FilterDesign
 from pllsim.blocks.oscillator import OscConfig
 from pllsim.blocks.sampler import SamplerConfig
+from pllsim.validation import compare_domains  # noqa: I001
 
 
 @pytest.fixture(scope="module")
@@ -49,17 +50,9 @@ def test_false_lock_without_fll(pll):
 
 
 def test_cross_domain_psd(pll):
-    ar = pll.analyze()
-    sim = pll.simulate(200_000, seed=3)
-    m = (sim.f_psd > ar.loop.f_ugb / 10) & (sim.f_psd < 19.2e6 / 4)
-    fm, sm = sim.f_psd[m], sim.s_phi_psd[m]
-    tgt = np.interp(np.log10(fm), np.log10(ar.f), ar.pn_breakdown["total"])
-    edges = np.logspace(np.log10(fm[0]), np.log10(fm[-1]), 8)
-    for a, b in zip(edges[:-1], edges[1:]):
-        mm = (fm >= a) & (fm < b)
-        if mm.sum() < 3:
-            continue
-        err = 10 * np.log10(np.mean(sm[mm]) / np.mean(tgt[mm]))
-        # 3 dB: UGB/fref ~ 1/16 here, CT-vs-DT peaking deviation is larger
-        # than in the CPPLL case (1/20)
-        assert abs(err) < 3.0, f"band {a:.3g}-{b:.3g} off {err:.2f} dB"
+    """3 dB: UGB/fref ~ 1/16 here, discrete-loop peaking deviation is larger
+    than in the CPPLL case (1/20)."""
+    c = compare_domains(pll, n_cycles=200_000, seed=3)
+    assert c.skipped == [], c.skipped
+    assert c.worst_db < 3.0, [f"{b.f_lo:.3g}-{b.f_hi:.3g}: {b.err_db:+.2f}"
+                              for b in c.bands]
