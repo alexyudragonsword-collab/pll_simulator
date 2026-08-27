@@ -174,6 +174,12 @@ class ADPLL(PLLBase):
         jit = rms_jitter_fs(f, bd["total"], c.fout, *c.int_band)
         if m.f_ugb > c.fref / 10:
             notes.append("UGB > fref/10: discrete loop peaking significant")
+        from ..core.boundaries import conditionally_stable
+        if conditionally_stable(m.n_crossings):
+            notes.append(
+                f"open loop crosses unity gain {m.n_crossings}x below "
+                "fref/2: conditionally stable — phase margin at the first "
+                "crossing does not describe the loop")
         spurs = dict(pull_spur(c.osc, err))
         notes.extend(pull_notes(c.osc))
         if c.mode == "tdc" and c.fcw % 1.0 > 1e-9:

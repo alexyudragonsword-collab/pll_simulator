@@ -34,6 +34,7 @@ from .base import (
     PLLBase,
     add_pull_offset,
     attach_fine,
+    no_fine_note,
     pull_hz,
     pull_notes,
     pull_spur,
@@ -178,6 +179,19 @@ class SPLL(PLLBase):
         spurs.update(pull_spur(c.osc, err))
         notes = [f"PD gain referred to reference phase: sampler/gm noise "
                  f"multiplied by N={n} at the output (contrast with SSPLL)"]
+        # the same continuous-time approximation as the CPPLL, and until now
+        # the only CT architecture without this warning -- README claimed it
+        from ..core.boundaries import CT_UGB_RATIO, ct_approx_exceeded
+        if ct_approx_exceeded(m.f_ugb, c.fref):
+            notes.append(f"UGB {m.f_ugb / 1e6:.1f} MHz > fref/"
+                         f"{CT_UGB_RATIO:.0f}: continuous-time "
+                         "approximation degrading")
+        from ..core.boundaries import conditionally_stable
+        if conditionally_stable(m.n_crossings):
+            notes.append(
+                f"open loop crosses unity gain {m.n_crossings}x below "
+                "fref/2: conditionally stable — phase margin at the first "
+                "crossing does not describe the loop")
         notes.extend(pull_notes(c.osc))
         if i1 == 0.0:
             notes.append(
@@ -352,4 +366,4 @@ class SPLL(PLLBase):
         sim = postprocess(sim, int_band=c.int_band, spur_offsets=spur_offsets)
         if fine is not None:
             return attach_fine(sim, fine, m_os, c.fref, c.int_band, spur_offsets)
-        return sim
+        return no_fine_note(sim)

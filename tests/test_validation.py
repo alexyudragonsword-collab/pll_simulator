@@ -130,6 +130,9 @@ def test_every_boundary_code_can_fire(code, quick):
         "bbpd-linearization": BoundaryContext(
             pll=presets.ALL_PRESETS["adpll_bb_100m_10g"](), ar=None, sim=None,
             band=(1e5, 1e6), n_cycles=1),
+        "dsm-tonal": BoundaryContext(
+            pll=presets.ALL_PRESETS["cppll_frac_38p4m_6g"](), ar=None,
+            sim=None, band=(1e5, 1e6), n_cycles=1),
     }
     assert code in triggering, f"no trigger case written for {code}"
     entry = next(b for b in BOUNDARIES if b.code == code)

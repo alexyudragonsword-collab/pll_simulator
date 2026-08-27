@@ -47,11 +47,22 @@ def postprocess(sim: SimResult, settle_frac: float = 0.25,
                 "jitter below includes an acquisition/calibration transient. "
                 "Run more cycles.")
     if ph.size >= 2048:
+        from .boundaries import NYQ_FRACTION, jitter_band_clipped
         f_w, s_w = phase_psd(ph, sim.fs)
         sim.f_psd, sim.s_phi_psd = f_w, s_w
         f1 = max(int_band[0], f_w[0])
-        f2 = min(int_band[1], sim.fs / 2 * 0.9)
+        f2 = min(int_band[1], NYQ_FRACTION * sim.fs)
         sim.jitter_fs = rms_jitter_fs(f_w, s_w, sim.f0, f1, f2)
+        if jitter_band_clipped(int_band[1], sim.fs):
+            # the largest silent apples-to-oranges these results carried:
+            # analyze() integrates the full band, this number stops at what a
+            # record sampled once per reference edge can show, and the two
+            # sat side by side in every GUI with nothing saying so
+            sim.notes.append(
+                f"jitter integrated to {f2 / 1e6:.3g} MHz (0.45x the "
+                f"reference-edge record rate), not the full "
+                f"{int_band[1] / 1e6:.3g} MHz band the linear model "
+                "integrates — compare the two only over the common band")
         if spur_offsets is not None:
             from .spectrum import find_spurs
             f_p, s_p = periodogram_psd(ph, sim.fs)

@@ -37,6 +37,7 @@ from .base import (
     PLLBase,
     add_pull_offset,
     attach_fine,
+    no_fine_note,
     pull_hz,
     pull_notes,
     pull_spur,
@@ -187,6 +188,12 @@ class SSPLL(PLLBase):
                 spurs[f"frac_spur@{off:.0f}Hz"] = dbc
         notes = [f"PD gain referred to output phase: CP/LF noise not multiplied "
                  f"by N={n} (the SSPLL advantage)"] + pull_notes(c.osc)
+        from ..core.boundaries import conditionally_stable
+        if conditionally_stable(m.n_crossings):
+            notes.append(
+                f"open loop crosses unity gain {m.n_crossings}x below "
+                "fref/2: conditionally stable — phase margin at the first "
+                "crossing does not describe the loop")
         if i1 == 0.0:
             notes.append(
                 "no reference spur reported: the sampling pedestal produces a "
@@ -378,4 +385,4 @@ class SSPLL(PLLBase):
         sim = postprocess(sim, int_band=c.int_band, spur_offsets=spur_offsets)
         if fine is not None:
             return attach_fine(sim, fine, m_os, c.fref, c.int_band, spur_offsets)
-        return sim
+        return no_fine_note(sim)

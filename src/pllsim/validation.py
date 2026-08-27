@@ -51,6 +51,18 @@ MIN_POINTS = 3
 K_RBW = 3.0
 
 
+class NotLockedError(ValueError):
+    """The simulated loop never locked at this operating point.
+
+    Comparing an unlocked run against a lock-assumed linear model measures
+    nothing: the calibration sweep saw +25..48 dB "deviations" on off-plan
+    fractional configs that were simply loops wandering unlocked.  Every
+    loop architecture's engine has a lock detector and reports
+    ``lock_time_s``; ``None`` there means it never fired.  ILCM/MDLL are
+    injection-locked per cycle and have no detector -- they are exempt.
+    """
+
+
 @dataclass(frozen=True)
 class BandDeviation:
     """One log-spaced bin of the comparison."""
@@ -134,7 +146,9 @@ BOUNDARIES: tuple[Boundary, ...] = (
             "the time domain is the reference in that region."),
         applies=lambda c: _is_ct_arch(c.pll) and ct_approx_exceeded(
             c.ar.loop.f_ugb, c.pll.cfg.fref),
-        # extra_db set from sweep calibration (test_cross_domain_sweep.py).
+        extra_db=4.5,     # measured: worst 6.54 dB at UGB = fref/10.7, the
+                          # most aggressive loop the synthesizer will build
+                          # (it refuses past fref/8); 2.5 base + 4.5 covers
     ),
     Boundary(
         code="jitter-band-clip",
@@ -171,6 +185,22 @@ BOUNDARIES: tuple[Boundary, ...] = (
             "when the loop is quantization-dominated it over-predicts "
             "in-band noise by 2-4 dB and the time domain is the reference."),
         applies=lambda c: getattr(c.pll.cfg, "mode", "") == "dtc_bbpd",
+        extra_db=1.5,     # measured +3.3..3.4 dB at stock vs the 3.0 base
+    ),
+    Boundary(
+        code="dsm-tonal",
+        statement=(
+            "The linear model budgets the DSM/DTC residual as white noise "
+            "(ShapedQuantization); the actual residual is deterministic and "
+            "tonal, concentrated at frac-related offsets.  For near-rational "
+            "fractions most of that power sits in tones outside (or at the "
+            "edge of) the comparison band, so the in-band PSDs legitimately "
+            "differ -- the frac_spur table is the deterministic complement "
+            "the white budget stands in for."),
+        applies=lambda c: getattr(c.pll.cfg, "frac", None) is not None,
+        extra_db=1.5,     # cppll_frac measured 3.0 vs the 2.5 base; the
+                          # sspll_frac near-rational extreme (6.84 dB) is
+                          # pinned as a KnownGap instead of widened here
     ),
 )
 
@@ -225,6 +255,13 @@ def compare_domains(pll: Any, *, n_cycles: int, seed: int,
     """
     ar = pll.analyze()
     sim = pll.simulate(n_cycles, seed=seed, **(sim_kwargs or {}))
+    if (type(pll).__name__ not in ("ILCM", "MDLL")
+            and sim.lock_time_s is None):
+        raise NotLockedError(
+            f"{type(pll).__name__} never locked in {n_cycles} cycles at "
+            "this operating point — the domains cannot be compared; the "
+            "configuration is outside the architecture's acquisition "
+            "envelope (or needs far more cycles)")
 
     fref = float(pll.cfg.fref)
     requested = band or (ar.loop.f_ugb / 10.0, fref / 4.0)
