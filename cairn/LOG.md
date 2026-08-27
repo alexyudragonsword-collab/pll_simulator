@@ -2,6 +2,26 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-27 · Cross-domain consistency: comparator, boundaries, CI sweep
+
+- The contract now holds (or is stated) across the parameter space, not just
+  at 15 stock points.  `pllsim.validation.compare_domains` is the one
+  comparator (five hand-copied test blocks retired onto it, tolerances
+  unchanged); `BOUNDARIES` registers every capability limit with a runtime
+  note all three GUIs show and the tolerance it earns; ~45-point sweep runs
+  in its own parallel CI job with the contract: over tolerance with no flag
+  = defect = red.
+- 12 gaps pinned and re-measured every push.  Headline findings: CT peaking
+  reaches 7.25 dB at the deepest synthesizable CPPLL loop; sspll_frac stock
+  is a flat −6.8 dB (white DSM budget vs tonal truth at near-rational frac);
+  SSPLL int-N (exact z-domain) robust everywhere swept.
+- Two inline fixes: n_crossings counted alias images (stock SSPLL read 15);
+  the jitter headline pair silently integrated different bands.
+- The sweep caught its own harness twice (inconsistent frac configs
+  fabricated 12–16 dB "gaps"; three wrong pins removed with reasons).
+  Conclusions in `cairn/cross-domain.md`; boundary/gap tables generated into
+  docs/roadmap.md.
+
 ## 2026-08-26 · Both calculators read correctly on a phone
 
 - APK run #16 on main (`6f3a76c`) shipped the converter and the FoM tab;
