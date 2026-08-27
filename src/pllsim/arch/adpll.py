@@ -169,7 +169,7 @@ class ADPLL(PLLBase):
                                        q=TWOPI * eps, fs=c.fref,
                                        order=c.frac.mash_order - 1), h))
 
-        m = loop_metrics(gol)
+        m = loop_metrics(gol, f_limit=c.fref / 2)
         bd = output_psd(paths, f)
         jit = rms_jitter_fs(f, bd["total"], c.fout, *c.int_band)
         if m.f_ugb > c.fref / 10:

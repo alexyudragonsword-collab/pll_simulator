@@ -151,7 +151,7 @@ class SPLL(PLLBase):
             paths.append(NoisePath(
                 ShapedQuantization(name="dsm_residual", unit="rad^2/Hz",
                                    q=TWOPI * eps, fs=c.fref, order=0), h))
-        m = loop_metrics(gol)
+        m = loop_metrics(gol, f_limit=c.fref / 2)
         bd = output_psd(paths, f)
         # Same accounting as the SSPLL: the pedestal shifts the held voltage
         # and the gm converts that same held voltage over the same window, so

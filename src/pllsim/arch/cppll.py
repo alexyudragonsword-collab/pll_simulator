@@ -201,7 +201,7 @@ class CPPLL(PLLBase):
                                     / c.fref), h_lp))
             paths.append(NoisePath(dsm_src, ntf_dsm))
 
-        m = loop_metrics(gol)
+        m = loop_metrics(gol, f_limit=c.fref / 2)
         if m.f_ugb > c.fref / 10:
             notes.append(f"UGB {m.f_ugb / 1e6:.1f} MHz > fref/10: continuous-time "
                          "approximation degrading")

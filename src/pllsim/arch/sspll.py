@@ -160,7 +160,7 @@ class SSPLL(PLLBase):
             paths.append(NoisePath(
                 ShapedQuantization(name="dsm_residual", unit="rad^2/Hz",
                                    q=TWOPI * eps, fs=c.fref, order=0), h_loop))
-        m = loop_metrics(gol)
+        m = loop_metrics(gol, f_limit=c.fref / 2)
         bd = output_psd(paths, f)
         jit = rms_jitter_fs(f, bd["total"], c.fout, *c.int_band)
         # Reference spur: from the sampling clock's kickback, NOT the pedestal.

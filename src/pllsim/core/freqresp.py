@@ -170,15 +170,25 @@ def _log_interp_crossing(f: np.ndarray, y: np.ndarray, level: float) -> list[flo
     return out
 
 
-def loop_metrics(gol: FreqResponse) -> LoopMetrics:
-    """Compute UGB, PM, GM, closed-loop bandwidth and peaking from open loop."""
+def loop_metrics(gol: FreqResponse, f_limit: float | None = None) -> LoopMetrics:
+    """Compute UGB, PM, GM, closed-loop bandwidth and peaking from open loop.
+
+    ``f_limit`` bounds where gain crossovers are *counted*: a sampled loop's
+    response is periodic in f, so above fref/2 the curve re-crosses unity at
+    every alias image (the stock SSPLL showed 15 "crossings", the ADPLL 6 --
+    all images, not conditional stability).  Pass fref/2; the images are
+    repetition, not information.  f_ugb/PM/GM are unaffected -- they already
+    read the first crossing.
+    """
     f = gol.f
     mag_db = gol.db()
     ph = gol.deg_unwrapped()
 
     crossings = _log_interp_crossing(f, mag_db, 0.0)
-    n_cross = len(crossings)
-    if n_cross == 0:
+    counted = crossings if f_limit is None else [c for c in crossings
+                                                if c < f_limit]
+    n_cross = len(counted)
+    if not crossings:
         f_ugb = float("nan")
         pm = float("nan")
     else:
