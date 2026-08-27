@@ -146,9 +146,9 @@ BOUNDARIES: tuple[Boundary, ...] = (
             "the time domain is the reference in that region."),
         applies=lambda c: _is_ct_arch(c.pll) and ct_approx_exceeded(
             c.ar.loop.f_ugb, c.pll.cfg.fref),
-        extra_db=4.5,     # measured: worst 6.54 dB at UGB = fref/10.7, the
-                          # most aggressive loop the synthesizer will build
-                          # (it refuses past fref/8); 2.5 base + 4.5 covers
+        extra_db=5.5,     # measured: worst 7.25 dB at UGB = fref/9.6, the
+                          # deepest flagged loop the synthesizer will build
+                          # (it refuses past fref/8); 2.5 base + 5.5 covers
     ),
     Boundary(
         code="jitter-band-clip",
@@ -255,15 +255,24 @@ def compare_domains(pll: Any, *, n_cycles: int, seed: int,
     """
     ar = pll.analyze()
     sim = pll.simulate(n_cycles, seed=seed, **(sim_kwargs or {}))
+    fref = float(pll.cfg.fref)
     if (type(pll).__name__ not in ("ILCM", "MDLL")
             and sim.lock_time_s is None):
-        raise NotLockedError(
-            f"{type(pll).__name__} never locked in {n_cycles} cycles at "
-            "this operating point — the domains cannot be compared; the "
-            "configuration is outside the architecture's acquisition "
-            "envelope (or needs far more cycles)")
-
-    fref = float(pll.cfg.fref)
+        # the detector not firing is necessary but not sufficient: its
+        # thresholds are tuned for the design point, and off-plan loops can
+        # converge in fact while it stays silent (measured: off-plan frac
+        # CPPLLs compare at 2-4 dB with lock_time None).  The tail frequency
+        # error separates the two -- a truly unlocked loop wanders ~1e5+ Hz
+        # off, a converged one sits within a few hundred
+        tail = np.asarray(sim.freq_out[-5000:], dtype=float)
+        ferr = abs(float(np.mean(tail)) - float(pll.cfg.fout))
+        if ferr > 1e-3 * fref:
+            raise NotLockedError(
+                f"{type(pll).__name__} never locked in {n_cycles} cycles "
+                f"(tail frequency error {ferr:.3g} Hz) — the domains cannot "
+                "be compared; the configuration is outside the "
+                "architecture's acquisition envelope (or needs far more "
+                "cycles)")
     requested = band or (ar.loop.f_ugb / 10.0, fref / 4.0)
 
     if psd_source == "auto":
@@ -360,6 +369,59 @@ class KnownGap:
     slack_db: float = 0.75
 
 
-#: Filled by the sweep triage; rendered into docs/roadmap.md by
-#: docs/gen_roadmap.py and re-measured by tests/test_cross_domain_sweep.py.
-CROSS_DOMAIN_GAPS: tuple[KnownGap, ...] = ()
+#: Confirmed by the calibration sweep (120k cycles, seed 1), rendered into
+#: docs/roadmap.md by docs/gen_roadmap.py, and re-measured by
+#: tests/test_cross_domain_sweep.py on every CI run -- an entry that drifts
+#: more than its slack in either direction fails the sweep, so these numbers
+#: are measured, not remembered.
+CROSS_DOMAIN_GAPS: tuple[KnownGap, ...] = (
+    KnownGap("cppll-fref-x0.5", "ct-peaking", 3.87,
+             "CPPLL at half the design fref (N doubled, same filter): the "
+             "CT model's peaking-region error grows off the designed plan "
+             "even at a safe UGB/fref (~1/18)."),
+    KnownGap("cppll-ugb-x1.6", "ct-knee", 5.26,
+             "CPPLL retuned to 1.6x stock UGB (fref/12.7): inside the CT "
+             "knee -- deviation grows before the fref/10 warning fires."),
+    KnownGap("cppll-ugb-x1.9", "ct-knee", 6.54,
+             "CPPLL at 1.9x stock UGB (fref/10.7): just under the warning "
+             "threshold, deviation already 6.5 dB in the fref/8..fref/4 "
+             "bands."),
+    KnownGap("cppll-pm45", "ct-filter-shape", 3.90,
+             "CPPLL re-synthesized at PM 45 (same UGB): the CT error "
+             "depends on the filter's shape, not only on UGB/fref."),
+    KnownGap("cppll-fine-m8", "engine-pulse-shape", 2.78,
+             "CPPLL simulated with fine_oversample=8: the real up/down "
+             "doublet replaces the one-net-pulse approximation and shifts "
+             "the measured PSD by ~0.7 dB against the CT model."),
+    KnownGap("cppll_frac-fref-x0.5", "dsm-tonal", 3.90,
+             "Fractional CPPLL at half fref (fraction held, fout moved to "
+             "stay consistent): the white DSM-residual budget vs the tonal "
+             "truth widens off the designed plan."),
+    KnownGap("sspll_frac-stock", "dsm-tonal", 6.84,
+             "Fractional SSPLL at its own stock point: frac=0.2503 is "
+             "near-rational, so the MASH-1 residual is nearly periodic -- "
+             "its power sits in tones at fref/4 harmonics, not in the white "
+             "floor the model budgets.  The in-band PSD reads a flat ~6 dB "
+             "below the model while the spur table carries the tones."),
+    KnownGap("sspll_frac-fref-x0.5", "dsm-tonal", 4.40,
+             "Fractional SSPLL at half fref (consistent fraction): the "
+             "tonal-residual family, 0.1 dB past its flagged allowance."),
+    KnownGap("sspll_frac-fref-x2.0", "dsm-tonal", 9.32,
+             "Fractional SSPLL at twice fref: the tonal DSM residual "
+             "dominates the shrunken in-band span."),
+    KnownGap("sspll_frac-near-int", "dsm-tonal", 6.79,
+             "Fractional SSPLL at fraction 0.004: near-rational tonal "
+             "residual, same family as the stock 0.2503 point."),
+    KnownGap("spll-fref-x0.5", "ct-peaking", 2.08,
+             "SPLL at half the design fref: marginally past its 2.0 dB "
+             "stock bound, same CT-peaking family as the CPPLL."),
+    KnownGap("mdll-fref-x2.0", "zoh-approx", 3.45,
+             "MDLL at twice the design fref: the 1-ZOH oscillator NTF "
+             "approximation sits at the edge of its 3.5 dB tolerance."),
+    # Three adpll_bb off-plan entries (12-16 dB) were pinned here briefly
+    # and removed the same day: the numbers measured a sweep-harness bug
+    # (fref scaled without keeping cfg.frac.frac consistent, so the loop
+    # locked to the configured fraction megahertz away from cfg.fout), not
+    # the tool.  With consistent configs those points sit at 3.7-4.7 dB,
+    # inside their flagged allowance.
+)

@@ -37,6 +37,9 @@ where = ["src"]
 "pllsim.webgui" = ["*.py", "*.png", "pages/*.py"]
 
 [tool.pytest.ini_options]
+markers = [
+    "sweep: full cross-domain parameter matrix; runs in its own CI job",
+]
 testpaths = ["tests"]
 addopts = "-q"
 
