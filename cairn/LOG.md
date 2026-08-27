@@ -2,6 +2,22 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-27 · The divider now follows the frequency plan (refuse → derive)
+
+- Supersedes the refusal below as the *first* line of defense, on the
+  user's call: frac.frac is fully determined by (fref, fout), so offering
+  it as an input was offering a contradiction.  `apply_overrides` now
+  derives it after every edit; `enumerate_fields` no longer offers it
+  (config-reference regenerated, −4 rows); the phone's fref 52→104 edit now
+  locks at fout in 2.0 µs, 143 fs.  The construction-time refusal stays as
+  the backstop for hand-built configs.  755 tests.
+- Also fixed for real: the page-harness FoM flake (2 of 3 runs) was the
+  harness's `settled` releasing on the FIRST fill's reply — a discarded
+  overtaken reply never writes dataset.seq, so after n fills the stamp
+  always reaches before+n, and the wait now says exactly that.  2/2 clean
+  full passes after; internal spur-page channel sweeps set frac directly
+  and are untouched.
+
 ## 2026-08-27 · GUI overrides bypassed construction validation (phone find)
 
 - fref 52→104 MHz on the spll_frac workbench (APK from run #17) left fout

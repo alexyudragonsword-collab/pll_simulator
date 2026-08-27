@@ -66,6 +66,11 @@ validation pass); supersedes the scattered per-test knowledge before it.
   re-validates (children first) after every edit, all four fractional configs
   refuse a fout/fref/frac mismatch with the numbers and the corrective action
   in the message, and the bridge hands that refusal to the page in-band.
+  Later the same day the fix moved a level up, on the user's call: frac.frac
+  is *derived* from (fref, fout) on every GUI edit and no longer offered as
+  an input, so the contradiction cannot be typed at all — the refusal stays
+  as the backstop for hand-built configs.  Deliberate frac-vs-plan mismatch
+  experiments now require the library, which is where they belong.
 - **`lock_time_s is None` does not mean unlocked.**  The detector thresholds
   are tuned for the design point; off-plan loops converge in fact while it
   stays silent.  NotLockedError requires None *and* tail frequency error

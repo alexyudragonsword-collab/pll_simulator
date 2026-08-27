@@ -22,6 +22,15 @@ from .arch.base import start_offset_kwarg
 # fields never shown in forms (derived/rebuilt/complex)
 _SKIP = {"trace", "lut", "counts"}
 
+# Paths that are derived, not inputs.  frac.frac is fully determined by the
+# frequency plan -- the divider locks at (n_int + frac)*fref, so the only
+# self-consistent value is (fout/fref) % 1 -- and offering it as an input is
+# offering a contradiction (a phone found this: editing fref alone left the
+# stale fraction pointing 13 MHz away).  apply_overrides re-derives it after
+# every edit; the config-level mismatch refusal stays as the backstop for
+# code that assembles configs by hand.
+_DERIVED_PATHS = {"frac.frac"}
+
 # form-section heading per config subtree (key = first dot-path component).
 # One source for every form that groups by subtree: the web GUI and the app
 # bridge both read it, so a new sub-config named here appears in both.
@@ -185,6 +194,8 @@ def enumerate_fields(cfg, prefix: str = "") -> list[FieldSpec]:
             continue
         v = getattr(cfg, f.name)
         path = f"{prefix}{f.name}"
+        if path in _DERIVED_PATHS:
+            continue
         if v is None:
             kind = _kind_from_annotation(f.type)
             if kind is None:
@@ -258,12 +269,20 @@ def apply_overrides(cfg, overrides: dict[str, str]):
         setattr(obj, parts[-1], val)
     # rebuild any calibrators so state never leaks between runs
     _rebuild_calibrators(cfg)
+    # the divider follows the frequency plan: frac is derived, never typed
+    _derive_fraction(cfg)
     # setattr slips past __post_init__, so edits could assemble exactly the
     # combinations construction refuses -- fref alone on a fractional preset
     # leaves the divider locking MHz away from fout, and the unlocked loop
     # reads as hundreds of ps of "jitter" with nothing saying why
     _revalidate(cfg)
     return cfg
+
+
+def _derive_fraction(cfg):
+    fr = getattr(cfg, "frac", None)
+    if fr is not None and hasattr(fr, "frac"):
+        fr.frac = (cfg.fout / cfg.fref) % 1.0
 
 
 def _revalidate(cfg):

@@ -22,7 +22,7 @@ figure to be derived rather than declared).
 
 ## CPPLL
 
-charge-pump PLL, fractional-N with DTC — `presets.cppll_frac_38p4m_6g()`, 52 fields.
+charge-pump PLL, fractional-N with DTC — `presets.cppll_frac_38p4m_6g()`, 51 fields.
 
 ### Top level
 
@@ -88,7 +88,6 @@ charge-pump PLL, fractional-N with DTC — `presets.cppll_frac_38p4m_6g()`, 52 f
 
 | field | unit | value | meaning |
 |---|---|---|---|
-| `frac.frac` | — | `0.2525` | fractional word / 小数字 |
 | `frac.mash_order` | — | `2` | MASH order / MASH 阶数 |
 | `frac.bits` | bit | `24` | accumulator bits / 累加器位宽 |
 
@@ -113,7 +112,7 @@ charge-pump PLL, fractional-N with DTC — `presets.cppll_frac_38p4m_6g()`, 52 f
 
 ## SSPLL
 
-sub-sampling PLL with FLL — `presets.sspll_frac_19p2m_4p806g()`, 50 fields.
+sub-sampling PLL with FLL — `presets.sspll_frac_19p2m_4p806g()`, 49 fields.
 
 ### Top level
 
@@ -177,7 +176,6 @@ sub-sampling PLL with FLL — `presets.sspll_frac_19p2m_4p806g()`, 50 fields.
 
 | field | unit | value | meaning |
 |---|---|---|---|
-| `frac.frac` | — | `0.2503` | fractional word / 小数字 |
 | `frac.mash_order` | — | `1` | MASH order / MASH 阶数 |
 | `frac.bits` | bit | `24` | accumulator bits / 累加器位宽 |
 
@@ -202,7 +200,7 @@ sub-sampling PLL with FLL — `presets.sspll_frac_19p2m_4p806g()`, 50 fields.
 
 ## SPLL
 
-reference-sampling PLL — `presets.spll_frac_52m_6p253g()`, 52 fields.
+reference-sampling PLL — `presets.spll_frac_52m_6p253g()`, 51 fields.
 
 ### Top level
 
@@ -268,7 +266,6 @@ reference-sampling PLL — `presets.spll_frac_52m_6p253g()`, 52 fields.
 
 | field | unit | value | meaning |
 |---|---|---|---|
-| `frac.frac` | — | `0.2503` | fractional word / 小数字 |
 | `frac.mash_order` | — | `1` | MASH order / MASH 阶数 |
 | `frac.bits` | bit | `24` | accumulator bits / 累加器位宽 |
 
@@ -350,7 +347,7 @@ all-digital PLL, counter + TDC — `presets.adpll_100m_10g()`, 33 fields.
 
 ## ADPLL (BBPD)
 
-all-digital PLL, DTC + bang-bang — `presets.adpll_bb_100m_10g()`, 40 fields.
+all-digital PLL, DTC + bang-bang — `presets.adpll_bb_100m_10g()`, 39 fields.
 
 ### Top level
 
@@ -399,7 +396,6 @@ all-digital PLL, DTC + bang-bang — `presets.adpll_bb_100m_10g()`, 40 fields.
 
 | field | unit | value | meaning |
 |---|---|---|---|
-| `frac.frac` | — | `0.503` | fractional word / 小数字 |
 | `frac.mash_order` | — | `2` | MASH order / MASH 阶数 |
 | `frac.bits` | bit | `24` | accumulator bits / 累加器位宽 |
 
