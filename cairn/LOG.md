@@ -2,6 +2,18 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-27 · PR #46 repurposed for the campaign; GitHub Actions refusing all jobs
+
+- PR #46 (opened yesterday for the phone-verification record, never merged)
+  already carried the five campaign commits, so it was retitled and its body
+  rewritten to describe them instead of opening a duplicate PR.
+- Correction: "CI green" for the campaign was **local only**.  Every GitHub
+  run since `5d76689` (03:11 UTC) fails in ~2 s with no logs — jobs are
+  created but never start, including a commit that touched no CI config;
+  all-green through `6a232e0` yesterday.  Private repo → metered Actions
+  minutes; evidence points at quota/billing, checkable only in the owner's
+  Settings → Billing, not from here.  Nothing about the code is implicated.
+
 ## 2026-08-27 · Cross-domain consistency: comparator, boundaries, CI sweep
 
 - The contract now holds (or is stated) across the parameter space, not just
