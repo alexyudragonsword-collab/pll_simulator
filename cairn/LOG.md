@@ -2,6 +2,22 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-27 · GUI overrides bypassed construction validation (phone find)
+
+- fref 52→104 MHz on the spll_frac workbench (APK from run #17) left fout
+  and frac untouched; the divider locks at (n_int+frac)·fref, 13 MHz from
+  cfg.fout, FLL and PD fight forever, and the page showed 1.6 ns "jitter".
+  The user-facing incarnation of the sweep's fabricated-gap pitfall.
+- Root cause: `apply_overrides` edits with setattr, which never re-runs
+  `__post_init__` — SPLL/SSPLL's designed refusal was bypassed; CPPLL/ADPLL
+  had none.  Fixed: apply_overrides re-validates after every edit, all four
+  fractional configs refuse the mismatch (with numbers + corrective action),
+  bridge returns it in-band.  753 tests; details in `cairn/cross-domain.md`
+  (Pitfalls).
+- Harness note: android_page_harness flaked once on FoM (power field read
+  at its default — input-commit race, pre-existing); clean full pass on
+  re-run.
+
 ## 2026-08-27 · Campaign merged (#46 → main 9b57101); outage confirmed as metering
 
 - The Actions refusal resolved the moment the repository went public: the

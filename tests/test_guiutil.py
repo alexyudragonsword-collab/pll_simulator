@@ -186,3 +186,33 @@ def test_unknown_field_rejected():
     pll = presets.ALL_PRESETS["cppll_19p2m_4p8g"]()
     with pytest.raises(KeyError):
         apply_overrides(pll.cfg, {"osc.nonexistent": "1"})
+
+
+# Editing fref alone on a fractional preset builds a divider (n_int + frac)
+# that locks MHz away from cfg.fout: the FLL and the PD then fight forever
+# and the "result" is an unlocked loop read as hundreds of ps of jitter.
+# Found on a phone, from the workbench, by doing exactly this.  The configs
+# refuse such combinations at construction; the override path must reach the
+# same refusal instead of slipping past __post_init__ with setattr.
+@pytest.mark.parametrize("name", [
+    "cppll_frac_38p4m_6g",
+    "sspll_frac_19p2m_4p806g",
+    "spll_frac_52m_6p253g",
+    "adpll_bb_100m_10g",
+])
+def test_fref_override_alone_is_refused_on_fractional_presets(name):
+    cfg = presets.ALL_PRESETS[name]().cfg
+    new_fref = cfg.fref * 2
+    # precondition: the edit really does break the fout/fref/frac relation
+    assert abs((cfg.fout / new_fref) % 1.0 - cfg.frac.frac) > 1e-6
+    with pytest.raises(ValueError, match="fractional part"):
+        make_pll(name, {"fref": fmt_value(new_fref)})
+
+
+def test_consistent_joint_override_is_accepted():
+    # the same fref change is legitimate when fout moves with it so the
+    # configured fraction still matches: (60 + 0.2503) * 104 MHz
+    pll = make_pll("spll_frac_52m_6p253g",
+                   {"fref": "104e6", "fout": "6266031200"})
+    assert pll.cfg.fref == 104e6
+    assert pll.analyze().jitter_fs > 0

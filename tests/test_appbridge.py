@@ -111,6 +111,20 @@ def test_errors_come_back_in_band_never_raised():
     assert reply["ok"] is False and "traceback" in reply
 
 
+def test_fref_only_edit_on_a_fractional_preset_is_refused_in_band():
+    # the phone found this: fref 52 -> 104 MHz on the workbench left fout and
+    # frac untouched, the divider locked 13 MHz away, and the "result" was an
+    # unlocked loop shown as 1.6 ns of jitter.  The bridge must now hand the
+    # page the construction-time refusal instead of the garbage.
+    reply = json.loads(appbridge.call(
+        "simulate", json.dumps({"preset": "spll_frac_52m_6p253g",
+                                "overrides": {"fref": "104e6"},
+                                "n_cycles": 4000, "seed": 1})))
+    assert reply["ok"] is False
+    assert "fractional part" in reply["error"]
+    assert "change fout or frac together with fref" in reply["error"]
+
+
 def test_spur_predict_inl_drives_the_spur():
     """0 vs 100x INL must move the top spur by >15 dB; at small amplitudes
     the DTC quantization floor dominates, so the sweep spans past it."""

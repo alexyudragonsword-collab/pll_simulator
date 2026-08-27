@@ -258,7 +258,27 @@ def apply_overrides(cfg, overrides: dict[str, str]):
         setattr(obj, parts[-1], val)
     # rebuild any calibrators so state never leaks between runs
     _rebuild_calibrators(cfg)
+    # setattr slips past __post_init__, so edits could assemble exactly the
+    # combinations construction refuses -- fref alone on a fractional preset
+    # leaves the divider locking MHz away from fout, and the unlocked loop
+    # reads as hundreds of ps of "jitter" with nothing saying why
+    _revalidate(cfg)
     return cfg
+
+
+def _revalidate(cfg):
+    """Re-run construction-time validation, children first.
+
+    Safe because every config's ``__post_init__`` is a pure validator: it
+    raises or it passes, and never derives state.
+    """
+    for f in dataclasses.fields(cfg):
+        v = getattr(cfg, f.name)
+        if dataclasses.is_dataclass(v) and not isinstance(v, type):
+            _revalidate(v)
+    post = getattr(cfg, "__post_init__", None)
+    if post is not None:
+        post()
 
 
 def _rebuild_calibrators(cfg):

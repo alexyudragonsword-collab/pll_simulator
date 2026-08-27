@@ -114,6 +114,12 @@ class CPPLLConfig:
         else:
             if not (0.0 <= self.frac.frac < 1.0):
                 raise ValueError("frac must be in [0,1)")
+            if abs((self.fout / self.fref) % 1.0 - self.frac.frac) > 1e-6:
+                raise ValueError(
+                    f"fout/fref fractional part {(self.fout / self.fref) % 1.0:.6f} "
+                    f"does not match FracConfig.frac {self.frac.frac}: the divider "
+                    f"locks at (n_int + frac)*fref, not at fout -- change fout or "
+                    f"frac together with fref")
 
 
 class CPPLL(PLLBase):

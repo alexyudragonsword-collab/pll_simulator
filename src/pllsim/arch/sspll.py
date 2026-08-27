@@ -78,8 +78,11 @@ class SSPLLConfig:
     def __post_init__(self):
         if self.frac is not None:
             if abs((self.fout / self.fref) % 1.0 - self.frac.frac) > 1e-6:
-                raise ValueError("fout/fref fractional part does not match "
-                                 "FracConfig.frac")
+                raise ValueError(
+                    f"fout/fref fractional part {(self.fout / self.fref) % 1.0:.6f} "
+                    f"does not match FracConfig.frac {self.frac.frac}: the divider "
+                    f"locks at (n_int + frac)*fref, not at fout -- change fout or "
+                    f"frac together with fref")
             if self.frac.dtc is None:
                 raise ValueError("fractional SSPLL requires a DTC in FracConfig "
                                  "(the sampler needs edge alignment)")

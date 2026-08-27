@@ -57,6 +57,15 @@ validation pass); supersedes the scattered per-test knowledge before it.
   consistent configs those points sit at 3.7–4.7 dB inside their flagged
   allowance.  The not-locked guard caught it; the wrong pins were removed
   with the reason recorded in place.
+- **The fabricated-gap construction was reachable from every GUI** (found
+  on a phone the day the campaign merged: fref 52→104 MHz on the spll_frac
+  workbench, fout/frac untouched, "jitter" 1.6 ns).  `guiutil.apply_overrides`
+  edited configs with `setattr`, which never re-runs `__post_init__` — so the
+  construction-time refusal SPLL/SSPLL already had was bypassed, and
+  CPPLL/ADPLL had no such refusal at all.  Since 2026-08-27: apply_overrides
+  re-validates (children first) after every edit, all four fractional configs
+  refuse a fout/fref/frac mismatch with the numbers and the corrective action
+  in the message, and the bridge hands that refusal to the page in-band.
 - **`lock_time_s is None` does not mean unlocked.**  The detector thresholds
   are tuned for the design point; off-plan loops converge in fact while it
   stays silent.  NotLockedError requires None *and* tail frequency error
