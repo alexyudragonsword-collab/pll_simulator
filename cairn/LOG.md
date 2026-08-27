@@ -2,6 +2,13 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-27 · Campaign merged (#46 → main 9b57101); outage confirmed as metering
+
+- The Actions refusal resolved the moment the repository went public: the
+  same commits went green untouched (sweep 55/55 in 74 s on the runner,
+  both matrix jobs).  Confirms the entry below — private-repo minutes, not
+  code.  Squash-merged as `9b57101`; branch reset onto main.
+
 ## 2026-08-27 · PR #46 repurposed for the campaign; GitHub Actions refusing all jobs
 
 - PR #46 (opened yesterday for the phone-verification record, never merged)
