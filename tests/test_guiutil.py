@@ -186,3 +186,52 @@ def test_unknown_field_rejected():
     pll = presets.ALL_PRESETS["cppll_19p2m_4p8g"]()
     with pytest.raises(KeyError):
         apply_overrides(pll.cfg, {"osc.nonexistent": "1"})
+
+
+# The divider follows the frequency plan: frac is derived from fout/fref on
+# every edit, never typed.  Editing fref alone used to leave the stale
+# fraction pointing the divider 13 MHz away from fout, and the unlocked loop
+# read as hundreds of ps of "jitter" -- found on a phone, from the workbench,
+# by doing exactly this.
+@pytest.mark.parametrize("name", [
+    "cppll_frac_38p4m_6g",
+    "sspll_frac_19p2m_4p806g",
+    "spll_frac_52m_6p253g",
+    "adpll_bb_100m_10g",
+])
+def test_fref_edit_rederives_the_fraction(name):
+    cfg0 = presets.ALL_PRESETS[name]().cfg
+    new_fref = cfg0.fref * 2
+    # precondition: the edit really does move the fractional part
+    assert abs((cfg0.fout / new_fref) % 1.0 - cfg0.frac.frac) > 1e-6
+    pll = make_pll(name, {"fref": fmt_value(new_fref)})
+    assert pll.cfg.frac.frac == pytest.approx((pll.cfg.fout / new_fref) % 1.0)
+    assert pll.analyze().jitter_fs > 0
+
+
+def test_the_phone_scenario_locks_end_to_end():
+    # fref 52 -> 104 MHz with fout held: the derived frac is 0.12515 and the
+    # loop must actually lock at fout, not wander between two targets
+    import numpy as np
+    pll = make_pll("spll_frac_52m_6p253g", {"fref": "104e6"})
+    sim = pll.simulate(20_000, seed=1)
+    tail = float(np.mean(sim.freq_out[-4000:]))
+    assert sim.lock_time_s is not None
+    assert abs(tail - pll.cfg.fout) < pll.cfg.fref / 1000
+
+
+def test_the_derived_fraction_is_not_offered_as_an_input():
+    pll = presets.ALL_PRESETS["spll_frac_52m_6p253g"]()
+    paths = [s.path for s in enumerate_fields(pll.cfg)]
+    assert "frac.frac" not in paths
+    assert "frac.dtc.t_res" in paths            # the rest of frac still edits
+    with pytest.raises(KeyError):
+        apply_overrides(pll.cfg, {"frac.frac": "0.3"})
+
+
+def test_hand_built_mismatch_is_still_refused():
+    # the config-level backstop for code that bypasses the GUI layer
+    import dataclasses
+    cfg = presets.ALL_PRESETS["spll_frac_52m_6p253g"]().cfg
+    with pytest.raises(ValueError, match="fractional part"):
+        dataclasses.replace(cfg, fref=cfg.fref * 2)

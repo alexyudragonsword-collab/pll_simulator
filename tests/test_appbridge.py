@@ -111,6 +111,22 @@ def test_errors_come_back_in_band_never_raised():
     assert reply["ok"] is False and "traceback" in reply
 
 
+def test_fref_only_edit_on_a_fractional_preset_follows_the_plan():
+    # the phone found this: fref 52 -> 104 MHz on the workbench left the
+    # stale fraction pointing the divider 13 MHz from fout, and the "result"
+    # was an unlocked loop shown as 1.6 ns of jitter.  The divider now
+    # follows the frequency plan (frac derived from fout/fref), so the same
+    # edit locks at fout.
+    reply = json.loads(appbridge.call(
+        "simulate", json.dumps({"preset": "spll_frac_52m_6p253g",
+                                "overrides": {"fref": "104e6"},
+                                "n_cycles": 12000, "seed": 1})))
+    assert reply["ok"], reply.get("error")
+    r = reply["result"]
+    assert abs(r["f_end_ghz"] - 6.2530156) < 1e-3
+    assert r["lock_time_us"] is not None
+
+
 def test_spur_predict_inl_drives_the_spur():
     """0 vs 100x INL must move the top spur by >15 dB; at small amplitudes
     the DTC quantization floor dominates, so the sweep spans past it."""

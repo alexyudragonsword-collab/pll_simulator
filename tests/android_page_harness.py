@@ -215,16 +215,23 @@ def _fom(page):
     """
     open_section(page, "fom")
 
-    def settled(out_id, fill):
+    def settled(out_id, fill, n=1):
+        # Each fill dispatches one input event -> one stamped request, and a
+        # reply that a newer request overtook never writes dataset.seq -- so
+        # after n fills the rendered stamp always reaches before+n.  Waiting
+        # for a mere increase raced: the first fill's reply can land before
+        # the second fill fires, and the readout then shows the first field
+        # against the second field's DEFAULT (seen live as FoM off by
+        # exactly 10*log10(17.2/10)).
         before = page.evaluate(
             f"+(document.getElementById('{out_id}').dataset.seq || 0)")
         fill()
         page.wait_for_function(
-            "([id, s]) => +(document.getElementById(id).dataset.seq || 0) > s",
-            arg=[out_id, before], timeout=30_000)
+            "([id, s]) => +(document.getElementById(id).dataset.seq || 0) >= s",
+            arg=[out_id, before + n], timeout=30_000)
 
     settled("fom-pll-out", lambda: (page.fill("#fom-jit", "77"),
-                                    page.fill("#fom-pwr", "17.2")))
+                                    page.fill("#fom-pwr", "17.2")), n=2)
     out = page.locator("#fom-pll-out").inner_text()
     assert "-249.91" in out, out
     assert "FoM_N" not in out, f"N was blank; FoM_N should not appear: {out}"
@@ -236,7 +243,7 @@ def _fom(page):
     settled("fom-vco-out", lambda: (page.fill("#fom-f0", "10e9"),
                                     page.fill("#fom-off", "1e6"),
                                     page.fill("#fom-l", "-120"),
-                                    page.fill("#fom-vpwr", "10")))
+                                    page.fill("#fom-vpwr", "10")), n=4)
     out = page.locator("#fom-vco-out").inner_text()
     assert "-190.00" in out, out
     # the sideband warning is the point of the note, not decoration
