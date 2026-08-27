@@ -375,7 +375,28 @@
       <td><span class="en">+2…4 dB in-band (linearization limit)</span><span class="zh">带内 +2…4 dB（线性化极限）</span></td></tr>
   <tr><td>ILCM+FTL</td><td>250M &rarr; 12G</td><td>113 / 115 fs</td>
       <td><span class="en">reference (&times;48, wide BW)</span><span class="zh">参考（&times;48，宽带宽）</span></td><td>&le;0.7 dB</td></tr>
+  <tr><td>MDLL</td><td>150M &rarr; 2.4G</td><td>—</td>
+      <td><span class="en">ring oscillator (edge-replaced)</span><span class="zh">环形振荡器（边沿替换）</span></td>
+      <td><span class="en">&le;3.5 dB (1-ZOH approximation; fine record is an unaveraged periodogram)</span><span class="zh">&le;3.5 dB（1-ZOH 近似；fine 记录为未平均周期图）</span></td></tr>
+  <tr><td>SSPLL frac-N+DTC</td><td>19.2M &rarr; 4.806G</td><td>272 / 127 fs</td>
+      <td><span class="en">DSM residual (budgeted white)</span><span class="zh">DSM 残余（按白噪声预算）</span></td>
+      <td><span class="en">&minus;6.8 dB flat: frac=0.2503 is near-rational, the residual is tonal at f<sub>ref</sub>/4 harmonics, and the white budget over-counts in-band — pinned in the gap register, re-measured every push</span><span class="zh">整体 &minus;6.8 dB：frac=0.2503 接近有理数，残余音调化集中在 f<sub>ref</sub>/4 谐波，白噪声预算高估带内 — 已入 gap 登记表，每次 push 复测</span></td></tr>
 </table>
+<p>
+  <span class="en">These bounds hold at the stock operating points.  Away from
+  them the deviation is a measured function of the parameters — the full
+  boundary register (with runtime warnings and the tolerance each boundary
+  earns) and the pinned gap table are generated into
+  <a href="roadmap.md">docs/roadmap.md</a> and re-measured by a dedicated CI
+  job on every push (<code>tests/test_cross_domain_sweep.py</code>, ~45
+  operating points).  The comparator itself ships in the library:
+  <code>pllsim.validation.compare_domains</code>.</span>
+  <span class="zh">上述界限在各预置工作点成立。离开工作点后偏差是参数的实测函数——
+  完整的边界登记（含运行时警告与每条边界的实测容差）和 pinned gap 表由
+  <a href="roadmap.md">docs/roadmap.md</a> 生成，并由专属 CI job 在每次 push
+  时复测（<code>tests/test_cross_domain_sweep.py</code>，约 45 个工作点）。
+  比较器本身随库发布：<code>pllsim.validation.compare_domains</code>。</span>
+</p>
 <p>
   <span class="en">Reading the table as a designer: with the same 19.2 MHz reference and VCO class, sub-sampling buys ~4.6 dB of integrated phase power over the classic CPPLL purely by removing the N&sup2; penalty on CP/LF noise. The ADPLL and ILCM reach the ~110 fs class by different routes — the ADPLL by a clean digital loop with calibrated gains, the ILCM by brute injection bandwidth (36 MHz) at the price of total dependence on free-running frequency accuracy. The SPLL sits between: it shares the SSPLL's front-end but pays &times;N on it.</span>
   <span class="zh">从设计者角度读表：同样的 19.2 MHz 参考与 VCO 等级下，亚采样仅靠去掉 CP/LF 噪声的 N&sup2; 惩罚就比经典 CPPLL 改善约 4.6 dB 积分相位功率。ADPLL 与 ILCM 以不同路径到达 ~110 fs 量级——ADPLL 靠干净的数字环路加增益校准，ILCM 靠粗暴的 36 MHz 注入带宽，代价是完全依赖自由振荡频率精度。SPLL 居中：前端与 SSPLL 相同，但要为其付出 &times;N。</span>

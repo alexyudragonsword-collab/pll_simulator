@@ -6,6 +6,7 @@ from pllsim.arch.cppll import CPPLL, CPPLLConfig
 from pllsim.blocks.chargepump import CPConfig
 from pllsim.blocks.loopfilter import FilterDesign
 from pllsim.blocks.oscillator import OscConfig
+from pllsim.validation import compare_domains
 
 
 @pytest.fixture(scope="module")
@@ -38,18 +39,13 @@ def test_locks_from_offset(pll):
 
 
 def test_cross_domain_psd(pll):
-    """Time-domain periodogram matches linear model within 2 dB band-averaged."""
-    ar = pll.analyze()
-    sim = pll.simulate(200_000, seed=3)
-    m = (sim.f_psd > ar.loop.f_ugb / 10) & (sim.f_psd < pll.cfg.fref / 4)
-    fm, sm = sim.f_psd[m], sim.s_phi_psd[m]
-    tgt = np.interp(np.log10(fm), np.log10(ar.f), ar.pn_breakdown["total"])
-    edges = np.logspace(np.log10(fm[0]), np.log10(fm[-1]), 8)
-    for a, b in zip(edges[:-1], edges[1:]):
-        mm = (fm >= a) & (fm < b)
-        if mm.sum() < 3:
-            continue
-        err = 10 * np.log10(np.mean(sm[mm]) / np.mean(tgt[mm]))
-        # 2.5 dB: Welch variance + the real CT-vs-DT loop deviation near UGB
-        # (UGB/fref ~ 1/20 here) both land in the peaking band
-        assert abs(err) < 2.5, f"band {a:.3g}-{b:.3g} Hz off by {err:.2f} dB"
+    """Time-domain periodogram matches linear model within 2.5 dB band-averaged.
+
+    2.5 dB: Welch variance + the real CT-vs-DT loop deviation near UGB
+    (UGB/fref ~ 1/20 here) both land in the peaking band.  Mutation: tighten
+    to 1.5 dB and the peaking bands go red (worst is ~2.1 dB at this seed).
+    """
+    c = compare_domains(pll, n_cycles=200_000, seed=3)
+    assert c.skipped == [], c.skipped
+    assert c.worst_db < 2.5, [f"{b.f_lo:.3g}-{b.f_hi:.3g}: {b.err_db:+.2f}"
+                              for b in c.bands]

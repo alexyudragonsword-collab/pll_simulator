@@ -63,7 +63,7 @@ Coverage targets: fref = 19.2–250 MHz, fout up to 12 GHz, integrated jitter
 
 ```bash
 pip install -e .          # numpy, scipy, matplotlib
-pytest tests/             # 663 tests: closed-form math + architecture behavior
+pytest tests/             # 747 tests: closed-form math + architecture behavior
 python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 ```
 
@@ -258,14 +258,14 @@ All calibrators record `.trace` for convergence plots
 ```
 src/pllsim/
   core/        freqresp, noise, jitter, fom, spectrum, colored, deltasigma,
-               engine, results, dtcspurs, tdcspurs
+               engine, results, dtcspurs, tdcspurs, boundaries
   blocks/      loopfilter, oscillator, chargepump, dtc, tdc, sampler, lockdetect
   calibration/ lms, gain_cal, ftl
   arch/        base, cppll, sspll, spll, adpll, ilcm, mdll
   export/      RTL + RNM + electrical-VAMS emitters, golden engine, manifest
   guiqt/       PySide6 desktop GUI      webgui/  Streamlit web GUI
   corners.py  fit.py  modulation.py  montecarlo.py  selector.py
-  settling.py  synth.py
+  settling.py  synth.py  validation.py
   guiutil.py   GUI-support introspection (no GUI dependency)
   appbridge.py JSON bridge for embedded hosts (the Android app)
   plotting.py  presets.py
@@ -305,3 +305,16 @@ percentage.
   the deterministic (tonal) component appears in the time domain only.
 * BBPD linearization is conservative when the loop is quantization-dominated;
   the time-domain result is the reference.
+* `simulate()` integrates its jitter figure only to 0.45·fref (a
+  reference-edge record shows nothing above); `analyze()` integrates the
+  full `int_band`.  Whenever the band reaches past 0.45·fref the two
+  headline numbers cover different bands — the simulation now says so in a
+  note, and `pllsim.validation.compare_domains` returns a pair integrated
+  over the same band.
+* Synthesized flicker is faithful only above max(fref/n_settled,
+  fref/65536): below the record's own floor nothing exists, and the 1/f
+  generator's chunked synthesis decorrelates across 65536-sample refills.
+* The full register of cross-domain boundaries and pinned gaps — each with
+  its runtime warning, measured allowance and the sweep that re-measures it
+  on every push — is in [`docs/roadmap.md`](docs/roadmap.md);
+  `pllsim.validation.compare_domains` is the comparator everything shares.

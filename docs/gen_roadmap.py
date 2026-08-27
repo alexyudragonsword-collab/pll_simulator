@@ -138,6 +138,46 @@ def main() -> int:
         L += [f"- **{where}** — {note}"]
     L.append("")
 
+    # ---- cross-domain: boundaries and pinned gaps.  Constants rendered,
+    # never simulated here: this generator re-runs inside the ordinary test
+    # suite (test_the_roadmap_is_regenerated), so measurement lives in the
+    # sweep job, which re-measures every pinned dB on every CI run and fails
+    # on drift in either direction.  The numbers below cannot rot; they can
+    # only be updated together with the measurement that justifies them.
+    from pllsim.validation import BOUNDARIES, CROSS_DOMAIN_GAPS
+    L += [
+        "## Cross-domain model boundaries",
+        "",
+        "Where the linear model and the time-domain engine legitimately",
+        "diverge.  Each boundary has a runtime warning note (all three GUIs",
+        "show it), a machine-readable predicate, and — where the divergence",
+        "is bounded — a tolerance allowance the sweep grants only while the",
+        "flag is active.  Source of truth: `pllsim.validation.BOUNDARIES`;",
+        "enforced by `tests/test_cross_domain_sweep.py` on every push.",
+        "",
+        "| code | allowance | statement |",
+        "|---|---|---|",
+    ]
+    for b in BOUNDARIES:
+        extra = f"+{b.extra_db:.1f} dB" if b.extra_db else "—"
+        L.append(f"| `{b.code}` | {extra} | {b.statement} |")
+    L += [
+        "",
+        "## Cross-domain gaps — pinned here, re-measured on every push",
+        "",
+        "Confirmed points where the deviation exceeds the flagged allowance.",
+        "Each is pinned at its measured worst-band value (120k cycles, seed",
+        "1); the sweep fails if a re-measurement drifts more than the slack",
+        "in either direction — getting better is also a failure, because it",
+        "means this register no longer describes the tool.",
+        "",
+        "| point | family | pinned |",
+        "|---|---|---|",
+    ]
+    for g in CROSS_DOMAIN_GAPS:
+        L.append(f"| `{g.point_id}` | `{g.code}` | {g.pinned_db:.2f} dB |")
+    L.append("")
+
     L += ["## Limits that are scope, not backlog", ""]
     for title, body in KNOWN_LIMITS:
         L += [f"### {title}", "", body, ""]

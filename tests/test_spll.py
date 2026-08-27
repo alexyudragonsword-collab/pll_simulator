@@ -7,6 +7,7 @@ from pllsim.blocks.loopfilter import FilterDesign
 from pllsim.blocks.oscillator import OscConfig
 from pllsim.blocks.sampler import SamplerConfig
 from pllsim.core.jitter import integrate_pn
+from pllsim.validation import compare_domains
 
 
 @pytest.fixture(scope="module")
@@ -38,3 +39,17 @@ def test_locks_and_matches_linear_model(pll):
     assert sim.lock_time_s is not None
     assert abs(np.mean(sim.freq_out[-10_000:]) - 8e9) < 1e5
     assert abs(sim.jitter_fs - ar.jitter_fs) / ar.jitter_fs < 0.35
+
+
+def test_cross_domain_psd(pll):
+    """The SPLL's first PSD-band test -- it had only the scalar jitter check.
+
+    A scalar comparison cannot see a shape error: two curves can integrate to
+    the same jitter while disagreeing by 6 dB in opposite directions.  2.0 dB
+    matches the stock-point measurement (worst 0.83 dB at this seed) and the
+    docs' stated SPLL bound.
+    """
+    c = compare_domains(pll, n_cycles=150_000, seed=1)
+    assert c.skipped == [], c.skipped
+    assert c.worst_db < 2.0, [f"{b.f_lo:.3g}-{b.f_hi:.3g}: {b.err_db:+.2f}"
+                              for b in c.bands]

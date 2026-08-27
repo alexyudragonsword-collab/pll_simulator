@@ -34,6 +34,7 @@ from .base import (
     PLLBase,
     add_pull_offset,
     attach_fine,
+    no_fine_note,
     pull_hz,
     pull_notes,
     pull_spur,
@@ -201,10 +202,18 @@ class CPPLL(PLLBase):
                                     / c.fref), h_lp))
             paths.append(NoisePath(dsm_src, ntf_dsm))
 
-        m = loop_metrics(gol)
-        if m.f_ugb > c.fref / 10:
-            notes.append(f"UGB {m.f_ugb / 1e6:.1f} MHz > fref/10: continuous-time "
+        m = loop_metrics(gol, f_limit=c.fref / 2)
+        from ..core.boundaries import CT_UGB_RATIO, ct_approx_exceeded
+        if ct_approx_exceeded(m.f_ugb, c.fref):
+            notes.append(f"UGB {m.f_ugb / 1e6:.1f} MHz > fref/"
+                         f"{CT_UGB_RATIO:.0f}: continuous-time "
                          "approximation degrading")
+        from ..core.boundaries import conditionally_stable
+        if conditionally_stable(m.n_crossings):
+            notes.append(
+                f"open loop crosses unity gain {m.n_crossings}x below "
+                "fref/2: conditionally stable — phase margin at the first "
+                "crossing does not describe the loop")
         if kvco != c.osc.gain:
             notes.append(f"Kvco at v_op={v_op:.3f} V: {kvco / 1e6:.1f} MHz/V "
                          f"(nominal {c.osc.gain / 1e6:.1f})")
@@ -507,4 +516,4 @@ class CPPLL(PLLBase):
                     "ps: the reference spur here is UNDER-read — raise it to "
                     f"{int(np.ceil(tref / c.cp.t_reset))} to resolve the pulse")
             return sim
-        return sim
+        return no_fine_note(sim)

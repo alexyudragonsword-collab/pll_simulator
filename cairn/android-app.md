@@ -435,6 +435,19 @@ target Python ever moves past 3.10 the generated C stops being confined to
 the public API, and this measurement has to be taken again rather than
 assumed to hold.
 
+**Both new calculators confirmed on a device, 2026-08-26** (APK run #16, main
+at `6f3a76c`). Read on the phone: the converter turns −45.5587 dBc SSB into
+118.09 fs / 0.427271°, and the FoM tab gives −249.91 dB for 77 fs at 17.2 mW
+— the figure Dartizio'23 publishes as −249.9. Same provenance as above:
+measured by the user, not by CI.
+
+What that does and does not settle. It settles the parts no harness reaches —
+that the tabs render on a real screen, that the soft keyboard does not bury
+the readout, that live recompute feels live rather than laggy over a real
+bridge. It does not re-verify the arithmetic, which the suite already pins on
+every preset and against the published triple; a device agreeing with the
+host is expected, and would only have been news if it had disagreed.
+
 **Adjacent finding, not acted on.** We pin Chaquopy 15.0.1; upstream is
 17.0.1, supporting Python 3.10–3.14, and its README now recommends
 `cibuildwheel` (which has official Android support) for 3.13+. Whether scipy is

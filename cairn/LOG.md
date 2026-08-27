@@ -2,6 +2,50 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-08-27 · PR #46 repurposed for the campaign; GitHub Actions refusing all jobs
+
+- PR #46 (opened yesterday for the phone-verification record, never merged)
+  already carried the five campaign commits, so it was retitled and its body
+  rewritten to describe them instead of opening a duplicate PR.
+- Correction: "CI green" for the campaign was **local only**.  Every GitHub
+  run since `5d76689` (03:11 UTC) fails in ~2 s with no logs — jobs are
+  created but never start, including a commit that touched no CI config;
+  all-green through `6a232e0` yesterday.  Private repo → metered Actions
+  minutes; evidence points at quota/billing, checkable only in the owner's
+  Settings → Billing, not from here.  Nothing about the code is implicated.
+
+## 2026-08-27 · Cross-domain consistency: comparator, boundaries, CI sweep
+
+- The contract now holds (or is stated) across the parameter space, not just
+  at 15 stock points.  `pllsim.validation.compare_domains` is the one
+  comparator (five hand-copied test blocks retired onto it, tolerances
+  unchanged); `BOUNDARIES` registers every capability limit with a runtime
+  note all three GUIs show and the tolerance it earns; ~45-point sweep runs
+  in its own parallel CI job with the contract: over tolerance with no flag
+  = defect = red.
+- 12 gaps pinned and re-measured every push.  Headline findings: CT peaking
+  reaches 7.25 dB at the deepest synthesizable CPPLL loop; sspll_frac stock
+  is a flat −6.8 dB (white DSM budget vs tonal truth at near-rational frac);
+  SSPLL int-N (exact z-domain) robust everywhere swept.
+- Two inline fixes: n_crossings counted alias images (stock SSPLL read 15);
+  the jitter headline pair silently integrated different bands.
+- The sweep caught its own harness twice (inconsistent frac configs
+  fabricated 12–16 dB "gaps"; three wrong pins removed with reasons).
+  Conclusions in `cairn/cross-domain.md`; boundary/gap tables generated into
+  docs/roadmap.md.
+
+## 2026-08-26 · Both calculators read correctly on a phone
+
+- APK run #16 on main (`6f3a76c`) shipped the converter and the FoM tab;
+  sideloaded and read on a device: 118.09 fs / 0.427271° from −45.5587 dBc
+  SSB, and −249.91 dB from 77 fs at 17.2 mW.
+- Measured by the user, not by CI — recorded with that provenance in
+  `cairn/android-app.md`, same as the compiled-module confirmation before it.
+- What it settles is the rendering and the feel, not the arithmetic: the
+  suite already pins those numbers on every preset and against the published
+  triple. A device agreeing with the host is expected; it would only have
+  been news the other way.
+
 ## 2026-08-26 · FoM calculator (PLL jitter + VCO), three surfaces
 
 - `core.fom`: `pll_jitter_fom` and `vco_fom`, plus the FoM_N and FoM_T

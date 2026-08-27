@@ -8,6 +8,7 @@ from pllsim.blocks.oscillator import OscConfig
 from pllsim.blocks.tdc import TDCConfig
 from pllsim.calibration.gain_cal import KdcoCal, TdcPeriodCal
 from pllsim.calibration.lms import SignSignLMS
+from pllsim.validation import compare_domains  # noqa: I001
 
 DCO = OscConfig(f0=10.0e9, gain=20e3, pn_dbchz=-112.0, pn_foffset=1e6,
                 pn_f1f3=4e5, pn_floor_dbchz=-150.0)
@@ -34,20 +35,11 @@ def test_zdomain_loop_metrics():
 
 
 def test_cross_domain_psd():
-    pll = ADPLL(make_tdc_cfg())
-    ar = pll.analyze()
-    sim = pll.simulate(150_000, seed=1)
-    m = (sim.f_psd > ar.loop.f_ugb / 10) & (sim.f_psd < FREF / 4)
-    fm, sm = sim.f_psd[m], sim.s_phi_psd[m]
-    tgt = np.interp(np.log10(fm), np.log10(ar.f), ar.pn_breakdown["total"])
-    edges = np.logspace(np.log10(fm[0]), np.log10(fm[-1]), 8)
-    for a, b in zip(edges[:-1], edges[1:]):
-        mm = (fm >= a) & (fm < b)
-        if mm.sum() < 3:
-            continue
-        err = 10 * np.log10(np.mean(sm[mm]) / np.mean(tgt[mm]))
-        # 3 dB: TDC quantization is deterministic/tonal, not exactly white
-        assert abs(err) < 3.0, f"band {a:.3g}-{b:.3g} off {err:.2f} dB"
+    """3 dB: TDC quantization is deterministic/tonal, not exactly white."""
+    c = compare_domains(ADPLL(make_tdc_cfg()), n_cycles=150_000, seed=1)
+    assert c.skipped == [], c.skipped
+    assert c.worst_db < 3.0, [f"{b.f_lo:.3g}-{b.f_hi:.3g}: {b.err_db:+.2f}"
+                              for b in c.bands]
 
 
 def test_kdco_fcal_and_tdc_period_cal():
@@ -81,3 +73,22 @@ def test_bbpd_mode_locks_and_dtc_cal_converges():
     assert abs(cal.value - 1 / (1 + eps)) < 0.01
     assert abs(np.mean(sim.freq_out[-20_000:]) - FOUT) < 1e5
     assert sim.jitter_fs < 300
+
+
+def test_cross_domain_psd_bbpd():
+    """The BBPD mode's first PSD-band test.
+
+    The BBPD linear gain is a describing-function approximation; measured at
+    this stock point the time domain sits +3.3 dB above the model in-band --
+    inside the +2..4 dB the docs have always stated for this limit, and the
+    reason the registry flags it rather than the tolerance hiding it.  4.5 dB
+    = the 3.0 dB architecture baseline + the linearization allowance; the
+    flag assertion keeps the widened tolerance tied to its cause.
+    """
+    from pllsim import presets
+    c = compare_domains(presets.ALL_PRESETS["adpll_bb_100m_10g"](),
+                        n_cycles=150_000, seed=1)
+    assert "bbpd-linearization" in c.flags
+    assert c.skipped == [], c.skipped
+    assert c.worst_db < 4.5, [f"{b.f_lo:.3g}-{b.f_hi:.3g}: {b.err_db:+.2f}"
+                              for b in c.bands]

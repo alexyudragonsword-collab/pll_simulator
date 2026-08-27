@@ -183,8 +183,17 @@ blanket ignore reads as "type-checked".
   which convention it is in.
 * **Every dual-domain architecture has a cross-domain test.**  The settled
   time-domain periodogram must match the linear model within 2–3 dB
-  band-averaged.  When they disagree, one of them is wrong — finding out which
-  is where most of §9 of the design guide came from.
+  band-averaged.  The mechanism is `pllsim.validation.compare_domains` — do
+  not hand-roll the comparison; it clips the band to where both estimates
+  mean something (and records every clip), keeps thin bins visible, returns
+  same-band jitter for both domains, and reports which capability-boundary
+  flags are active.  `tests/test_cross_domain_sweep.py` runs the same
+  contract across the parameter space in its own CI job: over base tolerance
+  with no boundary flag active is a model defect; a confirmed limitation too
+  large to fix inline goes into `validation.CROSS_DOMAIN_GAPS`, pinned at
+  its measured value and re-measured on every push.  When the domains
+  disagree, one of them is wrong — finding out which is where most of §9 of
+  the design guide came from.
 * **`analyze()` is not allowed to invent numbers.**  An impairment that is not
   configured is an absent key, not a `-600 dBc` entry; an architecture that
   genuinely has no such mechanism says so in `notes` rather than returning a

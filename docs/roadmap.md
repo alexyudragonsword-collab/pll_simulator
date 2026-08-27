@@ -24,6 +24,47 @@ number needs reading rather than raising:
 - **`guiqt/page_analysis.py`, ~59%** — FitPage's file-dialog branches need a GUI file picker to reach.
 - **`webgui/Home.py` and `webgui/_common.py`, 0%** — **Not** untested.  AppTest execs each page rather than importing it, so coverage attributes none of the 23 tests that drive them, and the pages under `webgui/pages/` do not appear in the report at all.  Do not 'fix' this with a test that merely imports them.
 
+## Cross-domain model boundaries
+
+Where the linear model and the time-domain engine legitimately
+diverge.  Each boundary has a runtime warning note (all three GUIs
+show it), a machine-readable predicate, and — where the divergence
+is bounded — a tolerance allowance the sweep grants only while the
+flag is active.  Source of truth: `pllsim.validation.BOUNDARIES`;
+enforced by `tests/test_cross_domain_sweep.py` on every push.
+
+| code | allowance | statement |
+|---|---|---|
+| `ct-approx` | +5.5 dB | CPPLL/SPLL analyze() is a continuous-time approximation; past UGB > fref/10 the sampled loop's peaking deviates from it, and the time domain is the reference in that region. |
+| `jitter-band-clip` | — | simulate() integrates jitter only to 0.45*fref (a reference-edge record shows nothing above it); analyze() integrates the full int_band.  The two headline jitter numbers cover different bands whenever int_band reaches past 0.45*fref. |
+| `flicker-floor` | — | Synthesized flicker is only faithful above max(fref/n_settled, fref/65536); a comparison band starting below that floor compares the model against noise the run never generated. |
+| `conditional-stability` | — | The open loop crosses unity gain more than once; phase margin at one crossing does not describe the loop and the linear jitter integral spans a non-small-signal region. |
+| `bbpd-linearization` | +1.5 dB | The BBPD linear gain is a describing-function approximation; when the loop is quantization-dominated it over-predicts in-band noise by 2-4 dB and the time domain is the reference. |
+| `dsm-tonal` | +1.5 dB | The linear model budgets the DSM/DTC residual as white noise (ShapedQuantization); the actual residual is deterministic and tonal, concentrated at frac-related offsets.  For near-rational fractions most of that power sits in tones outside (or at the edge of) the comparison band, so the in-band PSDs legitimately differ -- the frac_spur table is the deterministic complement the white budget stands in for. |
+
+## Cross-domain gaps — pinned here, re-measured on every push
+
+Confirmed points where the deviation exceeds the flagged allowance.
+Each is pinned at its measured worst-band value (120k cycles, seed
+1); the sweep fails if a re-measurement drifts more than the slack
+in either direction — getting better is also a failure, because it
+means this register no longer describes the tool.
+
+| point | family | pinned |
+|---|---|---|
+| `cppll-fref-x0.5` | `ct-peaking` | 3.87 dB |
+| `cppll-ugb-x1.6` | `ct-knee` | 5.26 dB |
+| `cppll-ugb-x1.9` | `ct-knee` | 6.54 dB |
+| `cppll-pm45` | `ct-filter-shape` | 3.90 dB |
+| `cppll-fine-m8` | `engine-pulse-shape` | 2.78 dB |
+| `cppll_frac-fref-x0.5` | `dsm-tonal` | 3.90 dB |
+| `sspll_frac-stock` | `dsm-tonal` | 6.84 dB |
+| `sspll_frac-fref-x0.5` | `dsm-tonal` | 4.40 dB |
+| `sspll_frac-fref-x2.0` | `dsm-tonal` | 9.32 dB |
+| `sspll_frac-near-int` | `dsm-tonal` | 6.79 dB |
+| `spll-fref-x0.5` | `ct-peaking` | 2.08 dB |
+| `mdll-fref-x2.0` | `zoh-approx` | 3.45 dB |
+
 ## Limits that are scope, not backlog
 
 ### No silicon correlation
