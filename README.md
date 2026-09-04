@@ -63,7 +63,7 @@ Coverage targets: fref = 19.2–250 MHz, fout up to 12 GHz, integrated jitter
 
 ```bash
 pip install -e .          # numpy, scipy, matplotlib
-pytest tests/             # 755 tests: closed-form math + architecture behavior
+pytest tests/             # 770 tests: closed-form math + architecture behavior
 python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 ```
 
@@ -314,6 +314,12 @@ percentage.
 * Synthesized flicker is faithful only above max(fref/n_settled,
   fref/65536): below the record's own floor nothing exists, and the 1/f
   generator's chunked synthesis decorrelates across 65536-sample refills.
+* A configured `fout` the oscillator cannot reach (ILCM/MDLL digital tuning
+  ranges are finite; a ring railed against its word is still "running") used
+  to come back as an ordinary result gigahertz off target.  `simulate()` now
+  compares the tail of the frequency record against `fout` — the same
+  fref/1000 criterion `compare_domains` uses to refuse an unlocked loop — and
+  says so in a note that every GUI shows.
 * The full register of cross-domain boundaries and pinned gaps — each with
   its runtime warning, measured allowance and the sweep that re-measures it
   on every push — is in [`docs/roadmap.md`](docs/roadmap.md);

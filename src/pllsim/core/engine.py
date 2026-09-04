@@ -32,6 +32,20 @@ def postprocess(sim: SimResult, settle_frac: float = 0.25,
     """Attach PSD, jitter and spur estimates from the settled portion."""
     n0 = int(sim.phase_err_out.size * settle_frac)
     ph = sim.phase_err_out[n0:]
+    from .boundaries import LOCK_FERR_FRACTION, never_locked, tail_frequency_error
+    ferr = tail_frequency_error(sim.freq_out, sim.f0)
+    if never_locked(ferr, sim.fs):
+        # ILCM/MDLL have no lock detector, and an analog loop's detector is
+        # tuned for its design point: without this, a ring railed against
+        # its tuning range read as an ordinary result 2.4 GHz off target
+        tail = float(np.mean(np.asarray(sim.freq_out[-5000:], dtype=float)))
+        sim.notes.append(
+            f"loop never reached the configured fout: output settled at "
+            f"{tail / 1e9:.6f} GHz vs {sim.f0 / 1e9:.6f} GHz configured "
+            f"({ferr / 1e6:.3g} MHz off, above fref/{1 / LOCK_FERR_FRACTION:.0f}) "
+            "— every figure below describes that unlocked or range-limited "
+            "state, not the design. Check osc.f0 and the tuning range "
+            "against fout, or run more cycles if it was still acquiring.")
     # A background calibration can still be converging well past settle_frac --
     # a DTC gain LMS that gear-shifts at 100k cycles leaves a fractional spur
     # that dominates everything before it.  The jitter number is then real but

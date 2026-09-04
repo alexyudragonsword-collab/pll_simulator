@@ -71,6 +71,15 @@ validation pass); supersedes the scattered per-test knowledge before it.
   an input, so the contradiction cannot be typed at all — the refusal stays
   as the backstop for hand-built configs.  Deliberate frac-vs-plan mismatch
   experiments now require the library, which is where they belong.
+- **A legal fout is not a reachable fout** (2026-09-04).  ILCM/MDLL accept
+  any integer multiple, but their digital tuning ranges are finite: fout×2
+  railed the ring and the run read as an ordinary result 2.4 GHz off, with
+  no lock detector to say otherwise.  `postprocess` now checks the tail
+  frequency error against `f0` with the same `never_locked` predicate the
+  comparator's refusal uses (fref/1000 over the last 5000 cycles) and notes
+  it.  Analog loops with unbounded tuning laws (no v_min/v_max set) still
+  follow fout anywhere — physically optimistic, numerically self-consistent,
+  a modelling-range statement rather than a defect.
 - **`lock_time_s is None` does not mean unlocked.**  The detector thresholds
   are tuned for the design point; off-plan loops converge in fact while it
   stays silent.  NotLockedError requires None *and* tail frequency error

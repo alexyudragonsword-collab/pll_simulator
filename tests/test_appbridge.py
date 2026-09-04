@@ -111,6 +111,19 @@ def test_errors_come_back_in_band_never_raised():
     assert reply["ok"] is False and "traceback" in reply
 
 
+def test_a_railed_loop_reaches_the_page_as_a_note():
+    # ILCM fout x2 is a legal integer multiple the oscillator cannot reach;
+    # the note is the only thing standing between the phone and a plausible
+    # looking number 12 GHz off target
+    reply = json.loads(appbridge.call(
+        "simulate", json.dumps({"preset": "ilcm_250m_12g",
+                                "overrides": {"fout": "24e9"},
+                                "n_cycles": 6000, "seed": 1})))
+    assert reply["ok"], reply.get("error")
+    assert any("never reached" in n for n in reply["result"]["notes"]), \
+        reply["result"]["notes"]
+
+
 def test_fref_only_edit_on_a_fractional_preset_follows_the_plan():
     # the phone found this: fref 52 -> 104 MHz on the workbench left the
     # stale fraction pointing the divider 13 MHz from fout, and the "result"

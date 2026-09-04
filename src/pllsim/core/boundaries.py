@@ -56,6 +56,29 @@ def flicker_floor_hz(fref: float, n_cycles: int) -> float:
     return max(fref / n_settled, fref / FLICKER_CHUNK)
 
 
+#: A loop counts as never having reached fout when the mean output frequency
+#: over the last LOCK_TAIL_CYCLES sits more than LOCK_FERR_FRACTION*fref away.
+#: Measured separation: a truly unlocked or railed loop wanders 1e5..1e9 Hz
+#: off, a converged one sits within a few hundred (fref/1000 = 19..250 kHz).
+#: Shared by postprocess's runtime note and compare_domains' refusal.
+LOCK_FERR_FRACTION = 1e-3
+LOCK_TAIL_CYCLES = 5000
+
+
+def tail_frequency_error(freq_out, fout: float) -> float:
+    """|mean of the record's tail - fout| in Hz."""
+    import numpy as np
+    tail = np.asarray(freq_out[-LOCK_TAIL_CYCLES:], dtype=float)
+    return abs(float(np.mean(tail)) - float(fout))
+
+
+def never_locked(ferr_hz: float, fref: float) -> bool:
+    """The output never settled at the configured fout: unlocked, railed
+    against a tuning range, or pulled elsewhere.  Every number downstream
+    then describes that state, not the design."""
+    return ferr_hz > LOCK_FERR_FRACTION * fref
+
+
 def conditionally_stable(n_crossings: int) -> bool:
     """More than one gain crossover: phase margin read at one crossing does
     not describe the loop, and the linear jitter integral spans a region

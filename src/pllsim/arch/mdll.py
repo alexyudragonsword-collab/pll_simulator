@@ -130,6 +130,7 @@ class MDLL(PLLBase):
                  supply_ripple: tuple[float, float] | None = None,
                  fine_oversample: int = 4) -> SimResult:
         c = self.cfg
+        c.n_mult          # validates the integer multiple; raises if not
         rng = np.random.default_rng(seed)
         tref = 1.0 / c.fref
         v_sup = supply_ripple_v(supply_ripple, n_cycles, tref)

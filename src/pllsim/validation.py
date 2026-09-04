@@ -264,9 +264,9 @@ def compare_domains(pll: Any, *, n_cycles: int, seed: int,
         # CPPLLs compare at 2-4 dB with lock_time None).  The tail frequency
         # error separates the two -- a truly unlocked loop wanders ~1e5+ Hz
         # off, a converged one sits within a few hundred
-        tail = np.asarray(sim.freq_out[-5000:], dtype=float)
-        ferr = abs(float(np.mean(tail)) - float(pll.cfg.fout))
-        if ferr > 1e-3 * fref:
+        from .core.boundaries import never_locked, tail_frequency_error
+        ferr = tail_frequency_error(sim.freq_out, pll.cfg.fout)
+        if never_locked(ferr, fref):
             raise NotLockedError(
                 f"{type(pll).__name__} never locked in {n_cycles} cycles "
                 f"(tail frequency error {ferr:.3g} Hz) — the domains cannot "
