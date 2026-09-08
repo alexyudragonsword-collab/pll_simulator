@@ -22,6 +22,9 @@ This file records substantive progress in reverse-chronological order — newest
   - Stale prose fixed: "both GUIs" → three surfaces; README gains its
     missing MDLL section; fref range 19.2–500 MHz (the 500 MHz bench had
     broken the old bound); cairn counts 48 grid points, 10 of 13 pages.
+- v0.9.3 cut in the same pass: version bump + `docs/release-notes/v0.9.3.md`
+  naming the 13 unreleased changes, index.html §11.23, deck rebuilt and
+  renamed, roadmap regenerated.  Merging it is what tags the release.
 - Findings held for P1+: Python 3.10 not in the CI matrix; bool config
   fields unreachable from every form; block configs without `__post_init__`;
   two silent substitutions in export; unbounded tuning laws; pure-Python
