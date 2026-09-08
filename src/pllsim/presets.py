@@ -1,4 +1,4 @@
-"""Ready-made example configurations (fref 19.2-250 MHz, fout up to 12 GHz).
+"""Ready-made example configurations (fref 19.2-500 MHz, fout up to 12 GHz).
 
 Each factory returns a fresh architecture instance whose analyze() jitter
 lands in the 50-200 fs class (except the deliberately pedestrian CPPLL

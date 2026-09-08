@@ -15,7 +15,7 @@ validation pass); supersedes the scattered per-test knowledge before it.
   tolerance contract call the *same predicates*, so warning and test cannot
   drift apart.
 - `tests/test_cross_domain_sweep.py` (marker `sweep`, own CI job, ~5 min in
-  parallel with the 18-min main jobs): ~45 operating points across UGB,
+  parallel with the 18-min main jobs): 48 operating points across UGB,
   frequency-plan, near-integer-fraction and secondary axes.  Contract per
   point: worst band deviation < base_tol + extra_db of declared-and-active
   flags; over base with no flag = model defect = red; declared flag not

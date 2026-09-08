@@ -35,6 +35,7 @@ from ..core.results import AnalysisResult, SimResult
 from .base import (
     PLLBase,
     add_pull_offset,
+    flicker_corner_hz,
     pull_hz,
     pull_notes,
     pull_spur,
@@ -414,7 +415,8 @@ class ADPLL(PLLBase):
         offs = add_pull_offset(offs, c.osc, c.fref)
         if supply_ripple is not None and supply_ripple[1] < 0.45 * c.fref:
             offs = (offs or []) + [supply_ripple[1]]
-        return postprocess(sim, int_band=c.int_band, spur_offsets=offs)
+        return postprocess(sim, int_band=c.int_band, spur_offsets=offs,
+                           flicker_corner_hz=flicker_corner_hz(c))
 
     def _sim_bbpd(self, n_cycles, noise, calibration, seed, f_start_offset,
                   dtc_gain_init_error, dtc_gain_drift=None,
@@ -505,4 +507,5 @@ class ADPLL(PLLBase):
         offs = add_pull_offset(
             frac_spur_offsets(c.frac.frac, c.fref, fmin=8.0 * c.fref / n_cycles),
             c.osc, c.fref)
-        return postprocess(sim, int_band=c.int_band, spur_offsets=offs)
+        return postprocess(sim, int_band=c.int_band, spur_offsets=offs,
+                           flicker_corner_hz=flicker_corner_hz(c))

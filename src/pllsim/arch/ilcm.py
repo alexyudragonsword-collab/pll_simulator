@@ -44,6 +44,7 @@ from .base import (
     PLLBase,
     add_pull_offset,
     attach_fine,
+    flicker_corner_hz,
     no_fine_note,
     pull_hz,
     pull_notes,
@@ -264,7 +265,8 @@ class ILCM(PLLBase):
         if tcal is not None:
             sim.cal_traces["inj_timing"] = np.asarray(tcal.trace)
         sim = postprocess(sim, int_band=c.int_band,
-                          spur_offsets=add_pull_offset(None, c.osc, c.fref))
+                          spur_offsets=add_pull_offset(None, c.osc, c.fref),
+                          flicker_corner_hz=flicker_corner_hz(c))
         # realignment resets the accumulated phase once per reference period,
         # so ref-rate sampling sees only the residual AT the edge and misses
         # what built up in between

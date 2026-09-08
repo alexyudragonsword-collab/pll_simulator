@@ -40,6 +40,7 @@ from .base import (
     PLLBase,
     add_pull_offset,
     attach_fine,
+    flicker_corner_hz,
     no_fine_note,
     pull_hz,
     pull_notes,
@@ -181,7 +182,8 @@ class MDLL(PLLBase):
                         freq_out=freq_out, ctrl=ctrl, lock_time_s=None)
         sim.cal_traces["tune_acc"] = ctrl.copy()
         sim = postprocess(sim, int_band=c.int_band,
-                          spur_offsets=add_pull_offset(None, c.osc, c.fref))
+                          spur_offsets=add_pull_offset(None, c.osc, c.fref),
+                          flicker_corner_hz=flicker_corner_hz(c))
         # edge replacement zeroes the error every Tref, so a ref-rate record
         # sees only the mux/ref term and misses the whole intra-period build-up
         if fine is not None:

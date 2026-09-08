@@ -152,3 +152,66 @@ def test_mdll_simulate_refuses_a_non_integer_multiple():
     pll.cfg.fout *= 1.07
     with pytest.raises(ValueError, match="integer fout/fref"):
         pll.simulate(2_000, seed=1)
+
+
+# --- flicker synthesis floor ----------------------------------------------
+# The boundary register listed flicker-floor with "a runtime warning note all
+# three GUIs show" -- and no engine ever emitted one.  It only becomes true
+# on long records: the Welch resolution has to drop below fref/65536 before
+# the integration band can reach the floor at all (>= 8 x 65536 cycles at
+# fref > 65.5 MHz), which is why no stock run ever showed it.
+
+def _synthetic(n: int, fs: float = 100e6, seed: int = 1):
+    import numpy as np
+
+    from pllsim.core.results import SimResult
+    rng = np.random.default_rng(seed)
+    return SimResult(fs=fs, f0=8e9, t=np.arange(n) / fs,
+                     phase_err_out=rng.normal(0.0, 1e-3, n),
+                     freq_out=np.full(n, 8e9), ctrl=np.zeros(n),
+                     lock_time_s=1e-6)
+
+
+def test_a_long_record_with_flicker_says_where_its_floor_is():
+    from pllsim.core.boundaries import flicker_floor_hz
+    from pllsim.core.engine import postprocess
+    # postprocess analyses the settled 75%: 600k samples -> nperseg 75000 ->
+    # Welch RBW 1.33 kHz, under the fref/65536 = 1.53 kHz floor.  At 600k
+    # cycles total (450k settled) the RBW is still 1.78 kHz and nothing fires.
+    n = 800_000
+    sim = postprocess(_synthetic(n), int_band=(1e3, 1e8), flicker_corner_hz=2e5)
+    hits = [x for x in sim.notes if "flicker synthesis floor" in x]
+    assert hits, sim.notes
+    assert f"{flicker_floor_hz(100e6, n):.3g}" in hits[0], hits[0]
+
+
+def test_no_flicker_configured_means_no_floor_note():
+    from pllsim.core.engine import postprocess
+    sim = postprocess(_synthetic(600_000), int_band=(1e3, 1e8), flicker_corner_hz=0.0)
+    assert not any("flicker synthesis floor" in x for x in sim.notes), sim.notes
+
+
+def test_a_short_record_never_reaches_the_floor():
+    from pllsim.core.engine import postprocess
+    sim = postprocess(_synthetic(120_000), int_band=(1e3, 1e8), flicker_corner_hz=2e5)
+    assert not any("flicker synthesis floor" in x for x in sim.notes), sim.notes
+
+
+@pytest.mark.parametrize("name", ["cppll_19p2m_4p8g", "sspll_19p2m_4p8g",
+                                  "spll_100m_8g", "adpll_100m_10g",
+                                  "ilcm_250m_12g", "mdll_150m_2p4g"])
+def test_every_engine_tells_postprocess_its_flicker_corner(name, monkeypatch):
+    # a note that no engine can trigger is decorative: each engine must hand
+    # postprocess a positive corner from its own noise configuration
+    import importlib
+    pll = presets.ALL_PRESETS[name]()
+    mod = importlib.import_module(type(pll).__module__)
+    seen = {}
+    real = mod.postprocess
+
+    def spy(sim, *a, **kw):
+        seen.update(kw)
+        return real(sim, *a, **kw)
+    monkeypatch.setattr(mod, "postprocess", spy)
+    pll.simulate(3_000, seed=1)
+    assert seen.get("flicker_corner_hz", 0.0) > 0.0, seen

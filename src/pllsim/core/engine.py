@@ -28,8 +28,12 @@ def detect_lock(t: np.ndarray, ferr: np.ndarray, tol_hz: float, hold: int = 200)
 
 def postprocess(sim: SimResult, settle_frac: float = 0.25,
                 int_band: tuple[float, float] = (1e3, 100e6),
-                spur_offsets=None) -> SimResult:
-    """Attach PSD, jitter and spur estimates from the settled portion."""
+                spur_offsets=None, flicker_corner_hz: float = 0.0) -> SimResult:
+    """Attach PSD, jitter and spur estimates from the settled portion.
+
+    ``flicker_corner_hz`` is the highest 1/f corner the run was configured
+    with (0 = no flicker anywhere); it gates the synthesis-floor note.
+    """
     n0 = int(sim.phase_err_out.size * settle_frac)
     ph = sim.phase_err_out[n0:]
     from .boundaries import LOCK_FERR_FRACTION, never_locked, tail_frequency_error
@@ -67,6 +71,21 @@ def postprocess(sim: SimResult, settle_frac: float = 0.25,
         f1 = max(int_band[0], f_w[0])
         f2 = min(int_band[1], NYQ_FRACTION * sim.fs)
         sim.jitter_fs = rms_jitter_fs(f_w, s_w, sim.f0, f1, f2)
+        if flicker_corner_hz > 0.0:
+            from .boundaries import flicker_floor_hz
+            floor = flicker_floor_hz(sim.fs, sim.phase_err_out.size)
+            if f1 < floor:
+                # only long records get here: the Welch resolution has to
+                # drop under fref/65536 first, so no stock run ever did --
+                # which is how this boundary sat in the register for a month
+                # with a note nothing emitted
+                sim.notes.append(
+                    f"jitter band starts at {f1:.3g} Hz, below the flicker "
+                    f"synthesis floor {floor:.3g} Hz (max(fref/n_settled, "
+                    "fref/65536)): synthesized 1/f content below that offset "
+                    "is not trustworthy, so neither is the integral over "
+                    f"{f1:.3g}..{floor:.3g} Hz — raise the band's lower edge "
+                    "or read the figure as approximate there")
         if jitter_band_clipped(int_band[1], sim.fs):
             # the largest silent apples-to-oranges these results carried:
             # analyze() integrates the full band, this number stops at what a

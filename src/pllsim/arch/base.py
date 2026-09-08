@@ -173,6 +173,17 @@ def attach_fine(sim: SimResult, fine: np.ndarray, m_os: int, fref: float,
     return sim
 
 
+def flicker_corner_hz(c) -> float:
+    """Highest configured 1/f corner: reference, divider (if any), oscillator.
+
+    Zero when the configuration carries no flicker at all, which is what
+    lets postprocess keep its synthesis-floor note quiet for white-only runs.
+    """
+    return max(float(getattr(c, "ref_pn_fc", 0.0)),
+               float(getattr(c, "div_pn_fc", 0.0)),
+               float(getattr(c.osc, "pn_f1f3", 0.0)))
+
+
 def no_fine_note(sim: SimResult) -> SimResult:
     """Say plainly that the reference spur is not in this record."""
     sim.notes.append("jitter integrated at the reference rate: intra-period "
