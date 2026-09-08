@@ -107,3 +107,48 @@ def test_a_locked_loop_is_not_refused():
     c = compare_domains(presets.ALL_PRESETS["sspll_frac_19p2m_4p806g"](),
                         n_cycles=40_000, seed=1)
     assert c.bands
+
+
+# --- never reached fout ---------------------------------------------------
+# An audit of fref/fout-only edits found ILCM and MDLL silently railing: the
+# configured fout is a legal integer multiple, the oscillator's digital tuning
+# cannot reach it, and the run read as an ordinary result 2.4 GHz off target
+# (MDLL fout x2) with no lock detector to hint otherwise.  Every architecture
+# goes through postprocess, so the check lives there and shares its criterion
+# with compare_domains' NotLockedError.
+
+def test_a_loop_that_never_reaches_fout_says_so():
+    pll = presets.ALL_PRESETS["mdll_150m_2p4g"]()
+    pll.cfg.fout *= 2                       # N = 32, legal; ring cannot get there
+    sim = pll.simulate(8_000, seed=1)
+    assert any("never reached" in n for n in sim.notes), sim.notes
+
+
+def test_ilcm_out_of_range_fout_says_so():
+    pll = presets.ALL_PRESETS["ilcm_250m_12g"]()
+    pll.cfg.fout *= 2                       # 24 GHz, N = 48; FTL range is Hz-level
+    sim = pll.simulate(8_000, seed=1)
+    assert any("never reached" in n for n in sim.notes), sim.notes
+
+
+@pytest.mark.parametrize("name", [n for n in presets.ALL_PRESETS
+                                  if not n.startswith("bench_")])
+def test_stock_presets_reach_fout_and_stay_quiet(name):
+    sim = presets.ALL_PRESETS[name]().simulate(8_000, seed=1)
+    assert not any("never reached" in n for n in sim.notes), sim.notes
+
+
+def test_never_locked_predicate_threshold():
+    from pllsim.core.boundaries import LOCK_FERR_FRACTION, never_locked
+    fref = 100e6
+    assert never_locked(1.01 * LOCK_FERR_FRACTION * fref, fref)
+    assert not never_locked(0.99 * LOCK_FERR_FRACTION * fref, fref)
+
+
+def test_mdll_simulate_refuses_a_non_integer_multiple():
+    # analyze() and both ILCM paths already refused; simulate() ran with a
+    # rounded multiple and reported a result 154 MHz off target
+    pll = presets.ALL_PRESETS["mdll_150m_2p4g"]()
+    pll.cfg.fout *= 1.07
+    with pytest.raises(ValueError, match="integer fout/fref"):
+        pll.simulate(2_000, seed=1)

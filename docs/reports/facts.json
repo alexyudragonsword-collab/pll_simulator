@@ -3,7 +3,7 @@
   "architectures": 6,
   "presets": 15,
   "examples": 21,
-  "tests": 653,
+  "tests": 770,
   "releases": 14,
   "benchmarks": [
     {

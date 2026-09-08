@@ -2,6 +2,20 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-04 · A loop that never reaches fout now says so (last audit hole)
+
+- The fref/fout-edit audit's remaining hole: ILCM fout×2 and MDLL fout×2
+  are legal integer multiples the oscillator cannot reach; the run railed
+  and read as an ordinary result 12 / 2.4 GHz off target, no lock detector
+  to hint.  `postprocess` now measures the tail frequency error against
+  `f0` and appends a note; criterion (`never_locked`, fref/1000 over the
+  last 5000 cycles) lives in `core/boundaries.py` and `compare_domains`'
+  NotLockedError calls the same function.  All 15 stock presets stay quiet
+  at 8k cycles (parametrized test); note reaches the bridge.
+- Same audit, second finding: `MDLL.simulate` never validated the integer
+  multiple (`analyze` and ILCM did), so fout×1.07 ran on a rounded N and
+  reported 154 MHz off.  It refuses now, like the others.  770 tests.
+
 ## 2026-08-27 · The divider now follows the frequency plan (refuse → derive)
 
 - Supersedes the refusal below as the *first* line of defense, on the
