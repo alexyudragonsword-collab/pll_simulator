@@ -2,6 +2,34 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-09 · P3-19: the phone gets the Fit page (11 of 13)
+
+- Bridge `fit(text, mode, preset)`: pasted (offset, dBc/Hz) text through
+  `fit.load_pn_csv`, empty = the synthetic example; Leeson / locked /
+  budget, plot + cursor.  Drawer tab "拟合 / Fit"; the tab count in
+  `test_android_parity` is 11 on purpose.  Harness drives synthetic, a
+  pasted CSV in another separator, and junk (refused in-band).
+- MonteCarlo deferred (viable serially, but a phone-minute with no
+  progress channel through the one-shot bridge reads as hung); Export out
+  for good.  Reasons in `cairn/android-app.md` Parity.
+
+## 2026-09-09 · P3 (part 1): engineering notation, config files, the `pllsim` command
+
+- **Notation** (`guiutil.parse_number` / `fmt_number`): forms, `--set` and
+  the sensitivity gate all speak `19.2M`, `680p`, `2ms`, `100k`; ratios
+  between 1e-3 and 1e3 stay plain.  Parsing scales the decimal string, not
+  the float, so a round trip is ULP-exact; an empty tuple shows as `()`
+  because a blank box means None (the INL polynomial used to be unloadable).
+- **Config files** (`config_to_json` / `config_from_json`, format
+  `pllsim-config/1`): preset name + every form field as a JSON number,
+  bit-exact round trip over all 18 presets; unknown preset or field refused
+  by name.  Web download/upload, Qt Save/Load, phone text box (bridge
+  `config_export` / `config_import`); see `cairn/android-app.md` Parity.
+- **CLI** `pllsim` (`src/pllsim/cli.py`): presets / fields / analyze /
+  simulate (+CSV record) / sweep (a refusal is a row) / corners / export /
+  config (--out, --check); `--config FILE` + `--set` compose.  Tests drive
+  main(argv) and check the numbers against the library it wraps.
+
 ## 2026-09-09 · P2-16: MASH-2 for SSPLL/SPLL measured, deferred
 
 - Residue spans measured on the modulators: MASH-1 1 UI, MASH-2 2 UI,

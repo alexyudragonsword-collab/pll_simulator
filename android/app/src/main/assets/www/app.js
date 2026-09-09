@@ -179,6 +179,55 @@ async function loadPreset(name) {
   }
 }
 
+/* ----------------------------------------------------- config file */
+// the phone has no file dialog: the JSON goes through a text box, out by
+// copy and in by paste, and lands in the form as ordinary edits
+$("wb-cfg-export").addEventListener("click", async () => {
+  const note = $("wb-cfg-note");
+  try {
+    const r = await call("config_export", wbArgs());
+    $("wb-cfg-text").value = r.json;
+    note.textContent = r.filename;
+  } catch (e) {
+    note.textContent = String(e.message || e);
+  }
+});
+$("wb-cfg-copy").addEventListener("click", () => {
+  const ta = $("wb-cfg-text");
+  ta.focus(); ta.select();
+  const done = () => { $("wb-cfg-note").textContent = lang === "zh" ? "已复制" : "copied"; };
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(ta.value).then(done, () => document.execCommand("copy") && done());
+  } else if (document.execCommand("copy")) {
+    done();
+  }
+});
+$("wb-cfg-import").addEventListener("click", async () => {
+  const note = $("wb-cfg-note");
+  try {
+    const r = await call("config_import", { text: $("wb-cfg-text").value });
+    if (candidate) {                 // a file always names a preset
+      candidate = "";
+      $("wb-candidate").hidden = true;
+      $("preset").disabled = false;
+    }
+    $("preset").value = r.preset;
+    await loadPreset(r.preset);
+    Object.entries(r.overrides).forEach(([path, text]) => {
+      const inp = document.querySelector(`#form input[data-path="${path}"]`);
+      if (!inp) return;
+      if (inp.dataset.kind === "bool") inp.checked = text === "true";
+      else inp.value = text;
+    });
+    markEdited();
+    const n = Object.keys(r.overrides).length;
+    note.textContent = (lang === "zh" ? `已载入 ${r.preset}，${n} 个字段被修改`
+                                      : `loaded ${r.preset}, ${n} edited field(s)`);
+  } catch (e) {
+    note.textContent = String(e.message || e);
+  }
+});
+
 /* ---------------------------------------------------------- actions */
 async function runAnalyze() {
   busy("analyze…", "analyze…", true);
@@ -1272,6 +1321,31 @@ const runFomVco = fomRunner("vco", "fom-vco-out", async () => {
 document.querySelector('#tabs button[data-tab="fom"]')
   .addEventListener("click", () => { runFomPll(); runFomVco(); });
 
+/* ---------------------------------------------------------- fit */
+async function runFit() {
+  busy("fit…", "fit…", true);
+  const out = $("fit-out");
+  try {
+    const r = await call("fit", {
+      text: $("fit-text").value, mode: $("fit-mode").value,
+      preset: $("fit-preset").value,
+    });
+    let html = `<p class="muted">${r.n_points} ${lang === "zh" ? "点" : "points"}, ` +
+      `${(+r.f_lo_hz).toPrecision(3)} Hz - ${(+r.f_hi_hz).toPrecision(3)} Hz` +
+      (r.demo ? (lang === "zh" ? "（合成示例）" : " (synthetic example)") : "") + `</p>`;
+    html += tableHtml(Object.entries(r.result).map(([k, v]) => ({ metric: k, value: v })));
+    if (r.rows.length) html += tableHtml(r.rows);
+    html += notesHtml(r.notes);
+    html += pngHtml(r.png, r.cursor);
+    out.innerHTML = html;
+  } catch (e) {
+    out.innerHTML = errHtml(e);
+  } finally {
+    busy("", "", false);
+  }
+}
+$("fit-run").addEventListener("click", runFit);
+
 /* ---------------------------------------------------------- boot */
 async function boot() {
   applyLang();
@@ -1289,6 +1363,8 @@ async function boot() {
       presets.filter(p => p.two_point).map(opt).join("");
     $("dr-preset").innerHTML =
       presets.filter(p => p.frac).map(opt).join("");
+    $("fit-preset").innerHTML = presets.map(opt).join("");
+    $("fit-preset").value = "spll_frac_52m_6p253g";
     updateSpsNote();
     updateDriftRate();
     refreshSpurNotes();

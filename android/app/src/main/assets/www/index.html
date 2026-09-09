@@ -54,6 +54,7 @@
   <button data-tab="mod" data-zh="调制" data-en="Mod">调制</button>
   <button data-tab="drift" data-zh="温漂" data-en="Drift">温漂</button>
   <button data-tab="bench" data-zh="对标" data-en="Papers">对标</button>
+  <button data-tab="fit" data-zh="拟合" data-en="Fit">拟合</button>
   <button data-tab="units" data-zh="单位换算" data-en="PN units">单位换算</button>
   <button data-tab="fom" data-zh="FoM" data-en="FoM">FoM</button>
 </nav>
@@ -72,6 +73,21 @@
     <p id="preset-info" class="muted"></p>
     <p id="edited" class="muted" hidden></p>
     <div id="form"></div>
+    <details id="wb-cfg">
+      <summary data-zh="配置文件（JSON：保存 / 载入这套参数）"
+               data-en="Config file (JSON: save / load this parameter set)">配置文件（JSON：保存 / 载入这套参数）</summary>
+      <div class="grid3">
+        <button id="wb-cfg-export" class="ghost"
+                data-zh="导出到文本框" data-en="export to text">导出到文本框</button>
+        <button id="wb-cfg-copy" class="ghost"
+                data-zh="复制" data-en="copy">复制</button>
+        <button id="wb-cfg-import" class="ghost"
+                data-zh="从文本框载入" data-en="load from text">从文本框载入</button>
+      </div>
+      <textarea id="wb-cfg-text" rows="7" spellcheck="false"
+                autocapitalize="off" autocorrect="off"></textarea>
+      <p id="wb-cfg-note" class="muted"></p>
+    </details>
   </section>
 
   <section class="card">
@@ -356,6 +372,29 @@
   </section>
 </div>
 </main>
+
+<div id="tab-fit" class="tab" hidden>
+  <section class="card">
+    <h2 data-zh="实测相噪导入与拟合" data-en="Measured phase-noise fitting">实测相噪导入与拟合</h2>
+    <p class="muted"
+       data-zh="把仪器导出的 (offset_hz, dBc/Hz) 两列贴进来（E5052/FSWP 导出均可，分隔符随意）；留空则用合成示例（Wu'19 类 SPLL + 0.5 dB 仪器噪声）。"
+       data-en="Paste the analyzer's (offset_hz, dBc/Hz) columns (E5052/FSWP exports, any separator); leave empty for the synthetic example (Wu'19-class SPLL + 0.5 dB instrument noise).">把仪器导出的 (offset_hz, dBc/Hz) 两列贴进来（E5052/FSWP 导出均可，分隔符随意）；留空则用合成示例（Wu'19 类 SPLL + 0.5 dB 仪器噪声）。</p>
+    <textarea id="fit-text" rows="6" spellcheck="false" autocapitalize="off"
+              autocorrect="off" placeholder="1e3, -95.2&#10;1e4, -105.7&#10;..."></textarea>
+    <div class="grid3">
+      <label><span data-zh="拟合模式" data-en="fit mode">拟合模式</span>
+        <select id="fit-mode">
+          <option value="leeson" data-zh="自由振荡 (Leeson)" data-en="free-running (Leeson)">自由振荡 (Leeson)</option>
+          <option value="locked" data-zh="闭环频谱" data-en="locked spectrum">闭环频谱</option>
+          <option value="budget" data-zh="预算归因" data-en="budget attribution">预算归因</option>
+        </select></label>
+      <label><span data-zh="归因用的预算基准 preset" data-en="budget baseline preset">归因用的预算基准 preset</span>
+        <select id="fit-preset"></select></label>
+    </div>
+    <button id="fit-run" class="primary" data-zh="拟合" data-en="Fit">拟合</button>
+    <div id="fit-out"></div>
+  </section>
+</div>
 
 <div id="tab-units" class="tab" hidden>
   <section class="card">

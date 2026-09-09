@@ -40,6 +40,8 @@ from .guiutil import (
     GROUP_LABELS,
     apply_overrides,
     arch_kind,
+    config_from_json,
+    config_to_json,
     enumerate_fields,
     fine_oversample_note,
     fine_record_mb,
@@ -698,9 +700,120 @@ def _drift(preset: str, eps_total: float = 0.03, ramp_cycles: int = 60_000,
     }
 
 
+def _fit_data(text: str):
+    """(f, ldbc, demo) from pasted CSV text, or the web page's synthetic
+    example when the box is empty."""
+    import io
+
+    from .core.jitter import ldbc_from_sphi
+    from .fit import load_pn_csv
+    if text and text.strip():
+        f, l = load_pn_csv(io.StringIO(text))
+        return f, l, False
+    pll = presets.spll_frac_52m_6p253g()
+    ar = pll.analyze()
+    sel = (ar.f >= 3e3) & (ar.f <= 40e6)
+    rng = np.random.default_rng(42)
+    f = ar.f[sel]
+    l = ldbc_from_sphi(ar.pn_breakdown["total"][sel]) + rng.normal(0, 0.5, int(sel.sum()))
+    return f, l, True
+
+
+def _fit(text: str = "", mode: str = "leeson",
+         preset: str = "spll_frac_52m_6p253g") -> dict:
+    """Measured phase-noise fitting: the web/Qt Fit page over pasted CSV.
+
+    A phone has no file picker worth wiring (zero permissions), but every
+    analyzer exports (offset, dBc/Hz) rows that paste into a text box.
+    Empty text runs the same synthetic example the desktop pages offer, so
+    the tab demonstrates itself.  ``mode``: leeson | locked | budget.
+    """
+    import matplotlib
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    from .fit import attribute_budget, fit_closed_loop, fit_leeson
+    f, l, demo = _fit_data(text)
+    fig, ax = plt.subplots(figsize=(6.4, 4.0))
+    ax.semilogx(f, l, ".", ms=3, alpha=0.5, label="data")
+    out: dict[str, Any] = {"n_points": int(f.size), "f_lo_hz": float(f[0]),
+                           "f_hi_hz": float(f[-1]), "demo": demo, "mode": mode,
+                           "rows": [], "notes": []}
+    if mode == "leeson":
+        lee = fit_leeson(f, l)
+        out["result"] = {"L(1MHz) 1/f^2 [dBc/Hz]": round(float(lee.pn_dbchz), 1),
+                         "1/f^3 corner [kHz]": round(float(lee.pn_f1f3 / 1e3), 1),
+                         "floor [dBc/Hz]": round(float(lee.pn_floor_dbchz), 1),
+                         "residual [dB rms]": round(float(lee.residual_db_rms), 2)}
+        k3, k2, fl = lee.k
+        ax.semilogx(f, 10 * np.log10((k3 / f**3 + k2 / f**2 + fl) / 2), "r",
+                    lw=1.8, label="Leeson fit")
+    elif mode == "locked":
+        cl = fit_closed_loop(f, l)
+        out["result"] = {"in-band [dBc/Hz]": round(float(cl.inband_dbchz), 1),
+                         "f_3db [kHz]": round(float(cl.f_3db / 1e3), 1),
+                         "UGB est [kHz]": round(float(cl.f_ugb / 1e3), 1),
+                         "peaking [dB]": round(float(cl.peaking_db), 2),
+                         "skirt L(1M) as seen [dBc/Hz]": round(float(cl.osc.pn_dbchz), 1),
+                         "residual [dB rms]": round(float(cl.residual_db_rms), 2)}
+        out["notes"].append("the skirt triple only upper-bounds the VCO and PM is "
+                            "not readable from a total-noise plot (ex16)")
+    elif mode == "budget":
+        if preset not in presets.ALL_PRESETS:
+            raise KeyError(f"unknown preset {preset!r}")
+        att = attribute_budget(presets.ALL_PRESETS[preset](), f, l)
+        out["result"] = {"residual [dB rms]": round(float(att.residual_db_rms), 2)}
+        out["rows"] = [{"group": "+".join(g), "factor": round(float(att.factors[g]), 2),
+                        "dB": round(float(att.factors_db[g]), 1)} for g in att.groups]
+        out["notes"].extend(att.notes)
+    else:
+        raise ValueError("mode must be leeson, locked or budget")
+    ax.set_xlabel("offset [Hz]")
+    ax.set_ylabel("L(f) [dBc/Hz]")
+    ax.legend()
+    ax.grid(alpha=0.3, which="both")
+    out.update(_plot(fig))
+    plt.close(fig)
+    return out
+
+
+def _config_export(preset: str = "", overrides: dict[str, str] | None = None,
+                   candidate: str = "") -> dict:
+    """The current parameter set as a config file's text.
+
+    The phone has no file dialog worth the name, so the page shows the JSON
+    in a text box the user copies out of (and pastes back into).
+    """
+    if candidate:
+        raise ValueError("a selector candidate has no preset to rebuild from; "
+                         "it cannot be written as a config file")
+    pll = _build(preset, overrides, candidate)
+    return {"json": config_to_json(pll, preset),
+            "filename": f"{preset}.pllsim.json"}
+
+
+def _config_import(text: str = "") -> dict:
+    """A config file's text back to (preset, edited fields) for the form.
+
+    Only fields that differ from the preset are returned, formatted the way
+    the form shows them, so the page can select the preset, load its form and
+    type the edits in -- and the "edited" marker reads the same as if a
+    person had typed them.
+    """
+    pll, name = config_from_json(text)
+    base = {s.path: fmt_value(s.value) for s in enumerate_fields(
+        presets.ALL_PRESETS[name]().cfg)}
+    edited = {s.path: fmt_value(s.value) for s in enumerate_fields(pll.cfg)
+              if fmt_value(s.value) != base.get(s.path)}
+    return {"preset": name, "overrides": edited}
+
+
 _METHODS: dict[str, Callable[..., Any]] = {
     "list_presets": _list_presets,
     "fields": _fields,
+    "config_export": _config_export,
+    "config_import": _config_import,
+    "fit": _fit,
     "analyze": _analyze,
     "bank": _bank,
     "fine_info": _fine_info,

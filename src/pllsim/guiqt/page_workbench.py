@@ -1,13 +1,17 @@
 """Architecture workbench: preset -> full parameter edit -> analyze/simulate."""
 from __future__ import annotations
 
+from pathlib import Path
+
 import matplotlib.pyplot as plt
 import numpy as np
 from PySide6.QtWidgets import (
     QCheckBox,
     QComboBox,
+    QFileDialog,
     QHBoxLayout,
     QLabel,
+    QMessageBox,
     QPushButton,
     QSpinBox,
     QSplitter,
@@ -55,6 +59,14 @@ class WorkbenchPage(Page):
         self.info = QLabel("")
         top.addWidget(self.info)
         top.addStretch(1)
+        # a config file is the preset plus the edited fields, bit-exact; it
+        # loads through the same handoff path the selector uses
+        self.btn_save_cfg = tr(QPushButton(), "保存配置…", "Save config…")
+        self.btn_save_cfg.clicked.connect(self._save_config_dialog)
+        top.addWidget(self.btn_save_cfg)
+        self.btn_load_cfg = tr(QPushButton(), "载入配置…", "Load config…")
+        self.btn_load_cfg.clicked.connect(self._load_config_dialog)
+        top.addWidget(self.btn_load_cfg)
         lay.addLayout(top)
 
         split = QSplitter()
@@ -145,12 +157,58 @@ class WorkbenchPage(Page):
         right.addTab(stab, "Simulate (time domain)")
 
         self._handoff = None       # a config handed over by the selector
+        self._handoff_preset = None   # the preset a loaded file rebuilds from
         self._rebuild_form(self.preset.currentText())
+
+    # -------------------------------------------------------- config files
+    def source_preset(self) -> str | None:
+        """The preset name a config file would rebuild this editor from."""
+        if self._handoff is None:
+            return self.preset.currentText()
+        return self._handoff_preset
+
+    def save_config(self, path: str) -> str:
+        """Write the current parameter set to `path`; returns the preset."""
+        from ..guiutil import config_to_json
+        src = self.source_preset()
+        if src is None:
+            raise ValueError("a selector candidate has no preset to rebuild "
+                             "from; it cannot be written as a config file")
+        Path(path).write_text(config_to_json(self._pll(), src), encoding="utf-8")
+        return src
+
+    def load_config_file(self, path: str) -> str:
+        """Load a config file into the editor; returns the preset it names."""
+        from ..guiutil import config_from_json
+        pll, name = config_from_json(Path(path).read_text(encoding="utf-8"))
+        self.load_config(pll, f"{Path(path).name} ({name})")
+        self._handoff_preset = name
+        return name
+
+    def _save_config_dialog(self):
+        src = self.source_preset() or "config"
+        path, _ = QFileDialog.getSaveFileName(
+            self, "pllsim", f"{src}.pllsim.json", "pllsim config (*.json)")
+        if path:
+            try:
+                self.save_config(path)
+            except Exception as e:                       # noqa: BLE001
+                QMessageBox.warning(self, "pllsim", f"{type(e).__name__}: {e}")
+
+    def _load_config_dialog(self):
+        path, _ = QFileDialog.getOpenFileName(
+            self, "pllsim", "", "pllsim config (*.json)")
+        if path:
+            try:
+                self.load_config_file(path)
+            except Exception as e:                       # noqa: BLE001
+                QMessageBox.warning(self, "pllsim", f"{type(e).__name__}: {e}")
 
     # ------------------------------------------------------------- helpers
     def load_preset(self, name: str) -> None:
         """Show `name` in the editor.  Used by the selector handoff."""
         self._handoff = None
+        self._handoff_preset = None
         if name in presets.ALL_PRESETS:
             self.preset.setCurrentText(name)
 
@@ -166,6 +224,7 @@ class WorkbenchPage(Page):
 
     def _rebuild_form(self, name: str):
         self._handoff = None
+        self._handoff_preset = None
         self._show_config(presets.ALL_PRESETS[name](), "")
 
     def _show_config(self, pll, label: str):

@@ -402,3 +402,54 @@ def test_fom_bridge_reports_bad_input_in_the_envelope(kwargs):
     reply = json.loads(appbridge.call("fom", json.dumps(kwargs)))
     assert reply["ok"] is False, kwargs
     assert reply["error"]
+
+
+# ------------------------------------------------------------ config file
+
+def test_config_export_import_round_trip_through_the_text_box():
+    """The phone's file dialog is a text box: export -> copy -> paste ->
+    import must hand the form the same preset and the same edits."""
+    exp = call("config_export", preset="spll_frac_52m_6p253g",
+               overrides={"osc.pn_dbchz": "-120", "fll_i": "3u"})
+    assert exp["filename"] == "spll_frac_52m_6p253g.pllsim.json"
+    imp = call("config_import", text=exp["json"])
+    assert imp["preset"] == "spll_frac_52m_6p253g"
+    assert imp["overrides"] == {"osc.pn_dbchz": "-120", "fll_i": "3u"}
+
+
+def test_config_import_refuses_junk_in_band():
+    r = json.loads(appbridge.call("config_import", json.dumps({"text": "{\"x\": 1}"})))
+    assert r["ok"] is False and "not a pllsim config" in r["error"]
+
+
+def test_a_candidate_cannot_be_exported_and_says_why():
+    r = json.loads(appbridge.call("config_export", json.dumps({"candidate": "x"})))
+    assert r["ok"] is False and "no preset to rebuild from" in r["error"]
+
+
+# ----------------------------------------------------------------- fit
+
+def test_fit_demo_is_the_library_fit_of_the_same_synthetic():
+    from pllsim.appbridge import _fit_data
+    from pllsim.fit import fit_leeson
+    r = call("fit", text="", mode="leeson")
+    assert r["demo"] is True and r["n_points"] > 100 and r["png"]
+    f, l, _ = _fit_data("")
+    lee = fit_leeson(f, l)
+    assert r["result"]["L(1MHz) 1/f^2 [dBc/Hz]"] == pytest.approx(lee.pn_dbchz, abs=0.05)
+
+
+def test_fit_reads_pasted_csv_in_any_separator():
+    from pllsim.appbridge import _fit_data
+    f, l, _ = _fit_data("")
+    text = "offset_hz;dBc/Hz\n" + "\n".join(f"{x:.6g};{y:.3f}" for x, y in zip(f, l))
+    r = call("fit", text=text, mode="locked")
+    assert r["demo"] is False and r["n_points"] == f.size
+    assert "in-band [dBc/Hz]" in r["result"] and r["notes"]
+
+
+def test_fit_budget_attribution_rows_and_bad_text_in_band():
+    r = call("fit", text="", mode="budget", preset="spll_frac_52m_6p253g")
+    assert r["rows"] and all({"group", "factor", "dB"} <= set(x) for x in r["rows"])
+    bad = json.loads(appbridge.call("fit", json.dumps({"text": "hello\nworld"})))
+    assert bad["ok"] is False and "no parseable" in bad["error"]

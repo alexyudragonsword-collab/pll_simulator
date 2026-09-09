@@ -66,7 +66,7 @@ Coverage targets: fref = 19.2–500 MHz, fout up to 12 GHz, integrated jitter
 
 ```bash
 pip install -e .          # numpy, scipy, matplotlib
-pytest tests/             # 883 tests: closed-form math + architecture behavior
+pytest tests/             # 944 tests: closed-form math + architecture behavior
 python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 ```
 
@@ -78,7 +78,23 @@ pllsim-web
 
 pip install -e .[guiqt]   # native desktop (PySide6), bilingual zh/EN
 pllsim-gui                # or: python -m pllsim.guiqt
+
+pllsim presets                                   # no GUI at all: the library from a shell
+pllsim analyze sspll_19p2m_4p8g --set osc.pn_dbchz=-118 --set fll_i=1u
+pllsim simulate cppll_frac_38p4m_6g --cycles 200k --start-offset=-5M --json
+pllsim sweep spll_100m_8g --field cp.icp --values 0.5m,1m,2m
+pllsim corners adpll_100m_10g          # PVT report;  pllsim export ... --out dir
+pllsim config sspll_19p2m_4p8g --set fll_i=1u --out my.pllsim.json   # then --config my.pllsim.json anywhere
 ```
+
+Every field takes the forms' notation — `19.2M`, `680p`, `2ms`, `100k` — in
+the GUIs, in `--set`, and in the sensitivity gate that drives them.  A
+**config file** is a preset name plus the edited fields, stored as JSON
+numbers so it round-trips bit-exactly; the web workbench downloads and
+uploads it, the Qt one has Save/Load buttons, the phone passes it through a
+text box (copy out, paste in), and `pllsim config --check` says whether a
+file still loads against this version — a field the code no longer has is
+refused with its name, never dropped.
 
 Pages (both flavors): architecture workbench (preset -> edit every Config
 field -> analyze/simulate with plots), loop synthesis, architecture
@@ -289,8 +305,9 @@ src/pllsim/
   guiqt/       PySide6 desktop GUI      webgui/  Streamlit web GUI
   corners.py  fit.py  modulation.py  montecarlo.py  selector.py
   settling.py  synth.py  validation.py
-  guiutil.py   GUI-support introspection (no GUI dependency)
+  guiutil.py   GUI-support introspection (no GUI dependency), config files
   appbridge.py JSON bridge for embedded hosts (the Android app)
+  cli.py       the `pllsim` command: analyze / simulate / sweep / corners / export / config
   plotting.py  presets.py
 examples/      ex01..ex21 (plots into examples/out/)
 tests/         closed-form core math + architecture-level regressions
