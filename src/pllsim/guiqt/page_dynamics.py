@@ -70,7 +70,7 @@ class ModulationPage(Page):
         n_cyc = int(float(self.n_cyc.text()))
         return modulation_run(presets.ALL_PRESETS[nm](), rb, dp, n_cyc, seed=2)
 
-    def render(self, run):
+    def show_result(self, run):
         e = run.evm
         self.metrics.set_metrics([
             ("EVM", f"{e['evm_pct']:.2f} %"),
@@ -81,7 +81,7 @@ class ModulationPage(Page):
         self.figs.set_figs([fig])
 
     def _go(self):
-        self.run_async(self.compute, self.render, self.btn)
+        self.run_async(self.compute, self.show_result, self.btn)
 
 
 class HopSettlingPage(Page):
@@ -143,7 +143,7 @@ class HopSettlingPage(Page):
                             n_cycles=int(float(self.n_cyc.text())),
                             seed=int(float(self.seed.text())))
 
-    def render(self, r):
+    def show_result(self, r):
         self.metrics.set_metrics([
             ("t_freq", f"{r.t_freq_s * 1e6:.1f} us"
              if np.isfinite(r.t_freq_s) else "not settled"),
@@ -169,7 +169,7 @@ class HopSettlingPage(Page):
         self.figs.set_figs([fig])
 
     def _go(self):
-        self.run_async(self.compute, self.render, self.btn, self.btn_stats)
+        self.run_async(self.compute, self.show_result, self.btn, self.btn_stats)
 
     def compute_stats(self):
         nm = self.preset.currentText()
@@ -236,7 +236,7 @@ class DriftPage(Page):
         start = int(float(self.start.text()))
         return drift_run(presets.ALL_PRESETS[nm](), eps, n_ramp, start, seed=3)
 
-    def render(self, run):
+    def show_result(self, run):
         self.metrics.set_metrics([
             ("rate/mu", f"{run.rate_over_mu:.2f}x"),
             ("peak lag", f"{run.peak_lag * 100:.2f} %"),
@@ -249,4 +249,4 @@ class DriftPage(Page):
         self.figs.set_figs([fig])
 
     def _go(self):
-        self.run_async(self.compute, self.render, self.btn)
+        self.run_async(self.compute, self.show_result, self.btn)

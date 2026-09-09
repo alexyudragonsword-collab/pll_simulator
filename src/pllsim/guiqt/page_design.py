@@ -28,7 +28,7 @@ from ..synth import (
     sweepable_presets,
 )
 from .i18n import L, tr
-from .widgets import FigList, Page, float_edit, in_scroll, table_from_rows
+from .widgets import FigList, Page, clear_layout, float_edit, in_scroll, table_from_rows
 
 
 def _filt_rows(filt):
@@ -152,11 +152,12 @@ class SynthesisPage(Page):
         self.sw_hi = float_edit("3e6")
         self.sw_n = float_edit("8")
         self.sw_pm = float_edit("")          # blank = per-architecture default
-        for lab, w in [("preset", self.sw_preset),
-                       ("UGB from [Hz]", self.sw_lo),
-                       ("UGB to [Hz]", self.sw_hi), ("points", self.sw_n),
-                       ("PM [deg] (blank = arch default)", self.sw_pm)]:
-            f4.addRow(lab, w)
+        rows: list[tuple[str, QWidget]] = [
+            ("preset", self.sw_preset), ("UGB from [Hz]", self.sw_lo),
+            ("UGB to [Hz]", self.sw_hi), ("points", self.sw_n),
+            ("PM [deg] (blank = arch default)", self.sw_pm)]
+        for lab, wid in rows:
+            f4.addRow(lab, wid)
         f4.addRow(QLabel(f"{len(names)} of {len(presets.ALL_PRESETS)} presets: "
                          "ILCM/MDLL have no loop to re-synthesize"))
         self.sw_btn = tr(QPushButton(), "扫描", "Sweep")
@@ -168,10 +169,7 @@ class SynthesisPage(Page):
 
     @staticmethod
     def _set(layout, widget):
-        while layout.count():
-            w = layout.takeAt(0).widget()
-            if w is not None:
-                w.deleteLater()
+        clear_layout(layout)
         layout.addWidget(widget)
 
     def _go_cp(self):
@@ -276,10 +274,7 @@ class SelectorPage(Page):
                 modulation=self.mod.isChecked()))
 
         def done(rep):
-            while self._body.count():
-                w = self._body.takeAt(0).widget()
-                if w is not None:
-                    w.deleteLater()
+            clear_layout(self._body)
             rows = []
             for c in sorted(rep.candidates, key=lambda c: c.key):
                 rows.append({

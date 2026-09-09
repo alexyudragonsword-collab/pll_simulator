@@ -36,6 +36,7 @@ from .widgets import (
     FigList,
     MetricRow,
     Page,
+    clear_layout,
     float_edit,
     in_scroll,
     table_from_rows,
@@ -228,10 +229,7 @@ class WorkbenchPage(Page):
         self._show_config(presets.ALL_PRESETS[name](), "")
 
     def _show_config(self, pll, label: str):
-        while self._form_lay.count():
-            w = self._form_lay.takeAt(0).widget()
-            if w is not None:
-                w.deleteLater()
+        clear_layout(self._form_lay)
         self.form = ConfigForm(pll.cfg)
         self._form_lay.addWidget(self.form)
         head = f"{label} — " if label else ""
@@ -248,10 +246,7 @@ class WorkbenchPage(Page):
 
     @staticmethod
     def _clear(lay):
-        while lay.count():
-            w = lay.takeAt(0).widget()
-            if w is not None:
-                w.deleteLater()
+        clear_layout(lay)
 
     # ------------------------------------------------------------- analyze
     def compute_analyze(self):

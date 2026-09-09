@@ -91,6 +91,7 @@ class MainWindow(QMainWindow):
         leaving you to find the name in a dropdown yourself.
         """
         wb = self.pages[PAGES.index(WorkbenchPage)]
+        assert isinstance(wb, WorkbenchPage)
         wb.load_preset(preset)
         self.nav.setCurrentRow(PAGES.index(WorkbenchPage))
 

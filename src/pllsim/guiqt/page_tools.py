@@ -252,7 +252,7 @@ class ExportPage(Page):
             "the generated README."))
         self.list = QListWidget()
         self.list.addItems(list(presets.ALL_PRESETS))
-        self.list.setSelectionMode(QAbstractItemView.ExtendedSelection)
+        self.list.setSelectionMode(QAbstractItemView.SelectionMode.ExtendedSelection)
         self.list.setCurrentRow(list(presets.ALL_PRESETS)
                                 .index("spll_frac_52m_6p253g"))
         self.list.setMaximumHeight(180)

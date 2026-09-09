@@ -105,6 +105,16 @@ class Page(QWidget):
         QMessageBox.warning(self, "pllsim", msg)
 
 
+def clear_layout(lay) -> None:
+    """Delete every widget a layout holds.  One copy: eight pages carried
+    this loop, and every one indexed takeAt()'s Optional without a guard."""
+    while lay.count():
+        item = lay.takeAt(0)
+        w = item.widget() if item is not None else None
+        if w is not None:
+            w.deleteLater()
+
+
 class ConfigForm(QWidget):
     """Auto-generated editor for a Config dataclass tree (via guiutil)."""
 
@@ -348,11 +358,7 @@ class FigList(QWidget):
         self._lay.setContentsMargins(0, 0, 0, 0)
 
     def set_figs(self, figs):
-        while self._lay.count():
-            item = self._lay.takeAt(0)
-            w = item.widget()
-            if w is not None:
-                w.deleteLater()
+        clear_layout(self._lay)
         for fig in figs:
             holder = QWidget()
             box = QVBoxLayout(holder)
@@ -368,14 +374,14 @@ class FigList(QWidget):
             canvas = FigureCanvasQTAgg(fig)
             h = int(fig.get_size_inches()[1] * fig.dpi)
             canvas.setMinimumHeight(max(h, 220))
-            canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            canvas.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             # the toolbar must outlive this scope and be found again by the
             # tests, so it is parented into the holder rather than floated
             bar = NavigationToolbar2QT(canvas, holder)
             bar.setIconSize(bar.iconSize() * 0.75)
             box.addWidget(bar)
             box.addWidget(canvas)
-            holder.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Fixed)
+            holder.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
             self._lay.addWidget(holder)
             # a readout cursor per data axes.  Held on the canvas so it lives
             # exactly as long as the widget does: a cursor that is only
@@ -428,10 +434,7 @@ class MetricRow(QWidget):
         self._lay.setContentsMargins(0, 4, 0, 4)
 
     def set_metrics(self, items: list[tuple[str, str]]):
-        while self._lay.count():
-            w = self._lay.takeAt(0).widget()
-            if w is not None:
-                w.deleteLater()
+        clear_layout(self._lay)
         for name, val in items:
             lab = QLabel(f"<b>{name}</b><br><span style='font-size:16px'>"
                          f"{val}</span>")

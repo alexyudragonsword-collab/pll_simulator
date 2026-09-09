@@ -29,7 +29,7 @@ from ..guiutil import (
 )
 from ..plotting import plot_ipn_pie, plot_spur_spectrum
 from .i18n import tr
-from .widgets import FigList, Page, float_edit, table_from_rows
+from .widgets import FigList, Page, clear_layout, float_edit, table_from_rows
 
 FRAC_PRESETS = frac_presets()
 
@@ -147,10 +147,7 @@ class SpursPage(Page):
 
     def render_ref(self, res):
         rows, notes = res
-        while self._body.count():
-            w = self._body.takeAt(0).widget()
-            if w is not None:
-                w.deleteLater()
+        clear_layout(self._body)
         if rows:
             self._body.addWidget(table_from_rows(rows))
         for n in notes:
@@ -182,10 +179,7 @@ class SpursPage(Page):
                           key=lambda kv: -kv[1])
 
         def done(tab):
-            while self._body.count():
-                w = self._body.takeAt(0).widget()
-                if w is not None:
-                    w.deleteLater()
+            clear_layout(self._body)
             self._body.addWidget(table_from_rows(
                 [{"offset": k.split("@")[1], "spur [dBc]": f"{v:.1f}"}
                  for k, v in tab]))
@@ -293,10 +287,7 @@ class FitPage(Page):
 
         def done(res):
             kind, r = res
-            while self._body.count():
-                w = self._body.takeAt(0).widget()
-                if w is not None:
-                    w.deleteLater()
+            clear_layout(self._body)
             fig, ax = plt.subplots(figsize=(8, 4.2))
             ax.semilogx(f, l, ".", ms=3, alpha=0.5, label="data")
             if kind == "leeson":
@@ -407,10 +398,7 @@ class BenchmarksPage(Page):
                     for label, mk, pub in self.LIVE]
 
         def done(rows):
-            while self._body.count():
-                w = self._body.takeAt(0).widget()
-                if w is not None:
-                    w.deleteLater()
+            clear_layout(self._body)
             self._body.addWidget(table_from_rows(rows))
             self._body.addWidget(tr(
                 QLabel(),

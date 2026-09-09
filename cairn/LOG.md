@@ -26,6 +26,15 @@ This file records substantive progress in reverse-chronological order — newest
 - `windows-exe` dispatched from main after the reusable-workflow rewrite:
   green in 3.5 min through `windows-exe-build.yml`, artifact produced.
   P1-B2 closed.
+- Pitfall: the local mypy gate passed and CI's failed with 19 errors —
+  CI resolves the newest numpy (2.4: no `trapz` in the stubs) and PySide6
+  stubs, the container had older ones.  Reproduced in a fresh venv
+  (`uv venv` + latest wheels) and fixed for real: three Qt pages had
+  named their result hook `render`, shadowing `QWidget.render` with a
+  foreign signature (now `show_result`); eight layout-clearing loops
+  indexed `takeAt()`'s Optional (one `clear_layout`); Qt enums scoped;
+  the trapezoid shim resolved through `vars(np)`.  Run mypy in a fresh
+  venv before claiming the gate, not against whatever the container has.
 
 ## 2026-09-09 · P3-19: the phone gets the Fit page (11 of 13)
 

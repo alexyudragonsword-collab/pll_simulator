@@ -224,7 +224,7 @@ def test_modulation_page_computes_an_evm(app):
     page.n_cyc.setText("60000")
     run = page.compute()                  # guiutil.ModulationRun since 2026-09
     assert 0.0 < run.evm["evm_pct"] < 100.0
-    page.render(run)
+    page.show_result(run)
     page.deleteLater()
 
 
@@ -235,7 +235,7 @@ def test_hop_settling_page_computes_and_renders(app):
     page.hop.setText("-40e6")
     r = page.compute()
     assert r.f_to != 0.0
-    page.render(r)
+    page.show_result(r)
     page.deleteLater()
 
 
@@ -260,7 +260,7 @@ def test_drift_page_computes_a_tracking_lag(app):
     run = page.compute()                  # guiutil.DriftRun since 2026-09
     assert run.lag.size == 50_000
     assert run.peak_lag > 0.0, "a drifting gain must leave a tracking lag"
-    page.render(run)
+    page.show_result(run)
     page.deleteLater()
 
 
