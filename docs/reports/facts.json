@@ -1,9 +1,9 @@
 {
-  "version": "0.9.3",
+  "version": "0.9.4",
   "architectures": 6,
   "presets": 18,
   "examples": 21,
-  "tests": 944,
+  "tests": 958,
   "releases": 14,
   "benchmarks": [
     {

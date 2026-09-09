@@ -2,6 +2,13 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-09 · v0.9.4 cut
+
+- `pyproject` 0.9.4 + `docs/release-notes/v0.9.4.md` in one commit, as the
+  rule requires; index.html §11.24, roadmap and deck regenerated against
+  the version.  Merging the PR is the release (auto-release walks the notes
+  directory on push to main).
+
 ## 2026-09-09 · Code hygiene (plan item 22), and the Windows workflow proven
 
 - One source each: `arch/base.dtc_t_target_of` (was five copies of the
