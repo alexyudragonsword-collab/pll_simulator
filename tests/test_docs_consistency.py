@@ -44,11 +44,15 @@ def _collected_test_count() -> int:
 
 
 def test_readme_test_count_is_in_the_right_decade():
-    m = re.search(r"pytest tests/\s+# (\d+) tests", README)
-    assert m, "the README quickstart no longer states a test count"
-    stated, actual = int(m.group(1)), _collected_test_count()
-    assert 0.85 * actual <= stated <= 1.15 * actual, (
-        f"README says {stated} tests, the suite collects {actual}")
+    # both files quote the count in the same quickstart line; this test
+    # read only the README for a year while index.html sat at 452 of 770
+    actual = _collected_test_count()
+    for name, text in (("README", README), ("docs/index.html", INDEX)):
+        m = re.search(r"pytest tests/\s+# (\d+) tests", text)
+        assert m, f"the {name} quickstart no longer states a test count"
+        stated = int(m.group(1))
+        assert 0.85 * actual <= stated <= 1.15 * actual, (
+            f"{name} says {stated} tests, the suite collects {actual}")
 
 
 # the docs quote two different preset counts on purpose: the whole set, and

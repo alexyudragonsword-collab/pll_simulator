@@ -56,14 +56,14 @@ the digital blocks verified with iverilog at zero tolerance, a cycle-true
 wreal/RNM top with golden-CSV testbench for Cadence digital-top regressions,
 and an electrical VAMS netlist for block-level AMS verification).
 
-Coverage targets: fref = 19.2–250 MHz, fout up to 12 GHz, integrated jitter
+Coverage targets: fref = 19.2–500 MHz, fout up to 12 GHz, integrated jitter
 50–200 fs (1 kHz–100 MHz band, configurable).
 
 ## Install & run
 
 ```bash
 pip install -e .          # numpy, scipy, matplotlib
-pytest tests/             # 770 tests: closed-form math + architecture behavior
+pytest tests/             # 779 tests: closed-form math + architecture behavior
 python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 ```
 
@@ -221,6 +221,19 @@ the time-domain FFT within 1 dB across a 0.25–8 MHz error sweep (ex06).
 The bang-bang FTL keeps the free-running frequency aligned; its residual
 sets the spur floor.
 
+### MDLL (`arch/mdll.py`)
+The ILCM's limiting case: once per reference period the ring's edge is not
+pulled toward the reference but *replaced* by it, so accumulated oscillator
+jitter resets to zero every Tref and only the intra-period accumulation
+survives — oscillator noise sees `NTF = 1 − ZOH(f)` (|NTF| ≈ πf/fref at low
+offset, a highpass far more aggressive than any realizable PLL bandwidth);
+the reference path is a flat ×N up to Nyquist.  A bang-bang digital tuning
+loop holds the free-running period at Tvco; its residual frequency error
+makes the per-period phase ramp and hence the fref spur, by the same
+sawtooth mechanism as the ILCM.  Time domain is exact per reference cycle
+with the intra-period record oversampled by default (M = 4), which is where
+its jitter figure lives.  Integer multiples only.
+
 ## Calibration library (`calibration/`)
 
 | Algorithm | Used by | Notes |
@@ -299,7 +312,7 @@ percentage.
   actual current waveform, which puts the reference spur in the FFT
   (`simulate()` then reports it in `spurs_fft`; 0.02 dB against the analytic
   model at M = 512).  M must resolve `cp.t_reset` or the reading comes back
-  low, and both GUIs say so next to the knob.  ILCM and MDLL oversample by
+  low, and all three surfaces say so next to the knob.  ILCM and MDLL oversample by
   default because their jitter figure is defined inside the period.
 * TDC/DTC quantization in-band noise is treated as white in the linear model;
   the deterministic (tonal) component appears in the time domain only.
@@ -314,6 +327,9 @@ percentage.
 * Synthesized flicker is faithful only above max(fref/n_settled,
   fref/65536): below the record's own floor nothing exists, and the 1/f
   generator's chunked synthesis decorrelates across 65536-sample refills.
+  `simulate()` says so in a note whenever its integration band reaches below
+  that floor — only long records get there, since the Welch resolution must
+  first drop under fref/65536.
 * A configured `fout` the oscillator cannot reach (ILCM/MDLL digital tuning
   ranges are finite; a ring railed against its word is still "running") used
   to come back as an ordinary result gigahertz off target.  `simulate()` now

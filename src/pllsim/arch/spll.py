@@ -34,6 +34,7 @@ from .base import (
     PLLBase,
     add_pull_offset,
     attach_fine,
+    flicker_corner_hz,
     no_fine_note,
     pull_hz,
     pull_notes,
@@ -366,7 +367,8 @@ class SPLL(PLLBase):
         if supply_ripple is not None and supply_ripple[1] < 0.45 * c.fref:
             spur_offsets = (spur_offsets or []) + [supply_ripple[1]]
         spur_offsets = add_pull_offset(spur_offsets, c.osc, c.fref)
-        sim = postprocess(sim, int_band=c.int_band, spur_offsets=spur_offsets)
+        sim = postprocess(sim, int_band=c.int_band, spur_offsets=spur_offsets,
+                          flicker_corner_hz=flicker_corner_hz(c))
         if fine is not None:
             return attach_fine(sim, fine, m_os, c.fref, c.int_band, spur_offsets)
         return no_fine_note(sim)

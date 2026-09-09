@@ -28,7 +28,7 @@ designers + jitter-vs-UGB sweep with a dropped-points caption) and
 Benchmarks; v4 added Modulation (two-point GMSK + EVM, with the
 samples-per-symbol caveat computed client-side from `list_presets` frefs)
 and Drift (ramp tracking with the rate-vs-mu precheck as a live caption).
-Still not in the app: Fit, MonteCarlo and Export — 8 of the Qt GUI's 11
+Still not in the app: Fit, MonteCarlo and Export — 10 of the Qt GUI's 13
 pages have app equivalents. What each would actually cost is measured under
 "Parity with the desktop GUIs" below, which corrects the first guess.
 
@@ -87,7 +87,7 @@ pages have app equivalents. What each would actually cost is measured under
 
 ## Parity with the desktop GUIs (audited 2026-08-22, all five closed)
 
-8 of the Qt GUI's 11 pages have app equivalents. The audit found five gaps
+10 of the Qt GUI's 13 pages have app equivalents. The audit found five gaps
 inside those 8 — all fixed the same day, each verified in a real browser:
 
 | gap | where | how it was closed |

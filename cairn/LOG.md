@@ -2,6 +2,34 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-08 · Health check, and P0: the blind spots that contradicted our own rules
+
+- A full audit (code/architecture, tests/CI/tooling, model/docs/product;
+  26 findings, 22 recommendations, plan file) found the risk not in code
+  quality but in verification blind spots.  P0 closes the ones that
+  contradicted stated doctrine:
+  - `docs/index.html` said **452 tests** against 770 — the count test only
+    ever read the README.  It reads both files now.
+  - The deck's binary check `importorskip`'d python-pptx, which CI never
+    installed: it is in the `test` extras now, so it runs instead of skips.
+  - The register promised a runtime note for every boundary; flicker-floor
+    had none.  `postprocess` now takes the run's highest 1/f corner (shared
+    `arch.base.flicker_corner_hz`, wired from all six engines — a spy test
+    proves each one passes it) and notes when the integration band reaches
+    below `flicker_floor_hz`.  Only ≥ 700k-cycle records can get there
+    (Welch RBW must drop under fref/65536), which is why nothing stock ever
+    showed it and why the sweep exemption stands.
+  - Stale prose fixed: "both GUIs" → three surfaces; README gains its
+    missing MDLL section; fref range 19.2–500 MHz (the 500 MHz bench had
+    broken the old bound); cairn counts 48 grid points, 10 of 13 pages.
+- v0.9.3 cut in the same pass: version bump + `docs/release-notes/v0.9.3.md`
+  naming the 13 unreleased changes, index.html §11.23, deck rebuilt and
+  renamed, roadmap regenerated.  Merging it is what tags the release.
+- Findings held for P1+: Python 3.10 not in the CI matrix; bool config
+  fields unreachable from every form; block configs without `__post_init__`;
+  two silent substitutions in export; unbounded tuning laws; pure-Python
+  per-cycle loops as the performance ceiling.  All in the plan file.
+
 ## 2026-09-04 · A loop that never reaches fout now says so (last audit hole)
 
 - The fref/fout-edit audit's remaining hole: ILCM fout×2 and MDLL fout×2

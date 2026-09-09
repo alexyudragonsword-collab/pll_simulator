@@ -34,6 +34,7 @@ from .base import (
     PLLBase,
     add_pull_offset,
     attach_fine,
+    flicker_corner_hz,
     no_fine_note,
     pull_hz,
     pull_notes,
@@ -508,7 +509,8 @@ class CPPLL(PLLBase):
         if c.ref_doubler_duty_err != 0.0:
             spur_offsets = (spur_offsets or []) + [c.fref / 2.0]
         sim = postprocess(sim, settle_frac=0.25, int_band=c.int_band,
-                          spur_offsets=spur_offsets)
+                          spur_offsets=spur_offsets,
+                          flicker_corner_hz=flicker_corner_hz(c))
         if fine is not None:
             sim = attach_fine(sim, fine, m_os, c.fref, c.int_band, spur_offsets)
             sub = tref / m_os
