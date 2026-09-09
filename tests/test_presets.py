@@ -24,6 +24,9 @@ BOUNDS = {
     "bench_markulic16_sspll_40m_10p24g": (120, 230),     # published 176
     "bench_markulic16_sspll_frac_40m_10p25g": (150, 260),  # published 198
     "bench_wu19_spll_frac_52m_6p253g": (55, 105),        # published 75
+    "bench_dadalt03_cppll_311m_2p488g": (180, 340),      # anchor L(1M) -115; 258
+    "bench_helal09_ilcm_50m_3p2g": (55, 120),            # published 130 (time domain)
+    "bench_elshazly13_mdll_375m_1p5g": (380, 700),       # published 400 (time domain)
 }
 
 

@@ -100,8 +100,10 @@ class SSPLLConfig:
             if self.frac.mash_order != 1:
                 raise ValueError(
                     "fractional SSPLL uses a 1st-order EFM: its residue spans "
-                    "exactly 1 UI, matching a practical DTC range (MASH-2/3 "
-                    "spans 4-8 UI and saturates the DTC)")
+                    "exactly 1 UI, matching a practical DTC range (measured "
+                    "2026-09: a MASH-2 residue spans 2 UI and MASH-3 4 UI, "
+                    "while the shipped DTCs cover 1.0-1.6 UI -- a higher order "
+                    "needs a DTC of >= 2 UI plus a bipolar target mapping)")
 
 
 class SSPLL(PLLBase):

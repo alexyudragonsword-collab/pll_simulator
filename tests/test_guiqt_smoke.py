@@ -206,7 +206,7 @@ def test_benchmarks_page_static(app):
     # the table is built from the single source in presets, not a GUI-local
     # copy: a stale duplicate is how the published-vs-model numbers drifted
     rows = presets.benchmark_table()
-    assert len(rows) == 5
+    assert len(rows) == len(presets.BENCHMARKS) >= 8
     table = page.findChild(QTableWidget)
     assert table is not None
     assert table.rowCount() == len(rows)
@@ -269,11 +269,12 @@ def test_drift_page_computes_a_tracking_lag(app):
 def test_benchmarks_page_plots_an_ipn_pie(app):
     """The table says whether the model matches the paper; the pie says
     which source to attack first.  Both live on this page now."""
+    from pllsim import presets
     from pllsim.guiqt.page_analysis import BenchmarksPage
     page = BenchmarksPage()
     names = [page.pie_preset.itemText(i)
              for i in range(page.pie_preset.count())]
-    assert len(names) == 5, names
+    assert len(names) == len(presets.BENCHMARKS) >= 8, names
     page.pie_preset.setCurrentText("bench_wu19_spll_frac_52m_6p253g")
     name, ar = page.compute_pie()             # same fn the worker runs
     assert name == "bench_wu19_spll_frac_52m_6p253g"

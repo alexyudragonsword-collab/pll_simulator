@@ -58,13 +58,22 @@ def postprocess(sim: SimResult, settle_frac: float = 0.25,
     # locked performance.
     half = ph.size // 2
     if half >= 1024:
-        early, late = float(np.std(ph[:half])), float(np.std(ph[half:]))
+        # Compared on the cycle-to-cycle increments, not the phase itself: a
+        # 1/f wander (a divider or reference flicker corner in a long record)
+        # moves the std of one half against the other by up to 2x with no
+        # transient anywhere -- measured 0.7-1.95x across seeds on the
+        # Dartizio bench once its divider made noise -- while a real
+        # calibration transient (the uncalibrated MASH residue at the PD) is
+        # high-frequency and shows in the increments at 2x+ (measured 2.2x)
+        # against 1.00-1.02 for converged runs of every architecture.
+        d = np.diff(ph)
+        early, late = float(np.std(d[:half])), float(np.std(d[half:]))
         if early > 1.3 * max(late, 1e-30):
             sim.notes.append(
-                f"still settling: phase error is {early / late:.1f}x larger in "
-                "the first half of the analysed window than the second — the "
-                "jitter below includes an acquisition/calibration transient. "
-                "Run more cycles.")
+                f"still settling: cycle-to-cycle phase error is {early / late:.1f}x "
+                "larger in the first half of the analysed window than the "
+                "second — the jitter below includes an acquisition/calibration "
+                "transient. Run more cycles.")
     if ph.size >= 2048:
         from .boundaries import NYQ_FRACTION, jitter_band_clipped
         f_w, s_w = phase_psd(ph, sim.fs)

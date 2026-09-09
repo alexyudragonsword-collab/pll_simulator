@@ -14,8 +14,9 @@ from pllsim.plotting import plot_ipn_pie
 st.set_page_config(page_title="Benchmarks", layout="wide")
 sidebar_lang_toggle()
 
-st.title(L("文献对标（四篇 JSSC 论文，五个通道）",
-           "Literature benchmarks (four JSSC papers, five channels)"))
+st.title(L("文献对标（七篇 JSSC 论文，八个通道，六种架构各有锚点）",
+           "Literature benchmarks (seven JSSC papers, eight channels, "
+           "one anchor per architecture)"))
 
 ROWS = presets.benchmark_table()
 st.dataframe(ROWS, use_container_width=True)
@@ -32,17 +33,14 @@ if st.button("Re-run linear models", type="primary"):
     # shipped in the exe, so importing it worked from a checkout and raised
     # ModuleNotFoundError for anyone running the packaged build
     with st.spinner("running..."):
+        # one row per BENCHMARKS entry, so a paper added to presets shows
+        # up here without a second hand-maintained list (the Qt page and
+        # this one each carried one, both four rows short by 2026-09)
         rows = []
-        for name, pll, pub in [
-                ("Dartizio'23 (linear under-reads BB loops)",
-                 presets.bench_dartizio23_adpllbb_500m_9p2515g(), "77"),
-                ("Markulic'16 int-N",
-                 presets.bench_markulic16_sspll_40m_10p24g(), "176"),
-                ("Markulic'16 frac-N",
-                 presets.bench_markulic16_sspll_frac_40m_10p25g(), "198"),
-                ("Wu'19", presets.bench_wu19_spll_frac_52m_6p253g(), "75")]:
-            ar = pll.analyze()
-            rows.append({"benchmark": name, "published [fs]": pub,
+        for b in presets.BENCHMARKS:
+            ar = presets.ALL_PRESETS[b["preset"]]().analyze()
+            rows.append({"benchmark": b["paper"],
+                         "published [fs]": b["published [fs]"],
                          "linear model [fs]": round(float(ar.jitter_fs), 1)})
     st.dataframe(rows, use_container_width=True)
     st.caption(L("时域数字请跑 examples/ex14（约 23 s）。",

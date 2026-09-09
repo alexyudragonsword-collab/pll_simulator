@@ -2,6 +2,41 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-09 · P2-16: MASH-2 for SSPLL/SPLL measured, deferred
+
+- Residue spans measured on the modulators: MASH-1 1 UI, MASH-2 2 UI,
+  MASH-3 4 UI; shipped SSPLL/SPLL DTCs cover 1.02–1.60 UI, so MASH-2 would
+  saturate all of them.  Refusal text corrected (it said 4–8 UI); decision
+  and what it would take in `cairn/cross-domain.md`.
+
+## 2026-09-09 · P2-15: every architecture has a literature anchor now
+
+- Three `bench_*` presets close the gap the health check listed (CPPLL /
+  ILCM / MDLL had none): Da Dalt & Sandner JSSC'03 integer-N CPPLL
+  (311 MHz → 2.488 GHz, N = 8; anchor = L(1 MHz) −115 dBc/Hz, model −115.1;
+  its 860 fs has no band in the abstract and a −115 1/f² profile cannot
+  integrate to it over 12 k–20 M — quoted, not matched), Helal et al.
+  JSSC'09 PILO (50 → 3200 MHz, ×64; 130 fs published, 130 fs time domain),
+  Elshazly et al. JSSC'13 digital MDLL (375 → 1500 MHz, ×4; 400 fs
+  published, 415 fs time domain).  ex14 parts 4–6, `BENCHMARKS` rows,
+  tests, README/index, deck facts.
+- Sourcing limit worth knowing: the sandbox reaches search summaries but no
+  full text (IEEE, MIT dspace, cppsim, ADS all refused), so the integration
+  bands are stated assumptions in each docstring; a reader with the papers
+  should check them.  Every undisclosed circuit value is labelled.
+- Two things the new rows exposed: the web and Qt benchmark pages each
+  carried their own four-row list for the re-run button (both now derive
+  from `presets.BENCHMARKS`), and the deck builder's Chinese label list is a
+  third copy that refuses to build when it is short — kept, since labels
+  are translations.
+- The "still settling" detector (`engine.postprocess`) now compares
+  cycle-to-cycle phase-error increments, not the phase std of the two
+  halves: with the Dartizio divider's flicker in a 250k record the old
+  ratio read 0.7–1.95 across seeds with the DTC gain trace fully converged
+  (a spurious note on seed 1), while the increment ratio reads 1.00–1.02
+  converged and 2.2 on a real 80k transient.  Unit test with a random-walk
+  wander that trips the old rule.
+
 ## 2026-09-09 · P2-14: the bang-bang ADPLL's divider makes noise now
 
 - `ADPLLConfig.div_pn_dbchz` / `div_pn_fc` (None = not modelled, and

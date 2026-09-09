@@ -205,8 +205,8 @@ function card(s, x, y, w, h, fill = CARD) {
 /* ========================= 4. 文献对标 ========================= */
 {
   const s = pres.addSlide(); lightBg(s);
-  title(s, "凭什么可信：四篇 JSSC 论文对标",
-    "五个通道，逐条比较发表值 / 线性模型 / 时域模型的积分抖动（fs）");
+  title(s, "凭什么可信：七篇 JSSC 论文对标",
+    "八个通道，六种架构各有锚点，逐条比较发表值 / 线性模型 / 时域模型的积分抖动（fs）");
 
   const head = ["论文与通道", "发表值", "线性模型", "时域模型"];
   // only the row labels live here, because they are translations.  Every
@@ -218,6 +218,9 @@ function card(s, x, y, w, h, fill = CARD) {
     "Markulic'16  子采样 PLL  10.24 GHz  整数N",
     "Markulic'16  子采样 PLL  10.24 GHz  小数N",
     "Wu'19  采样 PLL  6.25 GHz  小数N",
+    "Da Dalt'03  电荷泵 PLL  2.488 GHz  整数N（锚点 L(1M) −115 dBc/Hz）",
+    "Helal'09  注入锁定倍频器  3.2 GHz  ×64",
+    "Elshazly'13  数字 MDLL  1.5 GHz  ×4",
   ];
   if (F.benchmarks.length !== LABELS.length) {
     console.error(`对标表有 ${F.benchmarks.length} 行，但这里只有 ` +

@@ -282,6 +282,73 @@ def bench_wu19_spll_frac_52m_6p253g() -> SPLL:
         int_band=(10e3, 10e6)))
 
 
+def bench_dadalt03_cppll_311m_2p488g() -> CPPLL:
+    """Da Dalt & Sandner, JSSC Jul 2003 (Infineon 0.12um digital CMOS,
+    ex14 part 4): the integer-N charge-pump anchor.  311 MHz reference,
+    2.488 GHz (N = 8), two differentially tuned LC-VCOs, fully differential
+    CP + active loop filter, 1.5 V, 35 mW.
+
+    Published: L(1 MHz) = -115 dBc/Hz on the 2.488 GHz output, 860 fs
+    integrated jitter (the abstract gives no band).  The anchor here is the
+    spot phase noise: model -115.1 dBc/Hz at 1 MHz.  Over the SONET OC-48
+    12 kHz - 20 MHz band a -115 dBc/Hz 1/f^2 profile cannot integrate to
+    860 fs (it reads ~250 fs), so the published jitter must span a wider
+    band or include deterministic jitter -- it is quoted, not matched.
+    Assumptions: VCO -117 dBc/Hz @ 1 MHz, a -138 dBc/Hz 311 MHz clock
+    (an on-chip clock, not a crystal), UGB 1.5 MHz / PM 60."""
+    from .synth import cppll_kdet, design_cp_filter
+    fref, n = 311.04e6, 8
+    osc = OscConfig(f0=2.44e9, gain=60e6, pn_dbchz=-117.0, pn_foffset=1e6,
+                    pn_f1f3=3e5, pn_floor_dbchz=-150.0)
+    cp = CPConfig(icp=200e-6, mismatch_pct=2.0, leakage_a=1e-9,
+                  t_reset=150e-12)
+    filt = design_cp_filter(cppll_kdet(cp.icp, n), osc.gain, 1.5e6, 60.0, fref)
+    return CPPLL(CPPLLConfig(
+        fref=fref, fout=n * fref, osc=osc, cp=cp, filt=filt,
+        ref_pn_dbchz=-138.0, ref_pn_fc=20e3, div_pn_dbchz=-155.0,
+        int_band=(12e3, 20e6)))
+
+
+def bench_helal09_ilcm_50m_3p2g() -> ILCM:
+    """Helal, Hsu, Johnson & Perrott, JSSC May 2009 (MIT 0.13um, ex14
+    part 5): the pulse injection-locked oscillator, the ILCM anchor.
+    50 MHz reference, 3.2 GHz (N = 64), 28.6 mW core.
+
+    Published: 130 fs rms integrated phase noise, -63.9 dBc reference spur,
+    200 fs pp estimated deterministic jitter.  Model: 130 fs time domain
+    (the ILCM's time domain reads above its linear model, 83 fs).
+    Assumptions: LC oscillator -120 dBc/Hz @ 1 MHz, a -165 dBc/Hz "low
+    jitter" 50 MHz reference (x64 puts it at -129 in-band, the dominant
+    term), 15 fs injection-path jitter, beta 0.6; integration band 1 kHz -
+    20 MHz (the abstract gives none; 20 MHz is what a 50 MHz-rate record
+    can show, so both domains integrate the same band)."""
+    return ILCM(ILCMConfig(
+        fref=50e6, fout=3.2e9,
+        osc=OscConfig(f0=3.2e9, gain=1.0, pn_dbchz=-120.0, pn_foffset=1e6,
+                      pn_f1f3=3e5, pn_floor_dbchz=-150.0),
+        beta=0.6, q_tank=10, i_ratio=0.2, inj_jitter_rms_s=15e-15,
+        ref_pn_dbchz=-165.0, ftl_f_lsb=20e3, int_band=(1e3, 20e6)))
+
+
+def bench_elshazly13_mdll_375m_1p5g() -> MDLL:
+    """Elshazly, Inti, Young & Hanumolu, JSSC Jun 2013 (0.13um, 1.1 V,
+    ex14 part 6): the digital MDLL with a 1-bit TDC, the MDLL anchor.
+    375 MHz reference, 1.5 GHz (N = 4), 890 uW.
+
+    Published: 400 fs rms integrated jitter, -55.6 dBc reference spur,
+    20 fs/mV supply sensitivity.  Model: 415 fs time domain (linear 541 --
+    the MDLL's 1-ZOH linear model over-reads).  Assumptions: ring
+    -88 dBc/Hz @ 1 MHz (FoM -151 dB at 0.89 mW, a low-power ring), 150 fs
+    select-path jitter; integration band 1 kHz - 100 MHz (the abstract
+    gives none)."""
+    return MDLL(MDLLConfig(
+        fref=375e6, fout=1.5e9,
+        osc=OscConfig(f0=1.5e9, gain=1e5, pn_dbchz=-88.0, pn_foffset=1e6,
+                      pn_f1f3=1e6, pn_floor_dbchz=-140.0),
+        mux_jitter_rms_s=150e-15, ref_pn_dbchz=-155.0,
+        int_band=(1e3, 100e6)))
+
+
 ALL_PRESETS = {
     "cppll_19p2m_4p8g": cppll_19p2m_4p8g,
     "cppll_frac_38p4m_6g": cppll_frac_38p4m_6g,
@@ -300,6 +367,9 @@ ALL_PRESETS = {
     "bench_markulic16_sspll_frac_40m_10p25g":
         bench_markulic16_sspll_frac_40m_10p25g,
     "bench_wu19_spll_frac_52m_6p253g": bench_wu19_spll_frac_52m_6p253g,
+    "bench_dadalt03_cppll_311m_2p488g": bench_dadalt03_cppll_311m_2p488g,
+    "bench_helal09_ilcm_50m_3p2g": bench_helal09_ilcm_50m_3p2g,
+    "bench_elshazly13_mdll_375m_1p5g": bench_elshazly13_mdll_375m_1p5g,
 }
 
 
@@ -324,6 +394,18 @@ BENCHMARKS = [
     {"paper": "Wu'19 sampling PLL 6.25G frac-N (10k-10M)",
      "preset": "bench_wu19_spll_frac_52m_6p253g",
      "published [fs]": "75", "time-domain [fs]": "78"},
+    # the abstracts of the three below give no integration band; the anchor
+    # is the spot phase noise for Da Dalt and the jitter class for the two
+    # clock multipliers -- see each preset's docstring
+    {"paper": "Da Dalt'03 CPPLL 2.488G int-N (L(1M) -115 dBc/Hz)",
+     "preset": "bench_dadalt03_cppll_311m_2p488g",
+     "published [fs]": "860 (band n/a)", "time-domain [fs]": "244"},
+    {"paper": "Helal'09 PILO/ILCM 3.2G x64",
+     "preset": "bench_helal09_ilcm_50m_3p2g",
+     "published [fs]": "130", "time-domain [fs]": "130"},
+    {"paper": "Elshazly'13 digital MDLL 1.5G x4",
+     "preset": "bench_elshazly13_mdll_375m_1p5g",
+     "published [fs]": "400", "time-domain [fs]": "415"},
 ]
 
 

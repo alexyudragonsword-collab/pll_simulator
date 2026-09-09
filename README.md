@@ -28,11 +28,14 @@ Beyond the architectures: **loop synthesis** (`pllsim.synth` — filter/DLF
 component values from UGB/PM targets, jitter-vs-bandwidth optimization, ex07),
 **second-order impairments** (Kvco nonlinearity, supply pushing, reference-
 doubler duty error, coarse band selection — ex09), **literature benchmarks
-against four JSSC papers** — Gao'09/'10 integer-N SSPLL (ex10, in-band
+against seven JSSC papers** — Gao'09/'10 integer-N SSPLL (ex10, in-band
 −126 dBc/Hz / 0.15 ps class), Dartizio'23 DTC+BBPD digital PLL (77 fs @
-9.25 GHz), Markulić'16 fractional DTC-SSPLL (176/198 fs @ 10.24 GHz) and
-Wu'19 fractional sampling PLL (75 fs @ 6.25 GHz, 10 kHz–10 MHz band) — all
-landing on the published jitter with labelled technology-plausible
+9.25 GHz), Markulić'16 fractional DTC-SSPLL (176/198 fs @ 10.24 GHz),
+Wu'19 fractional sampling PLL (75 fs @ 6.25 GHz, 10 kHz–10 MHz band),
+Da Dalt'03 integer-N charge-pump PLL (−115 dBc/Hz @ 1 MHz on 2.488 GHz),
+Helal'09 pulse-injection-locked clock multiplier (130 fs, ×64) and
+Elshazly'13 digital MDLL (400 fs, ×4) — one anchor per architecture,
+landing on the published number with labelled technology-plausible
 assumptions (ex14), **deterministic fractional-spur prediction** (bit-true
 MASH-through-DTC tones referred through the loop NTF, 0.2 dB against the
 time domain; worst-channel law and INL spec extraction — ex15),
@@ -63,7 +66,7 @@ Coverage targets: fref = 19.2–500 MHz, fout up to 12 GHz, integrated jitter
 
 ```bash
 pip install -e .          # numpy, scipy, matplotlib
-pytest tests/             # 857 tests: closed-form math + architecture behavior
+pytest tests/             # 883 tests: closed-form math + architecture behavior
 python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 ```
 

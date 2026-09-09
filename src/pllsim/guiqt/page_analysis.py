@@ -340,26 +340,25 @@ class BenchmarksPage(Page):
     title = "Benchmarks"
     title_zh = "文献对标"
 
-    # published vs the linear model, for the re-run button.  Built from the
-    # bench_* presets rather than from tests/, because a packaged build ships
-    # no test suite and importing one there is a guaranteed ImportError.
-    LIVE = [("Dartizio'23 (linear under-reads BB loops)",
-             "bench_dartizio23_adpllbb_500m_9p2515g", "77"),
-            ("Markulic'16 int-N", "bench_markulic16_sspll_40m_10p24g", "176"),
-            ("Markulic'16 frac-N",
-             "bench_markulic16_sspll_frac_40m_10p25g", "198"),
-            ("Wu'19", "bench_wu19_spll_frac_52m_6p253g", "75")]
+    # published vs the linear model, for the re-run button.  Built from
+    # presets.BENCHMARKS rather than from tests/ (a packaged build ships no
+    # test suite) and rather than a local list (this page and the web page
+    # each carried one, both four rows short by 2026-09).
+    LIVE = [(b["paper"], b["preset"], b["published [fs]"])
+            for b in presets.BENCHMARKS]
 
     def __init__(self):
         super().__init__()
         lay = QVBoxLayout(self)
         lay.addWidget(tr(
             QLabel(),
-            "四篇 JSSC 论文、五个通道 —— 所有未公开的电路参数都是标注过的工艺"
-            "合理假设；验证的是架构一致性（examples/ex10、ex14，docs 11.4）。",
-            "Four JSSC papers, five channels — all undisclosed parameters are "
-            "labelled technology-plausible assumptions; the check is "
-            "architectural consistency (examples/ex10, ex14, docs 11.4)."))
+            "七篇 JSSC 论文、八个通道，六种架构各有锚点 —— 所有未公开的电路参数"
+            "都是标注过的工艺合理假设；验证的是架构一致性（examples/ex10、ex14，"
+            "docs 11.4）。",
+            "Seven JSSC papers, eight channels, one anchor per architecture — "
+            "all undisclosed parameters are labelled technology-plausible "
+            "assumptions; the check is architectural consistency "
+            "(examples/ex10, ex14, docs 11.4)."))
         lay.addWidget(table_from_rows(presets.benchmark_table()))
         row = QHBoxLayout()
         self.btn = tr(QPushButton(), "现场重跑（线性模型，数秒）",
