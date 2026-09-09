@@ -89,3 +89,17 @@ def test_fll_bittrue(tmp_path):
     fn, ttxt = tb.tb_fll(64, 250 * 64, 128, 32, g["n"])
     write_file(tmp_path / fn, ttxt)
     run_iverilog(tmp_path, fn, f"{name}.v")
+
+
+def test_fll_bittrue_n256(tmp_path):
+    # N = 256 (bench_markulic_2016): 256*64 = 16384 counts per window.  An
+    # 8-bit `cycles` port silently truncates N itself to 0 and every ferr reads
+    # -16384; the width has to follow N.
+    name, txt = fsm.emit_fll()
+    write_file(tmp_path / f"{name}.v", txt)
+    g = golden.fll_vectors(64, 256 * 64, 128, 32, 256, 4096,
+                           tmp_path / "vectors")
+    fn, ttxt = tb.tb_fll(64, 256 * 64, 128, 32, g["n"],
+                         w_cyc=g["w_cyc"], w_cnt=g["w_cnt"])
+    write_file(tmp_path / fn, ttxt)
+    run_iverilog(tmp_path, fn, f"{name}.v")

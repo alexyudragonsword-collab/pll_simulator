@@ -1,19 +1,13 @@
 name: windows-exe
 
-# Builds ONEFILE Windows executables for both GUIs with PyInstaller and
-# smoke-tests them on the runner (the desktop exe opens and exits via the
-# PLLSIM_SMOKE hook; the web exe must serve HTTP 200).
-#
-# The two GUIs build as INDEPENDENT jobs so each shows its own progress
-# and status in the Actions UI, and a Streamlit packaging issue never
-# blocks the desktop exe (and vice versa).
+# PyInstaller Windows executables (fast build, self-extracting).  The build
+# itself lives in windows-exe-build.yml, shared with the Nuitka entry; this
+# file is the Actions UI entry that picks the builder.
 #
 # Trigger from the GitHub UI: Actions -> windows-exe -> Run workflow.
-# `target` picks which GUI to build -- these are windows-latest jobs
-# (2x minute multiplier on a private repo), so building both is a
-# deliberate choice rather than the default.  Optionally give an
-# existing release tag (e.g. v0.5.3) to attach the exes to that release
-# as downloadable assets.
+# `target` picks which GUI to build; building both is a deliberate choice
+# rather than the default.  Optionally give an existing release tag (e.g.
+# v0.9.3) to attach the exes to that release as downloadable assets.
 
 on:
   workflow_dispatch:
@@ -30,97 +24,11 @@ on:
         default: ""
 
 jobs:
-  qt:
-    if: inputs.target == 'qt' || inputs.target == 'both'
-    runs-on: windows-latest
-    permissions:
-      contents: write        # needed only for the optional release upload
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-      - name: Install (non-editable — safest for PyInstaller analysis)
-        run: |
-          python -m pip install --upgrade pip
-          pip install .[guiqt] pyinstaller
-      - name: Build desktop exe (PySide6, windowed)
-        run: >
-          pyinstaller --noconfirm --clean --onefile --windowed
-          --name pllsim-gui-qt
-          --icon packaging/pllsim.ico
-          --collect-data pllsim
-          packaging/launch_qt.py
-      - name: Smoke desktop exe (opens, renders, exits clean)
-        env:
-          PLLSIM_SMOKE: "1"
-        run: dist\pllsim-gui-qt.exe
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pllsim-gui-qt-windows
-          path: dist/pllsim-gui-qt.exe
-      - name: Attach to release (optional)
-        if: inputs.release_tag != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release upload "${{ inputs.release_tag }}"
-          dist/pllsim-gui-qt.exe --clobber
-
-  web:
-    if: inputs.target == 'web' || inputs.target == 'both'
-    runs-on: windows-latest
+  build:
+    uses: ./.github/workflows/windows-exe-build.yml
     permissions:
       contents: write
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: "3.11"
-          cache: pip
-      - name: Install (non-editable — safest for PyInstaller analysis)
-        run: |
-          python -m pip install --upgrade pip
-          pip install .[gui] pyinstaller
-      - name: Build web exe (Streamlit, console = server log)
-        run: >
-          pyinstaller --noconfirm --clean --onefile
-          --name pllsim-gui-web
-          --icon packaging/pllsim.ico
-          --add-data "src/pllsim/webgui;pllsim/webgui"
-          --collect-all streamlit
-          --copy-metadata streamlit
-          packaging/launch_web.py
-      - name: Smoke web exe (must serve HTTP 200)
-        shell: pwsh
-        env:
-          PLLSIM_NO_BROWSER: "1"
-        run: |
-          $p = Start-Process dist\pllsim-gui-web.exe -PassThru `
-            -RedirectStandardOutput exe-out.log -RedirectStandardError exe-err.log
-          $ok = $false
-          foreach ($i in 1..100) {
-            if ($p.HasExited) { break }
-            Start-Sleep -Seconds 3
-            try {
-              $r = Invoke-WebRequest http://localhost:8501 -UseBasicParsing -TimeoutSec 5
-              if ($r.StatusCode -eq 200) { $ok = $true; break }
-            } catch {}
-          }
-          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
-          Write-Output "== exe stdout =="; Get-Content exe-out.log -ErrorAction SilentlyContinue
-          Write-Output "== exe stderr =="; Get-Content exe-err.log -ErrorAction SilentlyContinue
-          if (-not $ok) { Write-Error "web exe never served HTTP 200"; exit 1 }
-          Write-Output "web exe served HTTP 200"
-      - uses: actions/upload-artifact@v4
-        with:
-          name: pllsim-gui-web-windows
-          path: dist/pllsim-gui-web.exe
-      - name: Attach to release (optional)
-        if: inputs.release_tag != ''
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: >
-          gh release upload "${{ inputs.release_tag }}"
-          dist/pllsim-gui-web.exe --clobber
+    with:
+      builder: pyinstaller
+      target: ${{ inputs.target }}
+      release_tag: ${{ inputs.release_tag }}

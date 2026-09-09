@@ -132,7 +132,8 @@ def _export_rtl(pll, kind: str, outdir: Path, rep: ExportReport,
         th_eng = max(int(round(c.fll_engage / c.fref * window)), 1)
         th_rel = max(int(round(c.fll_release / c.fref * window)), 1)
         add_block(emit_fll,
-                  lambda g: rtl_tb.tb_fll(window, n_t, th_eng, th_rel, g["n"]),
+                  lambda g: rtl_tb.tb_fll(window, n_t, th_eng, th_rel, g["n"],
+                                          w_cyc=g["w_cyc"], w_cnt=g["w_cnt"]),
                   lambda: gv.fll_vectors(window, n_t, th_eng, th_rel,
                                          int(round(c.fout / c.fref)),
                                          n_vec, vec))

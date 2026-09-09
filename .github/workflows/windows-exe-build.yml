@@ -1,0 +1,194 @@
+name: windows-exe-build
+
+# The one Windows build, called by windows-exe.yml (PyInstaller) and
+# windows-exe-nuitka.yml (Nuitka).  The two used to be ~80% the same file --
+# a 21-line PowerShell smoke block that differed in one path token, the
+# release-upload step four times over -- which is exactly how the two desktop
+# GUIs once drifted.  Now the builder is an input and every shared step
+# exists once.
+#
+# Policy unchanged: the two GUIs build as independent jobs so a Streamlit
+# freezing issue never blocks the desktop exe (and vice versa); every exe is
+# smoke-tested on the runner before upload (the desktop exe opens and exits
+# via the PLLSIM_SMOKE hook; the web exe must serve HTTP 200 and report
+# healthy); an existing release tag attaches the exes as assets.
+
+on:
+  workflow_call:
+    inputs:
+      builder:
+        description: "pyinstaller | nuitka"
+        type: string
+        required: true
+      target:
+        description: "qt | web | both"
+        type: string
+        required: true
+      release_tag:
+        description: "Existing release tag to attach the exes to (optional)"
+        type: string
+        required: false
+        default: ""
+
+jobs:
+  qt:
+    if: inputs.target == 'qt' || inputs.target == 'both'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: write        # needed only for the optional release upload
+    env:
+      EXE: ${{ inputs.builder == 'nuitka' && 'build-nuitka/pllsim-gui-qt-nuitka.exe' || 'dist/pllsim-gui-qt.exe' }}
+      SUFFIX: ${{ inputs.builder == 'nuitka' && '-nuitka' || '' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - uses: actions/cache@v4
+        if: inputs.builder == 'nuitka'
+        with:
+          path: ~\AppData\Local\Nuitka\Nuitka\Cache
+          key: nuitka-qt-${{ runner.os }}-py311-${{ hashFiles('pyproject.toml') }}
+          restore-keys: nuitka-qt-${{ runner.os }}-py311-
+      - name: Install (non-editable — safest for the freezer's analysis)
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[guiqt]
+          if ("${{ inputs.builder }}" -eq "nuitka") { pip install nuitka ordered-set zstandard } else { pip install pyinstaller }
+      - name: Build desktop exe (PyInstaller, windowed)
+        if: inputs.builder == 'pyinstaller'
+        run: >
+          pyinstaller --noconfirm --clean --onefile --windowed
+          --name pllsim-gui-qt
+          --icon packaging/pllsim.ico
+          --collect-data pllsim
+          packaging/launch_qt.py
+      - name: Build desktop exe (Nuitka, windowed)
+        if: inputs.builder == 'nuitka'
+        run: >
+          python -m nuitka packaging/launch_qt.py
+          --onefile --assume-yes-for-downloads --msvc=latest
+          --windows-console-mode=disable
+          --enable-plugin=pyside6
+          --windows-icon-from-ico=packaging/pllsim.ico
+          --include-package=pllsim
+          --include-package-data=pllsim
+          --include-package-data=matplotlib
+          --include-module=matplotlib.backends.backend_qtagg
+          --output-dir=build-nuitka
+          --output-filename=pllsim-gui-qt-nuitka.exe
+      - name: Smoke desktop exe (opens, renders, exits clean)
+        env:
+          PLLSIM_SMOKE: "1"
+        run: '& "$env:EXE"'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pllsim-gui-qt${{ env.SUFFIX }}-windows
+          path: ${{ env.EXE }}
+      - name: Attach to release (optional)
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.release_tag }}" "$env:EXE" --clobber
+
+  web:
+    if: inputs.target == 'web' || inputs.target == 'both'
+    runs-on: windows-latest
+    timeout-minutes: 150      # the Nuitka web compile is ~80 min cold
+    permissions:
+      contents: write
+    env:
+      EXE: ${{ inputs.builder == 'nuitka' && 'build-nuitka/pllsim-gui-web-nuitka.exe' || 'dist/pllsim-gui-web.exe' }}
+      SUFFIX: ${{ inputs.builder == 'nuitka' && '-nuitka' || '' }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.11"
+          cache: pip
+      - uses: actions/cache/restore@v4
+        if: inputs.builder == 'nuitka'
+        id: nuitka-cache
+        with:
+          path: ~\AppData\Local\Nuitka\Nuitka\Cache
+          key: nuitka-web-${{ runner.os }}-py311-${{ hashFiles('pyproject.toml') }}
+          restore-keys: nuitka-web-${{ runner.os }}-py311-
+      - name: Install (non-editable — safest for the freezer's analysis)
+        run: |
+          python -m pip install --upgrade pip
+          pip install .[gui]
+          if ("${{ inputs.builder }}" -eq "nuitka") { pip install nuitka ordered-set zstandard } else { pip install pyinstaller }
+      - name: Build web exe (PyInstaller, console = server log)
+        if: inputs.builder == 'pyinstaller'
+        run: >
+          pyinstaller --noconfirm --clean --onefile
+          --name pllsim-gui-web
+          --icon packaging/pllsim.ico
+          --add-data "src/pllsim/webgui;pllsim/webgui"
+          --collect-all streamlit
+          --copy-metadata streamlit
+          packaging/launch_web.py
+      - name: Build web exe (Nuitka, console = server log)
+        if: inputs.builder == 'nuitka'
+        run: >
+          python -m nuitka packaging/launch_web.py
+          --onefile --assume-yes-for-downloads --msvc=latest
+          --windows-icon-from-ico=packaging/pllsim.ico
+          --include-package=streamlit
+          --include-package-data=streamlit
+          --include-distribution-metadata=streamlit
+          --include-distribution-metadata=altair
+          --include-distribution-metadata=pyarrow
+          --include-distribution-metadata=pandas
+          --include-distribution-metadata=numpy
+          --include-distribution-metadata=pydeck
+          --include-distribution-metadata=pillow
+          --include-distribution-metadata=click
+          --include-distribution-metadata=protobuf
+          --include-package=pllsim
+          --include-package-data=matplotlib
+          --include-raw-dir=src/pllsim/webgui=pllsim/webgui
+          --output-dir=build-nuitka
+          --output-filename=pllsim-gui-web-nuitka.exe
+      # save the 80-minute compile cache even if the smoke step fails:
+      # debug iterations then rebuild from clcache in minutes, not hours
+      - uses: actions/cache/save@v4
+        if: always() && inputs.builder == 'nuitka'
+        with:
+          path: ~\AppData\Local\Nuitka\Nuitka\Cache
+          key: ${{ steps.nuitka-cache.outputs.cache-primary-key }}-${{ github.run_id }}
+      - name: Smoke web exe (must serve HTTP 200 and report healthy)
+        shell: pwsh
+        env:
+          PLLSIM_NO_BROWSER: "1"
+        run: |
+          $p = Start-Process $env:EXE -PassThru `
+            -RedirectStandardOutput exe-out.log -RedirectStandardError exe-err.log
+          $ok = $false
+          foreach ($i in 1..100) {
+            if ($p.HasExited) { break }
+            Start-Sleep -Seconds 3
+            try {
+              $r = Invoke-WebRequest http://localhost:8501 -UseBasicParsing -TimeoutSec 5
+              # the SPA shell answers 200 for any path; the health endpoint is
+              # the server itself saying it is up, and it says "ok"
+              $h = Invoke-WebRequest http://localhost:8501/_stcore/health -UseBasicParsing -TimeoutSec 5
+              if ($r.StatusCode -eq 200 -and $h.Content.Trim() -eq "ok") { $ok = $true; break }
+            } catch {}
+          }
+          Stop-Process -Id $p.Id -Force -ErrorAction SilentlyContinue
+          Write-Output "== exe stdout =="; Get-Content exe-out.log -ErrorAction SilentlyContinue
+          Write-Output "== exe stderr =="; Get-Content exe-err.log -ErrorAction SilentlyContinue
+          if (-not $ok) { Write-Error "web exe never served HTTP 200 + healthy"; exit 1 }
+          Write-Output "web exe served HTTP 200 and reports healthy"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: pllsim-gui-web${{ env.SUFFIX }}-windows
+          path: ${{ env.EXE }}
+      - name: Attach to release (optional)
+        if: inputs.release_tag != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "${{ inputs.release_tag }}" "$env:EXE" --clobber

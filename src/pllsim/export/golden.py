@@ -122,23 +122,34 @@ def bandselect_vectors(n_bands: int, target: int, band_true: int,
             "n": len(meas)}
 
 
+def fll_widths(n_cyc_nom: int, window: int) -> tuple[int, int]:
+    """(W_CYC, W_CNT) for pllsim_fll: the per-period count must hold N plus
+    the acquisition offset, the window accumulator N*WINDOW plus the same."""
+    w_cyc = max(8, (2 * n_cyc_nom).bit_length() + 1)
+    w_cnt = max(20, (2 * n_cyc_nom * window).bit_length() + 1)
+    return w_cyc, w_cnt
+
+
 def fll_vectors(window: int, n_target_counts: int, th_eng: int, th_rel: int,
                 n_cyc_nom: int, n: int, outdir: Path, seed: int = 6):
     """Frequency ramp toward lock, then noise around it: engage->release."""
     rng = np.random.default_rng(seed)
+    w_cyc, w_cnt = fll_widths(n_cyc_nom, window)
     # start 3 counts/cycle off, ramp to 0 over first half, then jitter
     off = np.linspace(3.0, 0.0, n // 2)
     off = np.concatenate([off, np.zeros(n - n // 2)])
     cyc = n_cyc_nom + np.round(off).astype(int) \
         + (rng.integers(0, 4, n) == 0).astype(int) \
         - (rng.integers(0, 4, n) == 0).astype(int)
+    assert int(cyc.max()) < (1 << w_cyc), "fll stimulus exceeds W_CYC"
     fx = FllFx(window, n_target_counts, th_eng, th_rel)
     eng, ferr = [], []
     for c in cyc:
         e, f = fx.step(int(c))
         eng.append(int(e))
         ferr.append(f)
-    return {"stim": write_hex(outdir / "fll_cycles.hex", cyc, 8),
+    return {"stim": write_hex(outdir / "fll_cycles.hex", cyc, w_cyc),
             "exp_eng": write_hex(outdir / "fll_eng.hex", eng, 1),
-            "exp_ferr": write_hex(outdir / "fll_ferr.hex", ferr, 21),
+            "exp_ferr": write_hex(outdir / "fll_ferr.hex", ferr, w_cnt + 1),
+            "w_cyc": w_cyc, "w_cnt": w_cnt,
             "n": n}

@@ -181,20 +181,20 @@ def tb_bandselect(n_bands: int, target: int, w_cnt: int, w_band: int,
 
 
 def tb_fll(window: int, n_target: int, th_eng: int, th_rel: int,
-           n: int) -> tuple[str, str]:
+           n: int, w_cyc: int = 8, w_cnt: int = 20) -> tuple[str, str]:
     decls = f"""\
-  reg [7:0] stim [0:{n - 1}];
+  reg [{w_cyc - 1}:0] stim [0:{n - 1}];
   reg [0:0] exp_e [0:{n - 1}];
-  reg [20:0] exp_f [0:{n - 1}];
-  reg [7:0] cycles;
+  reg [{w_cnt}:0] exp_f [0:{n - 1}];
+  reg [{w_cyc - 1}:0] cycles;
   wire engaged, fd_valid;
-  wire signed [20:0] ferr;
+  wire signed [{w_cnt}:0] ferr;
   initial begin
     $readmemh("vectors/fll_cycles.hex", stim);
     $readmemh("vectors/fll_eng.hex", exp_e);
     $readmemh("vectors/fll_ferr.hex", exp_f);
   end"""
-    dut = (f"  pllsim_fll #(.W_CNT(20), .WINDOW({window}), "
+    dut = (f"  pllsim_fll #(.W_CNT({w_cnt}), .W_CYC({w_cyc}), .WINDOW({window}), "
            f".N_TARGET({n_target}), .TH_ENG({th_eng}), .TH_REL({th_rel})) dut\n"
            f"    (.clk(clk), .rst_n(rst_n), .cycles(cycles), "
            f".engaged(engaged), .ferr(ferr), .fd_valid(fd_valid));")

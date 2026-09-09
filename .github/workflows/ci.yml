@@ -8,6 +8,12 @@ on:
 permissions:
   contents: write
 
+# A newer push to the same branch supersedes the run in flight; on main the
+# in-flight run may be tagging a release, so it is left to finish.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
+
 jobs:
   auto-release:
     # Any docs/release-notes/v*.md without a matching tag gets tagged and
@@ -18,8 +24,9 @@ jobs:
     # existed.  A release must be reachable from the branch it shipped on.
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
       - name: The version in pyproject must have notes
@@ -91,9 +98,10 @@ jobs:
   # and the sweep measures physics, not line coverage.
   cross-domain-sweep:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.11"
           cache: pip
@@ -104,19 +112,48 @@ jobs:
       - name: Run the sweep
         run: pytest tests/ -m "sweep or sensitivity" -n 4 -v --tb=short
 
+  # The declared floor (requires-python >= 3.10, numpy 1.24, scipy 1.8) is
+  # also the interpreter the Android app embeds -- and until this job it was
+  # the one combination CI never ran.  Library only: the GUI extras do not
+  # resolve against these pins, so the GUI suites skip here by design and
+  # this leg carries no coverage floor (a subset run would trip it).  Read
+  # the "selected" count in the log, not the colour.
+  test-minimum:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.10"
+          cache: pip
+      - name: Install the floor
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq iverilog
+          python -m pip install --upgrade pip
+          pip install "numpy==1.24.4" "scipy==1.8.1" "matplotlib==3.7.5"
+          pip install -e .[test] pytest-xdist
+          python -c "import numpy, scipy; print(numpy.__version__, scipy.__version__)"
+      - name: Run the library suite on the floor
+        run: pytest tests/ -m "not sweep and not sensitivity" -n 4 -v --tb=short
+
   test:
     runs-on: ubuntu-latest
+    timeout-minutes: 45
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12"]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           # tags, so the release-notes checks in test_docs_consistency.py run
           # for real -- without them they skip, which is indistinguishable
           # from passing
           fetch-depth: 0
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: ${{ matrix.python-version }}
           cache: pip
@@ -126,7 +163,7 @@ jobs:
             libegl1 libgl1 libxkbcommon0 libdbus-1-3
           python -m pip install --upgrade pip
           pip install -e .[test,gui,guiqt]
-          pip install ruff mypy pytest-cov
+          pip install ruff mypy pytest-cov pytest-xdist
       - name: Lint
         run: ruff check src tests examples packaging
       - name: Type check
@@ -137,8 +174,10 @@ jobs:
       - name: Run tests
         env:
           QT_QPA_PLATFORM: offscreen
-        # the cross-domain matrix and the field-sensitivity gate run in their own parallel job
-        run: pytest tests/ -m "not sweep and not sensitivity" -v --tb=short --cov=pllsim --cov-report=term-missing:skip-covered
+        # the cross-domain matrix and the field-sensitivity gate run in their
+        # own parallel job.  -n 4: the hosted runner has four cores and the
+        # suite is deterministic (seed=0 default); measured 15 -> 10 min.
+        run: pytest tests/ -m "not sweep and not sensitivity" -n 4 -v --tb=short --cov=pllsim --cov-report=term-missing:skip-covered
       - name: Run examples (fast subset)
         if: matrix.python-version == '3.11'
         run: |

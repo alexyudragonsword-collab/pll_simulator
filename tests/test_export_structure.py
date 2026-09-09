@@ -82,3 +82,24 @@ def test_export_reports_what_it_could_not_compute(tmp_path, monkeypatch):
         rep.warnings
     readme = (tmp_path / "x" / "README.md").read_text()
     assert "Export warnings" in readme and "no analysis today" in readme
+
+
+def test_fll_tb_width_follows_n(reports):
+    # bench_markulic16 is N = 256: an 8-bit `cycles` port truncates N itself
+    # to zero and the exported testbench fails bit-true (it did, silently,
+    # in ex13's INDEX for several releases).  The width has to follow N.
+    seen = 0
+    for rep in reports:
+        if rep.kind not in ("sspll_int", "sspll_frac", "spll", "spll_frac"):
+            continue
+        tb = (rep.outdir / "rtl" / "tb" / "tb_fll.v").read_text()
+        m = re.search(r"\.W_CYC\((\d+)\)", tb)
+        assert m, f"{rep.name}: tb_fll.v carries no W_CYC"
+        w_cyc = int(m.group(1))
+        stim = (rep.outdir / "rtl" / "vectors" / "fll_cycles.hex").read_text()
+        top = max(int(h, 16) for h in stim.split())
+        assert top < (1 << w_cyc), f"{rep.name}: stimulus {top} > W_CYC {w_cyc}"
+        assert f"reg [{w_cyc - 1}:0] cycles;" in tb
+        if top >= 256:
+            seen += 1
+    assert seen >= 1, "no preset exercises N >= 256; the width test is idle"

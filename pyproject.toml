@@ -69,7 +69,7 @@ ignore_missing_imports = true
 # The whole package: export/ and webgui/ were the last two paths out (24 and
 # 15 errors), fixed rather than silenced.  If something must leave the gate,
 # it goes in docs/gen_roadmap.py's TYPE_CANDIDATES so the cost stays measured.
-files = ["src/pllsim"]
+files = ["src/pllsim", "packaging/apk_check.py"]
 
 [tool.ruff]
 line-length = 88
