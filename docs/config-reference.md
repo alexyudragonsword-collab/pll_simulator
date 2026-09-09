@@ -22,7 +22,7 @@ figure to be derived rather than declared).
 
 ## CPPLL
 
-charge-pump PLL, fractional-N with DTC — `presets.cppll_frac_38p4m_6g()`, 51 fields.
+charge-pump PLL, fractional-N with DTC — `presets.cppll_frac_38p4m_6g()`, 52 fields.
 
 ### Top level
 
@@ -35,6 +35,7 @@ charge-pump PLL, fractional-N with DTC — `presets.cppll_frac_38p4m_6g()`, 51 f
 | `div_pn_dbchz` | dBc/Hz | `-160` | divider PN floor / 分频器噪声底 |
 | `div_pn_fc` | Hz | `100000` | divider flicker corner / 分频器闪烁拐角 |
 | `ref_doubler_duty_err` | — | `0` | reference-doubler duty error / 参考倍频器占空比误差 |
+| `divider_retimed` | — | `False` | divider retimed on a VCO edge / 分频器重定时 |
 | `retime_jitter_rms_s` | s | `0` | retiming jitter / 重定时抖动 |
 | `int_band` | Hz,Hz | `(1000, 1e+08)` | integration band / 积分带 |
 
@@ -420,7 +421,7 @@ all-digital PLL, DTC + bang-bang — `presets.adpll_bb_100m_10g()`, 39 fields.
 
 ## ILCM
 
-injection-locked clock multiplier with FTL — `presets.ilcm_250m_12g()`, 28 fields.
+injection-locked clock multiplier with FTL — `presets.ilcm_250m_12g()`, 30 fields.
 
 ### Top level
 
@@ -434,9 +435,11 @@ injection-locked clock multiplier with FTL — `presets.ilcm_250m_12g()`, 28 fie
 | `inj_jitter_rms_s` | s | `1.5e-14` | injection edge jitter / 注入沿抖动 |
 | `ref_pn_dbchz` | dBc/Hz | `-155` | reference PN floor / 参考噪声底 |
 | `ref_pn_fc` | Hz | `20000` | reference flicker corner / 参考闪烁拐角 |
+| `ftl` | — | `True` | FTL enabled / 启用 FTL |
 | `ftl_f_lsb` | Hz | `20000` | FTL frequency LSB / FTL 频率 LSB |
 | `ftl_mu` | — | `1` | FTL step size / FTL 步长 |
 | `ftl_det_offset_s` | s | `0` | FTL detector offset / FTL 鉴频器失调 |
+| `timing_cal` | — | `False` | injection timing calibration / 注入时序校准 |
 | `timing_cal_step_s` | s | `5e-14` | injection timing cal step / 注入时序校准步长 |
 | `int_band` | Hz,Hz | `(1000, 1e+08)` | integration band / 积分带 |
 

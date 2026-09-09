@@ -41,10 +41,16 @@ def config_form(cfg, key_prefix: str) -> dict[str, str]:
                 label = s.label_zh if lang() == "zh" else s.label_en
                 if s.unit:
                     label += f" [{s.unit}]"
-                txt = cols[i % 3].text_input(
-                    label, value=fmt_value(s.value),
-                    key=f"{key_prefix}:{s.path}", help=s.path)
-                overrides[s.path] = txt
+                if s.kind == "bool":
+                    on = cols[i % 3].checkbox(
+                        label, value=bool(s.value),
+                        key=f"{key_prefix}:{s.path}", help=s.path)
+                    overrides[s.path] = fmt_value(on)
+                else:
+                    txt = cols[i % 3].text_input(
+                        label, value=fmt_value(s.value),
+                        key=f"{key_prefix}:{s.path}", help=s.path)
+                    overrides[s.path] = txt
     return overrides
 
 

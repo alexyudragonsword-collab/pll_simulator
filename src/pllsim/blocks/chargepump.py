@@ -43,6 +43,10 @@ class CPConfig:
     def __post_init__(self):
         if self.pfd_mode not in ("clamp", "wrap"):
             raise ValueError("pfd_mode must be 'clamp' or 'wrap'")
+        if not self.icp > 0:
+            raise ValueError(f"CPConfig icp must be positive, got {self.icp}")
+        if self.t_reset < 0 or self.dead_zone_s < 0:
+            raise ValueError("CPConfig t_reset / dead_zone_s cannot be negative")
 
     def default_noise(self) -> float:
         """4kT*gamma*2*gm rough default: scale with Icp (gm ~ Icp/(V*)) ."""

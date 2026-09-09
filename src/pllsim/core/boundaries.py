@@ -66,9 +66,17 @@ LOCK_TAIL_CYCLES = 5000
 
 
 def tail_frequency_error(freq_out, fout: float) -> float:
-    """|mean of the record's tail - fout| in Hz."""
+    """|mean of the record's tail - fout| in Hz.
+
+    The tail is the last LOCK_TAIL_CYCLES samples, capped at a quarter of the
+    record: a 4000-cycle run that started 5 MHz off and converged to 829 Hz
+    read "never reached fout" when the tail was the whole record, transient
+    included.
+    """
     import numpy as np
-    tail = np.asarray(freq_out[-LOCK_TAIL_CYCLES:], dtype=float)
+    n = len(freq_out)
+    n_tail = max(1, min(LOCK_TAIL_CYCLES, n // 4))
+    tail = np.asarray(freq_out[-n_tail:], dtype=float)
     return abs(float(np.mean(tail)) - float(fout))
 
 

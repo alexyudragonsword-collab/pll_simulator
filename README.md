@@ -63,7 +63,7 @@ Coverage targets: fref = 19.2–500 MHz, fout up to 12 GHz, integrated jitter
 
 ```bash
 pip install -e .          # numpy, scipy, matplotlib
-pytest tests/             # 779 tests: closed-form math + architecture behavior
+pytest tests/             # 837 tests: closed-form math + architecture behavior
 python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 ```
 
@@ -209,6 +209,13 @@ absorbs the perturbation), **TDC period normalization** (codes-per-period
 EMA cancels TDC gain error exactly).  DTC+BBPD mode: MASH+DTC alignment,
 bang-bang PD with self-consistent linearization `Kbb = sqrt(2/π)/σt`
 (fixed-point iteration), sign-sign LMS DTC gain calibration.
+
+DCO nonlinearity (`osc.nl1/nl2`) and, in `dtc_bbpd` mode, `kdco_est_error`
+are refused rather than modelled: the DCO word is an integer in LSB that a
+per-volt coefficient cannot describe, and the BBPD loop filter drives that
+word directly with no Kdco estimate in the path.  Both were found by the
+field-sensitivity gate — one computed NaN, the other read correctly and did
+nothing.
 
 ### ILCM (`arch/ilcm.py`)
 Per-reference-cycle realignment `e⁺ = (1−β)·wrap(e + Δφ_drift + φ_osc) + β·φ_inj`.

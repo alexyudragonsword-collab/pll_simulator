@@ -214,8 +214,13 @@ def _export_ams(pll, kind: str, name: str, outdir: Path,
     if kind in AMS_FULL_ELECTRICAL:
         try:
             t_settle = 30.0 / max(pll.analyze().loop.f_ugb, 1e4)
-        except Exception:
+        except Exception as e:                       # noqa: BLE001 -- reported
             t_settle = 3000.0 / c.fref
+            rep.warnings.append(
+                f"analyze() failed ({e!r}): the AMS testbench settle time "
+                f"fell back to 3000/fref = {t_settle:.3g} s instead of "
+                "30/f_ugb -- check it against your loop before trusting "
+                "the testbench")
     else:
         t_settle = 5000.0 / c.fref
     write_file(ams_dir / f"tb_{name}_ams.vams",
@@ -244,7 +249,14 @@ def export(pll, outdir, *, name: str | None = None,
     if "ams" in flavors:
         _export_ams(pll, kind, name, outdir, rep)
 
-    fl = flicker_delta_fs(pll) if "rnm" in flavors else None
+    fl = None
+    if "rnm" in flavors:
+        try:
+            fl = flicker_delta_fs(pll)
+        except Exception as e:                       # noqa: BLE001 -- reported
+            rep.warnings.append(
+                f"flicker delta not computed ({e!r}): the README cannot say "
+                "how much 1/f^3 jitter the RNM export ignores")
     write_file(outdir / "README.md",
                emit_readme(name, kind, rep.files, rep.golden, rep.warnings, fl))
     rep.files["."] = ["README.md"]

@@ -4,16 +4,17 @@ from __future__ import annotations
 from dataclasses import replace
 
 
-def flicker_delta_fs(pll) -> float | None:
-    """How many fs of integrated jitter the RNM export ignores (no 1/f^3)."""
-    try:
-        ar_full = pll.analyze()
-        osc0 = replace(pll.cfg.osc, pn_f1f3=0.0)
-        pll2 = type(pll)(replace(pll.cfg, osc=osc0))
-        ar_no = pll2.analyze()
-        return ar_full.jitter_fs - ar_no.jitter_fs
-    except Exception:
-        return None
+def flicker_delta_fs(pll) -> float:
+    """How many fs of integrated jitter the RNM export ignores (no 1/f^3).
+
+    Raises whatever analyze() raises: the caller records it as an export
+    warning, where a reader will see it, instead of a silently absent line.
+    """
+    ar_full = pll.analyze()
+    osc0 = replace(pll.cfg.osc, pn_f1f3=0.0)
+    pll2 = type(pll)(replace(pll.cfg, osc=osc0))
+    ar_no = pll2.analyze()
+    return ar_full.jitter_fs - ar_no.jitter_fs
 
 
 def emit_readme(name: str, kind: str, files: dict[str, list[str]],

@@ -14,6 +14,7 @@ from matplotlib.backends.backend_qtagg import (
 )
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtWidgets import (
+    QCheckBox,
     QFormLayout,
     QGroupBox,
     QHBoxLayout,
@@ -110,6 +111,7 @@ class ConfigForm(QWidget):
     def __init__(self, cfg):
         super().__init__()
         self._edits: dict[str, QLineEdit] = {}
+        self._checks: dict[str, QCheckBox] = {}
         self._initial: dict[str, str] = {}
         lay = QVBoxLayout(self)
         lay.setContentsMargins(0, 0, 0, 0)
@@ -124,18 +126,28 @@ class ConfigForm(QWidget):
                 label = s.label_en or s.path
                 if s.unit:
                     label += f" [{s.unit}]"
-                edit = QLineEdit(fmt_value(s.value))
-                edit.setToolTip(s.path)
-                form.addRow(label, edit)
-                self._edits[s.path] = edit
+                if s.kind == "bool":
+                    check = QCheckBox()
+                    check.setChecked(bool(s.value))
+                    check.setToolTip(s.path)
+                    form.addRow(label, check)
+                    self._checks[s.path] = check
+                else:
+                    edit = QLineEdit(fmt_value(s.value))
+                    edit.setToolTip(s.path)
+                    form.addRow(label, edit)
+                    self._edits[s.path] = edit
                 self._initial[s.path] = fmt_value(s.value)
             lay.addWidget(box)
         lay.addStretch(1)
 
     def overrides(self) -> dict[str, str]:
         """Only the fields the user actually edited."""
-        return {p: e.text() for p, e in self._edits.items()
-                if e.text().strip() != self._initial[p]}
+        out = {p: e.text() for p, e in self._edits.items()
+               if e.text().strip() != self._initial[p]}
+        out.update({p: fmt_value(c.isChecked()) for p, c in self._checks.items()
+                    if fmt_value(c.isChecked()) != self._initial[p]})
+        return out
 
 
 def _eng(v: float) -> str:

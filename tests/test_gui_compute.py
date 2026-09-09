@@ -311,3 +311,11 @@ def test_fom_page_reports_bad_power_instead_of_crashing():
     at.text_input[1].set_value("0").run()      # PLL power
     assert not at.exception, at.exception
     assert at.error, "zero power produced no visible error"
+
+
+def test_workbench_offers_bool_fields_as_checkboxes():
+    # the form is generated from enumerate_fields; a bool that reaches the
+    # page as a text box would round-trip "false" as a string the user edits
+    at = _run("1_Workbench.py")
+    keys = [c.key for c in at.checkbox]
+    assert any(k and k.endswith(":divider_retimed") for k in keys), keys

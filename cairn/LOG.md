@@ -2,6 +2,33 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-09 · P1-A: every field must move a number; forms reach every field
+
+- **Field-sensitivity gate** (`tests/test_field_sensitivity.py`, marker
+  `sensitivity`, runs in the parallel CI job): every editable field of every
+  preset is perturbed — with a partner knob or a run context where the
+  physics needs one — and must change analyze() or a 4000-cycle simulate()
+  (records, notes, spurs, calibrator traces), or sit in INERT_OK with a
+  reason that is itself re-checked.  What it found: ADPLL `nl2` drove the
+  frequency law to NaN (per-volt coefficient on an LSB word); BBPD ignored
+  `kdco_est_error` in both domains; both now refused at construction.
+  What it taught: `fll_engage` is a *re-engage* threshold (the FLL starts in
+  ACQ; hop tests exercise it); a bang-bang loop cannot see a 1.3× LMS step
+  in 4000 cycles (10× can); `frac.bits` is invisible below ~2^bits cycles.
+- **Bool fields reach the forms**: `enumerate_fields` emits kind="bool"
+  (`divider_retimed`, ILCM `ftl`/`timing_cal` were unsettable from every
+  surface); web/Qt/Android render checkboxes; config reference +3 rows.
+- **Block configs validate** (`OscConfig`, DTC, TDC, sampler, filter, lock
+  detector, DLF, Frac, CP): pure `__post_init__` validators, so
+  `_revalidate` finally covers the widest part of the form; an AST test pins
+  "no `__post_init__` derives state".
+- **Export reports** what it could not compute (AMS settle-time fallback,
+  flicker delta) instead of substituting silently.
+- Corrections from the gate: the never-reached-fout tail window now scales
+  with the record (a 4000-cycle run that converged from 5 MHz off read as
+  unlocked); the stock-quiet test gives the BBPD loop 20k cycles because at
+  8k it is still 200 kHz off — the note was right and the test was lucky.
+
 ## 2026-09-08 · Health check, and P0: the blind spots that contradicted our own rules
 
 - A full audit (code/architecture, tests/CI/tooling, model/docs/product;

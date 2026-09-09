@@ -49,6 +49,33 @@ class OscConfig:
     pull_lock_range_hz: float = 0.0   # f_L = f0*(Iinj/Iosc)/(2Q)
     pull_offset_hz: float = 0.0       # |f0 - f_aggressor|
 
+    def __post_init__(self):
+        # Pure validation: guiutil._revalidate re-runs this after every form
+        # edit, and until it existed the fifteen fields here -- the widest
+        # part of every form -- reached the engine unchecked.
+        if not self.f0 > 0:
+            raise ValueError(f"OscConfig f0 must be positive, got {self.f0}")
+        if not self.gain or not np.isfinite(self.gain):
+            raise ValueError(f"OscConfig gain must be a finite non-zero Hz/V "
+                             f"(or Hz/LSB), got {self.gain}")
+        if not self.pn_foffset > 0:
+            raise ValueError(f"OscConfig pn_foffset must be positive, got {self.pn_foffset}")
+        if self.pn_f1f3 < 0:
+            raise ValueError(f"OscConfig pn_f1f3 cannot be negative, got {self.pn_f1f3}")
+        if int(self.n_bands) < 1:
+            raise ValueError(f"OscConfig n_bands must be >= 1, got {self.n_bands}")
+        if self.n_bands > 1 and not self.band_step_hz > 0:
+            raise ValueError("OscConfig band_step_hz must be positive when "
+                             "n_bands > 1: a bank of coincident bands is one band")
+        if self.band_step_hz < 0:
+            raise ValueError(f"OscConfig band_step_hz cannot be negative, got {self.band_step_hz}")
+        if self.v_min is not None and self.v_max is not None and not self.v_min < self.v_max:
+            raise ValueError(f"OscConfig v_min ({self.v_min}) must be below "
+                             f"v_max ({self.v_max})")
+        if self.pull_lock_range_hz < 0 or self.pull_offset_hz < 0:
+            raise ValueError("OscConfig pull_lock_range_hz / pull_offset_hz "
+                             "cannot be negative")
+
     @staticmethod
     def lock_range_from_tank(f0: float, i_ratio: float, q_tank: float) -> float:
         """Adler lock range f0*(Iinj/Iosc)/(2Q), the usual way to get f_L."""

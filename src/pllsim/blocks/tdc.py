@@ -14,6 +14,17 @@ class TDCConfig:
     jitter_rms_s: float = 0.0     # input-referred random jitter
     gain_error: float = 0.0       # true LSB = t_res*(1+gain_error), unknown to loop
 
+    def __post_init__(self):
+        if not self.t_res > 0:
+            raise ValueError(f"TDCConfig t_res must be positive, got {self.t_res}")
+        if int(self.n_bits) < 1:
+            raise ValueError(f"TDCConfig n_bits must be >= 1, got {self.n_bits}")
+        if self.jitter_rms_s < 0:
+            raise ValueError(f"TDCConfig jitter_rms_s cannot be negative, got {self.jitter_rms_s}")
+        if self.inl_sin and len(self.inl_sin) != 3:
+            raise ValueError("TDCConfig inl_sin is (amplitude_s, cycles, phase_rad) "
+                             f"or empty, got {self.inl_sin}")
+
 
 class TDC:
     """Flash TDC measuring a time interval in [0, range)."""

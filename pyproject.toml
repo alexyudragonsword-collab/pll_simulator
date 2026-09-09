@@ -39,6 +39,7 @@ where = ["src"]
 [tool.pytest.ini_options]
 markers = [
     "sweep: full cross-domain parameter matrix; runs in its own CI job",
+    "sensitivity: per-field perturbation gate over every preset; same CI job as the sweep",
 ]
 testpaths = ["tests"]
 addopts = "-q"

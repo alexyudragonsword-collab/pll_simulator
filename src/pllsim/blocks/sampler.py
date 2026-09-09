@@ -37,6 +37,14 @@ class SamplerConfig:
     kick_q_c: float = 0.0
     kick_delay_s: float = 0.0
 
+    def __post_init__(self):
+        for name in ("amp_v", "c_samp", "gm", "pulse_width", "temp_k"):
+            if not getattr(self, name) > 0:
+                raise ValueError(f"SamplerConfig {name} must be positive, "
+                                 f"got {getattr(self, name)}")
+        if self.kick_delay_s < 0:
+            raise ValueError(f"SamplerConfig kick_delay_s cannot be negative, got {self.kick_delay_s}")
+
     @property
     def ktc_sigma_v(self) -> float:
         return float(np.sqrt(KB * self.temp_k / self.c_samp))

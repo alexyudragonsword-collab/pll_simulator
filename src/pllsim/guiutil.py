@@ -140,6 +140,9 @@ FIELD_INFO = {
     "ref_doubler_duty_err": ("", "参考倍频器占空比误差",
                              "reference-doubler duty error"),
     "retime_jitter_rms_s": ("s", "重定时抖动", "retiming jitter"),
+    "divider_retimed": ("", "分频器重定时", "divider retimed on a VCO edge"),
+    "ftl": ("", "启用 FTL", "FTL enabled"),
+    "timing_cal": ("", "注入时序校准", "injection timing calibration"),
     "ftl_mu": ("", "FTL 步长", "FTL step size"),
     "ftl_det_offset_s": ("s", "FTL 鉴频器失调", "FTL detector offset"),
     "timing_cal_step_s": ("s", "注入时序校准步长", "injection timing cal step"),
@@ -151,7 +154,7 @@ FIELD_INFO = {
 class FieldSpec:
     path: str          # dot path, e.g. "osc.pn_dbchz"
     value: object
-    kind: str          # "float" | "int" | "str" | "tuple"
+    kind: str          # "float" | "int" | "str" | "tuple" | "bool"
     unit: str = ""
     label_zh: str = ""
     label_en: str = ""
@@ -216,9 +219,15 @@ def enumerate_fields(cfg, prefix: str = "") -> list[FieldSpec]:
                     out.append(FieldSpec(f"{path}.{p}", pv, kind,
                                          info[0], info[1], info[2]))
             continue
-        if isinstance(v, bool) or callable(v):
+        if callable(v):
             continue
-        if isinstance(v, int):
+        if isinstance(v, bool):
+            # a bool used to be skipped here, which made divider_retimed
+            # (a few-dB effect) and the ILCM's FTL unsettable from every
+            # form -- the "reads correctly and does nothing" class, at the
+            # form layer
+            kind = "bool"
+        elif isinstance(v, int):
             kind = "int"
         elif isinstance(v, float):
             kind = "float"
@@ -244,6 +253,13 @@ def parse_value(text: str, kind: str):
         return None
     if kind == "float":
         return float(text)
+    if kind == "bool":
+        low = text.lower()
+        if low in ("true", "1", "yes", "on"):
+            return True
+        if low in ("false", "0", "no", "off"):
+            return False
+        raise ValueError(f"not a boolean: {text!r}")
     if kind == "int":
         return int(float(text))
     if kind == "tuple":
@@ -488,6 +504,8 @@ def fmt_value(v) -> str:
     """Format a field value for a text input (keeps scientific notation)."""
     if v is None:
         return ""
+    if isinstance(v, bool):        # before int: bool is an int subclass
+        return "true" if v else "false"
     if isinstance(v, float):
         return f"{v:.6g}"
     if isinstance(v, tuple):

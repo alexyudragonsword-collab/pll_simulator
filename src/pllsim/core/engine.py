@@ -42,7 +42,8 @@ def postprocess(sim: SimResult, settle_frac: float = 0.25,
         # ILCM/MDLL have no lock detector, and an analog loop's detector is
         # tuned for its design point: without this, a ring railed against
         # its tuning range read as an ordinary result 2.4 GHz off target
-        tail = float(np.mean(np.asarray(sim.freq_out[-5000:], dtype=float)))
+        n_tail = max(1, min(5000, len(sim.freq_out) // 4))
+        tail = float(np.mean(np.asarray(sim.freq_out[-n_tail:], dtype=float)))
         sim.notes.append(
             f"loop never reached the configured fout: output settled at "
             f"{tail / 1e9:.6f} GHz vs {sim.f0 / 1e9:.6f} GHz configured "

@@ -196,3 +196,14 @@ def test_the_android_build_has_no_navigation_flavors_left():
     kt = (WWW.parents[1] / "java/com/pllsim/app/MainActivity.kt").read_text()
     assert "BuildConfig" not in kt and "?nav=" not in kt, \
         "MainActivity still passes a navigation mode to the page"
+
+
+def test_the_form_renders_bool_fields_as_checkboxes():
+    # the bridge now emits kind="bool" for divider_retimed / ftl / timing_cal;
+    # a page that only knows text inputs would show "false" in a text box and
+    # send back whatever was typed
+    js = APP_JS.read_text(encoding="utf-8")
+    assert 'f.kind === "bool"' in js
+    assert 'type="checkbox"' in js and 'data-kind="bool"' in js
+    # and the override collector reads the checkbox, not its .value
+    assert 'inp.dataset.kind === "bool"' in js
