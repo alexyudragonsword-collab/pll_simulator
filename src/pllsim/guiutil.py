@@ -334,6 +334,153 @@ def apply_overrides(cfg, overrides: dict[str, str]):
     return cfg
 
 
+# ------------------------------------------------- shared page recipes
+# The web page, the Qt page and the phone bridge used to each carry their
+# own copy of these two experiments (eight bare "+4000"s between them).
+# One recipe here, the three surfaces render it.
+
+#: cycles discarded after the settling window before the EVM is read: the
+#: loop's response to the first symbols of the trajectory is a transient,
+#: not modulation error
+MOD_SKIP_CYCLES = 4000
+
+
+@dataclass
+class ModulationRun:
+    """Two-point GMSK modulation with a gain-path mismatch, and its EVM."""
+
+    evm: dict
+    sim: Any
+    mod: np.ndarray
+    ideal: np.ndarray
+    settle: int
+    fref: float
+    bit_rate_hz: float
+
+    @property
+    def sps(self) -> float:
+        return self.fref / self.bit_rate_hz
+
+    @property
+    def sps_ok(self) -> bool:
+        # < 8 samples/symbol: the per-ref-cycle grid floors the comparison
+        # against the continuous ideal; only the mismatch trend is real then
+        return self.sps >= 8
+
+    @property
+    def skip(self) -> int:
+        return self.settle + MOD_SKIP_CYCLES
+
+
+def modulation_run(pll, bit_rate_hz: float, dp_err: float = 0.0,
+                   n_cycles: int = 100_000, seed: int = 2) -> ModulationRun:
+    from .modulation import evm, gmsk_trajectory, prbs
+    fref = pll.cfg.fref
+    n_cyc = int(n_cycles)
+    settle = max(50_000, n_cyc // 3)
+    if n_cyc - settle < 8_000:
+        raise ValueError(f"{n_cyc} cycles leaves only {n_cyc - settle} after "
+                         f"the {settle}-cycle settling window; raise cycles")
+    bits = prbs(max(64, int((n_cyc - settle) * bit_rate_hz / fref) - 20), seed=7)
+    fdev, _ = gmsk_trajectory(bits, fref, bit_rate_hz)
+    mod = np.zeros(n_cyc)
+    mod[settle:settle + min(fdev.size, n_cyc - settle)] = fdev[: n_cyc - settle]
+    ideal = 2 * np.pi * np.cumsum(mod) / fref
+    # two-point-modulation kwargs only exist on the engines that can inject
+    # them; the dict keeps the call site honest to mypy
+    mod_kw: dict[str, Any] = {"mod_freq": mod, "mod_dp_gain": 1.0 + dp_err}
+    sim = pll.simulate(n_cyc, seed=int(seed), **mod_kw)
+    skip = settle + MOD_SKIP_CYCLES
+    e = evm(sim.phase_err_out[skip:], ideal[skip:])
+    return ModulationRun(e, sim, mod, ideal, settle, fref, bit_rate_hz)
+
+
+def modulation_axes(run: ModulationRun, a_traj, a_err) -> None:
+    """Draw the trajectory window and the detrended phase error."""
+    k = run.skip
+    sl = slice(k, k + int(40 * run.sps))
+    a_traj.plot(run.sim.t[sl] * 1e6, run.mod[sl] / 1e6)
+    a_traj.set_xlabel("t [us]")
+    a_traj.set_ylabel("freq dev [MHz]")
+    a_traj.grid(alpha=0.3)
+    d = run.sim.phase_err_out[k:] - run.ideal[k:]
+    x = np.arange(d.size)
+    d = d - np.polyval(np.polyfit(x, d, 1), x)
+    a_err.plot(run.sim.t[k:] * 1e3, np.degrees(d), lw=0.5)
+    a_err.set_xlabel("t [ms]")
+    a_err.set_ylabel("phase error [deg]")
+    a_err.grid(alpha=0.3)
+
+
+@dataclass
+class DriftRun:
+    """Background DTC-gain calibration tracking an accelerated gain ramp."""
+
+    sim: Any
+    drift: np.ndarray
+    lag: np.ndarray
+    spur_table: dict
+    mu_final: float
+    rate: float
+    fref: float
+    start: int
+
+    @property
+    def rate_over_mu(self) -> float:
+        # the sign-sign slew wall is rate == mu_final
+        return self.rate / self.mu_final
+
+    @property
+    def peak_lag(self) -> float:
+        return float(self.lag[-1])
+
+    @property
+    def lag_spur_dbc(self) -> float | None:
+        return max(self.spur_table.values()) if self.spur_table else None
+
+
+def drift_precheck(pll, eps_total: float, ramp_cycles: int) -> tuple[float, float]:
+    """(rate per cycle, mu_final) -- the rate-vs-mu precheck shown before a run."""
+    frac = getattr(pll.cfg, "frac", None)
+    if frac is None or frac.dtc_cal is None:
+        raise TypeError(f"{type(pll).__name__} has no DTC gain calibrator to drift")
+    mu_final = frac.dtc_cal.mu_final or frac.dtc_cal.mu
+    return eps_total / int(ramp_cycles), float(mu_final)
+
+
+def drift_run(pll, eps_total: float = 0.03, ramp_cycles: int = 60_000,
+              ramp_start: int = 80_000, seed: int = 3) -> DriftRun:
+    from .arch.base import dtc_t_target_of
+    from .core.dtcspurs import dtc_spur_table
+    rate, mu_final = drift_precheck(pll, eps_total, ramp_cycles)
+    n_ramp, start = int(ramp_cycles), int(ramp_start)
+    n = start + n_ramp
+    cal = pll.cfg.frac.dtc_cal
+    # the gear shift must have happened before the ramp starts, or the
+    # ramp measures the acquisition step size instead of the tracking one
+    cal.gear_shift_n = min(cal.gear_shift_n or 40_000, start // 2)
+    drift = np.zeros(n)
+    drift[start:] = eps_total * np.arange(n_ramp) / n_ramp
+    drift_kw: dict[str, Any] = {"dtc_gain_drift": drift}
+    sim = pll.simulate(n, seed=int(seed), **drift_kw)
+    g = sim.cal_traces["dtc_gain"]
+    lag = np.abs(g * (1.0 + drift) - 1.0)
+    c = pll.cfg
+    tab = dtc_spur_table(c.frac, dtc_t_target_of(pll), c.fref, c.fout,
+                         gain_eps=float(lag[-1]))
+    return DriftRun(sim, drift, lag, tab, mu_final, rate, float(c.fref), start)
+
+
+def drift_axes(run: DriftRun, ax) -> None:
+    t_ms = (np.arange(run.lag.size) - run.start) / run.fref * 1e3
+    ax.plot(t_ms, run.lag * 100, lw=0.9, label="tracking lag")
+    ax.plot(t_ms, run.drift * 100, "--", lw=0.9, label="true drift")
+    ax.set_xlabel("time from ramp start [ms]")
+    ax.set_ylabel("[%]")
+    ax.legend()
+    ax.grid(alpha=0.3)
+
+
 # ------------------------------------------------------------ config files
 
 CONFIG_FORMAT = "pllsim-config/1"

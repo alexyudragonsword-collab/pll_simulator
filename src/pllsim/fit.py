@@ -34,7 +34,8 @@ def load_pn_csv(path_or_buf, min_offset: float = 1.0) -> tuple[np.ndarray,
                                                                np.ndarray]:
     """Read (offset_hz, ldbc) pairs; skips headers, comments, blank lines."""
     if isinstance(path_or_buf, (str, bytes)):
-        raw = open(path_or_buf, "r", errors="ignore").read()
+        with open(path_or_buf, errors="ignore") as fh:
+            raw = fh.read()
     else:
         raw = path_or_buf.read()
     f, l = [], []
@@ -279,7 +280,7 @@ def attribute_budget(pll, f_meas: np.ndarray, ldbc_meas: np.ndarray,
     coef, _ = nnls(a * w[:, None], s_meas * w)
     fit = a @ coef
     resid = float(np.sqrt(np.mean((_ldbc(fit) - _ldbc(s_meas)) ** 2)))
-    factors = {gn: float(c) for gn, c in zip(gnames, coef)}
+    factors = {gn: float(c) for gn, c in zip(gnames, coef, strict=True)}
     fdb = {gn: float(10.0 * np.log10(max(c, 1e-12)))
            for gn, c in factors.items()}
     notes = [f"{'+'.join(gn)}: {fdb[gn]:+.1f} dB vs budget"

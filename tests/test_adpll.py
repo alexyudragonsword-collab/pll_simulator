@@ -29,10 +29,16 @@ def make_tdc_cfg(**kw):
 
 def test_zdomain_loop_metrics():
     ar = ADPLL(make_tdc_cfg()).analyze()
-    # alpha*fref/(2*pi) first-order estimate ~1 MHz; IIR+delay reduce PM
+    # alpha*fref/(2*pi) first-order estimate ~1 MHz; IIR+delay reduce PM.
+    # Bounds are a factor 2 either side of that estimate, and the PM window
+    # is what a type-II loop with one IIR stage can reach at all -- outside
+    # it the DLF coefficients are wrong, not the model
     assert 0.5e6 < ar.loop.f_ugb < 2.5e6
     assert 40 < ar.loop.pm_deg < 80
     assert ar.loop.f_3db < FREF / 2          # first crossing, not an alias image
+    # a -112 dBc/Hz DCO at 10 GHz integrates to ~100 fs over 1k-100M; the
+    # factor-2 window covers TDC quantization on top, and a 3x miss either
+    # way is a noise-source unit error, the class of defect this pins
     assert 40 < ar.jitter_fs < 200
 
 
@@ -50,8 +56,13 @@ def test_kdco_fcal_and_tdc_period_cal():
     kcal = KdcoCal(kdco_init=DCO.gain * 1.3, amp_lsb=8, meas_n=1024, rounds=4)
     tcal = TdcPeriodCal(cpp_init=(1 / FOUT) / 0.5e-12)
     sim = ADPLL(cfg).simulate(120_000, seed=1, kdco_cal=kcal, tdc_cal=tcal)
+    # 2 %: the FCAL resolves Kdco to amp_lsb*gain over meas_n cycles and
+    # averages four rounds; the seeded 30 % error must shrink by 15x, and a
+    # calibrator that read the wrong sign or the wrong gain lands >10 %
     assert abs(kcal.value - DCO.gain) / DCO.gain < 0.02
     true_cpp = (1 / FOUT) / (0.5e-12 * 1.05)
+    # 1 %: the period calibrator averages the TDC count over its window,
+    # and the seeded 5 % TDC gain error is what it must take out
     assert abs(tcal.value - true_cpp) / true_cpp < 0.01
     assert sim.jitter_fs < 200
 

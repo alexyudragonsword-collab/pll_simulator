@@ -29,8 +29,9 @@ a boundary -- that contract is what keeps the documented limits honest.
 from __future__ import annotations
 
 import math
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable
+from typing import Any
 
 import numpy as np
 
@@ -353,7 +354,7 @@ def compare_domains(pll: Any, *, n_cycles: int, seed: int,
     edges = np.logspace(np.log10(fm[0]), np.log10(fm[-1]), n_bins + 1)
     bands: list[BandDeviation] = []
     skipped: list[BandDeviation] = []
-    for a, b in zip(edges[:-1], edges[1:]):
+    for a, b in zip(edges[:-1], edges[1:], strict=True):
         mm = (fm >= a) & (fm < b)
         n = int(mm.sum())
         if n < min_points:

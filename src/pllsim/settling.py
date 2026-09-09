@@ -120,13 +120,15 @@ def fll_stability(pll) -> dict:
             "margin": float(i_max / c.fll_i)}
 
 
-def hop_statistics(make_pll, f_from: float, seeds=range(20),
+def hop_statistics(make_pll, f_from: float, seeds=None,
                    **kwargs) -> dict:
     """Settling-time distribution over a seed population.
 
     make_pll: factory returning a FRESH instance per run (calibrators
     carry state).  Returns arrays plus percentiles of t_phase.
     """
+    if seeds is None:
+        seeds = range(20)
     freq_s, phase_s = [], []
     for s in seeds:
         r = hop_settling(make_pll(), f_from, seed=s, **kwargs)

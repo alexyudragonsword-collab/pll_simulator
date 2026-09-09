@@ -89,7 +89,7 @@ if __name__ == "__main__":
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     fig, axes = plt.subplots(1, 3, figsize=(12.5, 3.8))
-    for ax, pname in zip(axes, ["dtc_gain_err", "inl_amp_ps", "mismatch_pct"]):
+    for ax, pname in zip(axes, ["dtc_gain_err", "inl_amp_ps", "mismatch_pct"], strict=False):
         ax.plot(res.params[pname], res.metrics["jitter_fs"], ".", ms=5)
         ax.set_xlabel(pname)
         ax.set_ylabel("jitter [fs]")

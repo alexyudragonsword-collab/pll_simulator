@@ -12,6 +12,7 @@ library into the bundle.  A console window stays open on purpose: it is
 the server log.  The default browser opens automatically once the
 server is up.
 """
+import contextlib
 import os
 import sys
 import threading
@@ -56,10 +57,8 @@ def main() -> None:
 
     def _open():
         time.sleep(4.0)
-        try:
+        with contextlib.suppress(Exception):
             webbrowser.open(url)
-        except Exception:
-            pass
 
     if not os.environ.get("PLLSIM_NO_BROWSER"):
         threading.Thread(target=_open, daemon=True).start()

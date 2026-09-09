@@ -68,7 +68,7 @@ for label, cal, err in [
     runs.append((label.strip(), sim))
 
 fig, ax = plt.subplots(figsize=(9.5, 5.5))
-for (label, sim), col in zip(runs, ("C2", "C1", "C0")):
+for (label, sim), col in zip(runs, ("C2", "C1", "C0"), strict=False):
     ax.semilogx(sim.f_psd, ldbc_from_sphi(sim.s_phi_psd), lw=0.9, color=col,
                 label=f"{label} ({sim.jitter_fs:.0f} fs)")
 ax.set_xlabel("offset [Hz]")

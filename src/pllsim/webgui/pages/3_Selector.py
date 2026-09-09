@@ -60,7 +60,7 @@ if rep is not None:
         feasible = [c for c in sorted(rep.candidates, key=lambda c: c.key)
                     if c.feasible and c.pll is not None]
         cols = st.columns(max(len(feasible), 1))
-        for col, cand in zip(cols, feasible):
+        for col, cand in zip(cols, feasible, strict=False):
             if col.button(cand.arch, key=f"open_{cand.arch}"):
                 st.session_state["wb_handoff"] = cand.pll
                 st.session_state["wb_handoff_label"] = cand.arch

@@ -70,7 +70,7 @@ for n_ramp in (240_000, 120_000, 60_000, 30_000):
     traces[rate / MU_FINAL] = (sim, drift, lag)
     c = pll0.cfg
     tab = dtc_spur_table(c.frac,
-                         lambda r: -r / c.fout - c.frac.dtc.range_s / 2.0,
+                         lambda r, c=c: -r / c.fout - c.frac.dtc.range_s / 2.0,
                          c.fref, c.fout, gain_eps=float(lag[-1]))
     spur = max(tab.values())
     print(f"{rate / MU_FINAL:9.2f}{rate:16.2e}{lag[-1] * 100:9.2f}%"
@@ -110,7 +110,7 @@ print("real thermal ramps sit ~5 orders below the cliff: background gain "
 
 # ------------------------------------------------------------------ plot
 fig, (axl, axr) = plt.subplots(1, 2, figsize=(12.5, 4.6))
-for ratio, (sim, drift, lag) in sorted(traces.items()):
+for ratio, (_sim, _drift, lag) in sorted(traces.items()):
     n0 = RAMP_START - 20_000
     t_ms = (np.arange(lag.size) - RAMP_START) / pll0.cfg.fref * 1e3
     axl.plot(t_ms[n0:], lag[n0:] * 100, lw=1.0,

@@ -2,8 +2,7 @@
 import numpy as np
 
 from pllsim import presets
-from pllsim.arch.cppll import frac_spur_offsets
-from pllsim.core.dtcspurs import dtc_error_sequence, dtc_spur_table
+from pllsim.core.dtcspurs import dtc_error_sequence, dtc_spur_table, frac_spur_offsets
 
 
 def _wu():

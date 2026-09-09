@@ -222,10 +222,9 @@ def test_modulation_page_computes_an_evm(app):
     from pllsim.guiqt.page_dynamics import ModulationPage
     page = ModulationPage()
     page.n_cyc.setText("60000")
-    res = page.compute()
-    e = res[0]
-    assert 0.0 < e["evm_pct"] < 100.0
-    page.render(res)
+    run = page.compute()                  # guiutil.ModulationRun since 2026-09
+    assert 0.0 < run.evm["evm_pct"] < 100.0
+    page.render(run)
     page.deleteLater()
 
 
@@ -258,11 +257,10 @@ def test_drift_page_computes_a_tracking_lag(app):
     page = DriftPage()
     page.n_ramp.setText("20000")
     page.start.setText("30000")
-    res = page.compute()
-    lag = res[2]
-    assert lag.size == 50_000
-    assert lag[-1] > 0.0, "a drifting gain must leave a tracking lag"
-    page.render(res)
+    run = page.compute()                  # guiutil.DriftRun since 2026-09
+    assert run.lag.size == 50_000
+    assert run.peak_lag > 0.0, "a drifting gain must leave a tracking lag"
+    page.render(run)
     page.deleteLater()
 
 

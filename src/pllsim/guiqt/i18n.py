@@ -18,7 +18,7 @@ alive or get text pushed into a deleted C++ object.
 from __future__ import annotations
 
 import weakref
-from typing import Callable
+from collections.abc import Callable
 
 _LANG = "en"
 # (weakref to widget, apply(widget, text), zh, en)

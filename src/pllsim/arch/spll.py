@@ -34,6 +34,7 @@ from .base import (
     PLLBase,
     add_pull_offset,
     attach_fine,
+    dtc_t_target_of,
     flicker_corner_hz,
     no_fine_note,
     pull_hz,
@@ -182,7 +183,7 @@ class SPLL(PLLBase):
             eps_g = getattr(d, "gain_error_residual", 0.01)
             for off, dbc in dtc_spur_table(
                     c.frac,
-                    lambda r: -r / c.fout - d.range_s / 2.0,
+                    dtc_t_target_of(self),
                     c.fref, c.fout, ntf=h, gain_eps=eps_g).items():
                 spurs[f"frac_spur@{off:.0f}Hz"] = dbc
         spurs.update(pull_spur(c.osc, err))
@@ -365,7 +366,7 @@ class SPLL(PLLBase):
             sim.cal_traces["dtc_gain"] = cal_trace
         spur_offsets = None
         if c.frac is not None:
-            from .cppll import frac_spur_offsets
+            from ..core.dtcspurs import frac_spur_offsets
             spur_offsets = frac_spur_offsets(c.frac.frac, c.fref,
                                              fmin=8.0 * c.fref / n_cycles)
         if band_trace is not None:

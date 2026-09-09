@@ -121,7 +121,7 @@ what you measured, not what you expect.
 
 ```bash
 pytest tests/ -q                    # ~18 min.  Use -k <name> while iterating.
-ruff check src tests examples packaging
+ruff check src tests examples packaging docs
 mypy                                # file list in pyproject.toml
 QT_QPA_PLATFORM=offscreen pytest tests/test_guiqt_smoke.py -q
 ```

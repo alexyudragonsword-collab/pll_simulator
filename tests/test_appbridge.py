@@ -38,7 +38,7 @@ def test_fields_match_enumerate_fields_exactly():
     got = call("fields", preset=name)
     want = enumerate_fields(presets.ALL_PRESETS[name]().cfg)
     assert [f["path"] for f in got["fields"]] == [s.path for s in want]
-    for f, s in zip(got["fields"], want):
+    for f, s in zip(got["fields"], want, strict=True):
         assert (f["unit"], f["label_zh"], f["label_en"]) == \
                (s.unit, s.label_zh, s.label_en), f["path"]
     assert got["group_labels"]["osc"] == {"zh": "振荡器", "en": "Oscillator"}
@@ -136,6 +136,8 @@ def test_fref_only_edit_on_a_fractional_preset_follows_the_plan():
                                 "n_cycles": 12000, "seed": 1})))
     assert reply["ok"], reply.get("error")
     r = reply["result"]
+    # 1 MHz on 6.253 GHz: a 12k-cycle tail still carries the FLL's last
+    # step; the defect this catches parked the divider 13 MHz off
     assert abs(r["f_end_ghz"] - 6.2530156) < 1e-3
     assert r["lock_time_us"] is not None
 
@@ -221,7 +223,7 @@ def test_benchmarks_are_the_same_table_both_guis_render():
     got = call("benchmarks")["rows"]
     want = benchmark_table()
     assert [r["paper"] for r in got] == [r["paper"] for r in want]
-    for g, w in zip(got, want):
+    for g, w in zip(got, want, strict=True):
         assert g["linear [fs]"] == pytest.approx(w["linear [fs]"])
 
 
@@ -442,7 +444,7 @@ def test_fit_demo_is_the_library_fit_of_the_same_synthetic():
 def test_fit_reads_pasted_csv_in_any_separator():
     from pllsim.appbridge import _fit_data
     f, l, _ = _fit_data("")
-    text = "offset_hz;dBc/Hz\n" + "\n".join(f"{x:.6g};{y:.3f}" for x, y in zip(f, l))
+    text = "offset_hz;dBc/Hz\n" + "\n".join(f"{x:.6g};{y:.3f}" for x, y in zip(f, l, strict=True))
     r = call("fit", text=text, mode="locked")
     assert r["demo"] is False and r["n_points"] == f.size
     assert "in-band [dBc/Hz]" in r["result"] and r["notes"]

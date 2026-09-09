@@ -35,8 +35,8 @@ def test_spll_frac_config_guards():
                    filt=c.filt,
                    frac=FracConfig(frac=0.2503, mash_order=2, dtc=c.frac.dtc))
     with pytest.raises(ValueError):        # integer-N with fractional fout
-        SPLLConfig(fref=c.fref, fout=c.fout, osc=c.osc, sampler=c.sampler,
-                   filt=c.filt).n_div
+        _ = SPLLConfig(fref=c.fref, fout=c.fout, osc=c.osc, sampler=c.sampler,
+                       filt=c.filt).n_div        # the property raises
 
 
 def test_spll_fractionalization_nearly_free():

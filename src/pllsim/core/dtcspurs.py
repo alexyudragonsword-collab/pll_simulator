@@ -27,6 +27,23 @@ import numpy as np
 TWOPI = 2.0 * np.pi
 
 
+def frac_spur_offsets(frac: float, fref: float, kmax: int = 6,
+                      fmin: float = 1e3) -> list[float]:
+    """Expected fractional-spur offsets: k*frac folded into [0, fref/2].
+
+    Lived in arch/cppll.py until 2026-09 and was imported from there by the
+    three sibling architectures; it is a property of the modulator, not of
+    the charge-pump loop.
+    """
+    offs = set()
+    for k in range(1, kmax + 1):
+        x = (k * frac) % 1.0
+        fo = min(x, 1.0 - x) * fref
+        if fmin < fo < 0.45 * fref:
+            offs.add(round(fo, 3))
+    return sorted(offs)
+
+
 def dtc_error_sequence(frac_cfg, t_target_of, n_seq: int,
                        gain_eps: float = 0.0) -> np.ndarray:
     """Systematic DTC timing error [s] per reference cycle, bit-true.

@@ -37,29 +37,29 @@ class FreqResponse:
 
     # ---------------------------------------------------------------- ctors
     @classmethod
-    def constant(cls, f: np.ndarray, value: complex) -> "FreqResponse":
+    def constant(cls, f: np.ndarray, value: complex) -> FreqResponse:
         return cls(f, np.full(np.asarray(f).shape, complex(value)))
 
     @classmethod
-    def from_callable(cls, f: np.ndarray, func) -> "FreqResponse":
+    def from_callable(cls, f: np.ndarray, func) -> FreqResponse:
         s = 1j * TWOPI * np.asarray(f, dtype=float)
         return cls(f, func(s))
 
     @classmethod
-    def integrator(cls, f: np.ndarray, gain: float = 1.0) -> "FreqResponse":
+    def integrator(cls, f: np.ndarray, gain: float = 1.0) -> FreqResponse:
         """gain / s  with s = j2πf."""
         return cls(f, gain / (1j * TWOPI * np.asarray(f, dtype=float)))
 
     @classmethod
-    def differentiator(cls, f: np.ndarray, gain: float = 1.0) -> "FreqResponse":
+    def differentiator(cls, f: np.ndarray, gain: float = 1.0) -> FreqResponse:
         return cls(f, gain * 1j * TWOPI * np.asarray(f, dtype=float))
 
     @classmethod
-    def delay(cls, f: np.ndarray, td: float) -> "FreqResponse":
+    def delay(cls, f: np.ndarray, td: float) -> FreqResponse:
         return cls(f, np.exp(-1j * TWOPI * np.asarray(f, dtype=float) * td))
 
     @classmethod
-    def zdomain(cls, f: np.ndarray, num_z, den_z, fs: float) -> "FreqResponse":
+    def zdomain(cls, f: np.ndarray, num_z, den_z, fs: float) -> FreqResponse:
         """Evaluate a z-domain rational function at z = exp(j2πf/fs).
 
         num_z, den_z: coefficient sequences in z^-1 (i.e. b0 + b1 z^-1 + ...).
@@ -74,14 +74,14 @@ class FreqResponse:
         return cls(f, num / den)
 
     @classmethod
-    def zoh(cls, f: np.ndarray, fs: float) -> "FreqResponse":
+    def zoh(cls, f: np.ndarray, fs: float) -> FreqResponse:
         """Zero-order-hold response (1 - z^-1)/(s Ts): sinc magnitude, half-sample delay."""
         f = np.asarray(f, dtype=float)
         x = np.pi * f / fs
         return cls(f, np.sinc(f / fs) * np.exp(-1j * x))
 
     @classmethod
-    def accumulator(cls, f: np.ndarray, fs: float, gain: float = 1.0) -> "FreqResponse":
+    def accumulator(cls, f: np.ndarray, fs: float, gain: float = 1.0) -> FreqResponse:
         """gain / (1 - z^-1) at z = exp(j2πf/fs) — discrete-time integrator."""
         zinv = np.exp(-1j * TWOPI * np.asarray(f, dtype=float) / fs)
         return cls(f, gain / (1.0 - zinv))
@@ -122,7 +122,7 @@ class FreqResponse:
     def __neg__(self):
         return FreqResponse(self.f, -self.h)
 
-    def feedback(self, other=None) -> "FreqResponse":
+    def feedback(self, other=None) -> FreqResponse:
         """Closed loop self / (1 + self*other); unity feedback if other is None."""
         if other is None:
             return FreqResponse(self.f, self.h / (1.0 + self.h))

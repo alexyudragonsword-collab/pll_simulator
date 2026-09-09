@@ -278,6 +278,7 @@ class FitPage(Page):
     def _go(self):
         if self._data is None:
             self._demo()
+        assert self._data is not None
         f, l = self._data
         mode = self.mode.currentText()
         base = self.baseline.currentText()

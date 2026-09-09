@@ -10,7 +10,7 @@ from pllsim.core.spectrum import phase_psd
 def band_avg_db_error(f, s_meas, s_target, f1, f2, n_bands=8):
     edges = np.logspace(np.log10(f1), np.log10(f2), n_bands + 1)
     errs = []
-    for a, b in zip(edges[:-1], edges[1:]):
+    for a, b in zip(edges[:-1], edges[1:], strict=True):
         m = (f >= a) & (f < b)
         if m.sum() < 3:
             continue

@@ -20,6 +20,7 @@ import numpy as np
 from ..blocks.oscillator import OscConfig, Oscillator
 from ..blocks.tdc import BBPD, TDC, TDCConfig, meta_gain_penalty
 from ..core.colored import synth_from_psd
+from ..core.dtcspurs import frac_spur_offsets
 from ..core.engine import detect_lock, postprocess
 from ..core.freqresp import FreqResponse, default_grid, loop_metrics
 from ..core.jitter import ipn_dbc, rms_jitter_fs
@@ -35,13 +36,14 @@ from ..core.results import AnalysisResult, SimResult
 from .base import (
     PLLBase,
     add_pull_offset,
+    dtc_t_target_of,
     flicker_corner_hz,
     pull_hz,
     pull_notes,
     pull_spur,
     supply_ripple_v,
 )
-from .cppll import FracConfig, frac_spur_offsets
+from .cppll import FracConfig
 
 TWOPI = 2.0 * np.pi
 
@@ -269,7 +271,7 @@ class ADPLL(PLLBase):
             from ..core.dtcspurs import dtc_spur_table
             eps = getattr(c.frac.dtc, "gain_error_residual", 0.01)
             for off, dbc in dtc_spur_table(
-                    c.frac, lambda r: r / c.fout, c.fref, c.fout,
+                    c.frac, dtc_t_target_of(self), c.fref, c.fout,
                     ntf=h, gain_eps=eps).items():
                 spurs[f"frac_spur@{off:.0f}Hz"] = dbc
         return AnalysisResult(
@@ -517,7 +519,7 @@ class ADPLL(PLLBase):
         phase_err = np.empty(n_cycles)
         freq_out = np.empty(n_cycles)
         otw_rec = np.empty(n_cycles)
-        cal_trace = np.empty(n_cycles) if dtc_cal is not None else None
+        cal_trace = np.empty(n_cycles if dtc_cal is not None else 0)
         fv = c.osc.freq_law(otw_center)
 
         for n in range(n_cycles):
@@ -531,7 +533,7 @@ class ADPLL(PLLBase):
             # accumulate in the count (same as the CPPLL's jit_div)
             e = bb.sample(t_div + jit_div[n] - t_ref)
 
-            if dtc_cal is not None:
+            if dtc_cal is not None and dtc is not None:
                 dtc_cal.step(e, residual_ui)
                 dtc.gain_corr = dtc_cal.value
                 cal_trace[n] = dtc_cal.value

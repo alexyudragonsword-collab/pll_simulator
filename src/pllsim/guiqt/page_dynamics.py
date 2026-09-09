@@ -6,9 +6,14 @@ import numpy as np
 from PySide6.QtWidgets import QComboBox, QHBoxLayout, QLabel, QPushButton, QVBoxLayout
 
 from .. import presets
-from ..core.dtcspurs import dtc_spur_table
-from ..guiutil import frac_presets
-from ..modulation import evm, gmsk_trajectory, prbs, two_point_presets
+from ..guiutil import (
+    drift_axes,
+    drift_run,
+    frac_presets,
+    modulation_axes,
+    modulation_run,
+)
+from ..modulation import two_point_presets
 from ..settling import fll_stability, hop_settling, hop_statistics
 from .i18n import tr
 from .widgets import FigList, MetricRow, Page, float_edit
@@ -60,42 +65,19 @@ class ModulationPage(Page):
         failure this GUI has actually had.
         """
         nm = self.arch.currentText()
-        fref = presets.ALL_PRESETS[nm]().cfg.fref   # not a copy
         rb = float(self.rb.text())
         dp = float(self.dp.text())
         n_cyc = int(float(self.n_cyc.text()))
-        settle = max(50_000, n_cyc // 3)
-        bits = prbs(max(64, int((n_cyc - settle) * rb / fref) - 20), seed=7)
-        fdev, _ = gmsk_trajectory(bits, fref, rb)
-        mod = np.zeros(n_cyc)
-        mod[settle:settle + min(fdev.size, n_cyc - settle)] = \
-            fdev[: n_cyc - settle]
-        ideal = 2 * np.pi * np.cumsum(mod) / fref
-        pll = presets.ALL_PRESETS[nm]()
-        sim = pll.simulate(n_cyc, seed=2, mod_freq=mod, mod_dp_gain=1.0 + dp)
-        e = evm(sim.phase_err_out[settle + 4000:], ideal[settle + 4000:])
-        return e, sim, mod, ideal, settle, fref, rb
+        return modulation_run(presets.ALL_PRESETS[nm](), rb, dp, n_cyc, seed=2)
 
-    def render(self, res):
-        e, sim, mod, ideal, settle, fref, rb = res
+    def render(self, run):
+        e = run.evm
         self.metrics.set_metrics([
             ("EVM", f"{e['evm_pct']:.2f} %"),
             ("EVM", f"{e['evm_db']:.1f} dB"),
             ("phase err", f"{e['phase_err_rms_deg']:.2f} deg rms")])
-        sps = fref / rb
         fig, (a1, a2) = plt.subplots(1, 2, figsize=(10, 3.8))
-        sl = slice(settle + 4000, settle + 4000 + int(40 * sps))
-        a1.plot(sim.t[sl] * 1e6, mod[sl] / 1e6)
-        a1.set_xlabel("t [us]")
-        a1.set_ylabel("freq dev [MHz]")
-        a1.grid(alpha=0.3)
-        d = sim.phase_err_out[settle + 4000:] - ideal[settle + 4000:]
-        x = np.arange(d.size)
-        d = d - np.polyval(np.polyfit(x, d, 1), x)
-        a2.plot(sim.t[settle + 4000:] * 1e3, np.degrees(d), lw=0.5)
-        a2.set_xlabel("t [ms]")
-        a2.set_ylabel("phase error [deg]")
-        a2.grid(alpha=0.3)
+        modulation_axes(run, a1, a2)
         self.figs.set_figs([fig])
 
     def _go(self):
@@ -252,46 +234,18 @@ class DriftPage(Page):
         eps = float(self.eps.text())
         n_ramp = int(float(self.n_ramp.text()))
         start = int(float(self.start.text()))
-        n = start + n_ramp
-        pll = presets.ALL_PRESETS[nm]()
-        pll.cfg.frac.dtc_cal.gear_shift_n = min(
-            pll.cfg.frac.dtc_cal.gear_shift_n or 40_000, start // 2)
-        drift = np.zeros(n)
-        drift[start:] = eps * np.arange(n_ramp) / n_ramp
-        sim = pll.simulate(n, seed=3, dtc_gain_drift=drift)
-        g = sim.cal_traces["dtc_gain"]
-        lag = np.abs(g * (1.0 + drift) - 1.0)
-        c = pll.cfg
-        kind = type(pll).__name__
-        if kind == "SPLL":
-            tof = lambda r: -r / c.fout - c.frac.dtc.range_s / 2.0
-        elif kind == "SSPLL":
-            tof = lambda r: (1.0 + r) / c.fout - c.frac.dtc.range_s / 2.0
-        else:
-            tof = lambda r: r / c.fout
-        tab = dtc_spur_table(c.frac, tof, c.fref, c.fout,
-                             gain_eps=float(lag[-1]))
-        mu = c.frac.dtc_cal.mu_final or c.frac.dtc_cal.mu
-        return sim, drift, lag, tab, mu, c.fref
+        return drift_run(presets.ALL_PRESETS[nm](), eps, n_ramp, start, seed=3)
 
-    def render(self, res):
-        sim, drift, lag, tab, mu, fref = res
-        rate = float(self.eps.text()) / int(float(self.n_ramp.text()))
+    def render(self, run):
         self.metrics.set_metrics([
-            ("rate/mu", f"{rate / mu:.2f}x"),
-            ("peak lag", f"{lag[-1] * 100:.2f} %"),
-            ("lag spur", f"{max(tab.values()):.1f} dBc" if tab else "-"),
-            ("jitter", f"{sim.jitter_fs:.0f} fs"
-             if sim.jitter_fs else "-")])
+            ("rate/mu", f"{run.rate_over_mu:.2f}x"),
+            ("peak lag", f"{run.peak_lag * 100:.2f} %"),
+            ("lag spur", f"{run.lag_spur_dbc:.1f} dBc"
+             if run.lag_spur_dbc is not None else "-"),
+            ("jitter", f"{run.sim.jitter_fs:.0f} fs"
+             if run.sim.jitter_fs else "-")])
         fig, ax = plt.subplots(figsize=(9, 4))
-        start = int(float(self.start.text()))
-        t_ms = (np.arange(lag.size) - start) / fref * 1e3
-        ax.plot(t_ms, lag * 100, lw=0.9, label="tracking lag")
-        ax.plot(t_ms, drift * 100, "--", lw=0.9, label="true drift")
-        ax.set_xlabel("time from ramp start [ms]")
-        ax.set_ylabel("[%]")
-        ax.legend()
-        ax.grid(alpha=0.3)
+        drift_axes(run, ax)
         self.figs.set_figs([fig])
 
     def _go(self):

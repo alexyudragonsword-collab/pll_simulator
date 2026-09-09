@@ -2,6 +2,24 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-09 · Code hygiene (plan item 22), and the Windows workflow proven
+
+- One source each: `arch/base.dtc_t_target_of` (was five copies of the
+  per-architecture residue→DTC-target mapping: two engines' analyze(),
+  bridge, web, Qt); `guiutil.modulation_run/_axes` and `drift_run/_axes`
+  (the GMSK/EVM and gain-ramp experiments, eight bare `+4000`s →
+  `MOD_SKIP_CYCLES`).  `frac_spur_offsets` lives in `core/dtcspurs.py`
+  (a modulator property, not the charge-pump loop's).
+- `__all__` names `validation` and `cli`; `tests/test_package.py` pins
+  both directions.  mypy `check_untyped_defs = true` (11 real errors
+  fixed: an Optional indexed, kwargs an engine does not take).  ruff adds
+  B/UP/SIM and covers `docs/`; every `zip()` says strict= on purpose.
+  Provenance comments on the ADPLL and bridge tolerances the health check
+  named.
+- `windows-exe` dispatched from main after the reusable-workflow rewrite:
+  green in 3.5 min through `windows-exe-build.yml`, artifact produced.
+  P1-B2 closed.
+
 ## 2026-09-09 · P3-19: the phone gets the Fit page (11 of 13)
 
 - Bridge `fit(text, mode, preset)`: pasted (offset, dBc/Hz) text through

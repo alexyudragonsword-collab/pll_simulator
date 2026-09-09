@@ -18,6 +18,7 @@ from ..blocks.loopfilter import FilterDesign, LoopFilter
 from ..blocks.oscillator import OscConfig, Oscillator
 from ..core.colored import synth_from_psd
 from ..core.deltasigma import Efm1, Mash11, Mash111
+from ..core.dtcspurs import frac_spur_offsets
 from ..core.engine import detect_lock, postprocess
 from ..core.freqresp import FreqResponse, default_grid, loop_metrics
 from ..core.jitter import ipn_dbc, rms_jitter_fs
@@ -34,6 +35,7 @@ from .base import (
     PLLBase,
     add_pull_offset,
     attach_fine,
+    dtc_t_target_of,
     flicker_corner_hz,
     no_fine_note,
     pull_hz,
@@ -48,18 +50,6 @@ from .base import (
 TWOPI = 2.0 * np.pi
 
 
-def frac_spur_offsets(frac: float, fref: float, kmax: int = 6,
-                      fmin: float = 1e3) -> list[float]:
-    """Expected fractional-spur offsets: k*frac folded into [0, fref/2]."""
-    offs = set()
-    for k in range(1, kmax + 1):
-        x = (k * frac) % 1.0
-        fo = min(x, 1.0 - x) * fref
-        if fmin < fo < 0.45 * fref:
-            offs.add(round(fo, 3))
-    return sorted(offs)
-
-
 @dataclass
 class FracConfig:
     """Fractional-N configuration."""
@@ -68,8 +58,8 @@ class FracConfig:
     mash_order: int = 3               # 1, 2 or 3
     bits: int = 24
     dtc: DTCConfig | None = None      # wired by blocks.dtc
-    dtc_cal: "object | None" = None   # gain calibrator (LMSGainCal/SignSignLMS)
-    dtc_lut_cal: "object | None" = None   # INL calibrator (LUTCal, seconds)
+    dtc_cal: object | None = None   # gain calibrator (LMSGainCal/SignSignLMS)
+    dtc_lut_cal: object | None = None   # INL calibrator (LUTCal, seconds)
 
     def __post_init__(self):
         if not 0.0 <= self.frac < 1.0:
@@ -110,7 +100,7 @@ class CPPLLConfig:
     # aperture jitter, and it costs a full VCO period of latency.
     divider_retimed: bool = False
     retime_jitter_rms_s: float = 0.0
-    lock_detect: "object | None" = None    # blocks.lockdetect.LockDetectConfig
+    lock_detect: object | None = None    # blocks.lockdetect.LockDetectConfig
     int_band: tuple[float, float] = (1e3, 100e6)
 
     @property
@@ -252,7 +242,7 @@ class CPPLL(PLLBase):
                 from ..core.dtcspurs import dtc_spur_table
                 eps = getattr(c.frac.dtc, "gain_error_residual", 0.01)
                 for off, dbc in dtc_spur_table(
-                        c.frac, lambda r: r / c.fout, c.fref, c.fout,
+                        c.frac, dtc_t_target_of(self), c.fref, c.fout,
                         ntf=h_lp, gain_eps=eps).items():
                     spurs[f"frac_spur@{off:.0f}Hz"] = dbc
         return AnalysisResult(

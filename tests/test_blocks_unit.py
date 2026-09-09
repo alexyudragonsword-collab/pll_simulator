@@ -224,7 +224,7 @@ def _piecewise(segs, i_bias, t0, t1):
         s += dur
     pts = sorted(e for e in edges if t0 <= e <= t1)
     out = []
-    for lo, hi in zip(pts[:-1], pts[1:]):
+    for lo, hi in zip(pts[:-1], pts[1:], strict=True):
         if hi <= lo:
             continue
         mid, cur, s = 0.5 * (lo + hi), i_bias, 0.0
