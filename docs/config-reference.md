@@ -291,7 +291,7 @@ reference-sampling PLL — `presets.spll_frac_52m_6p253g()`, 51 fields.
 
 ## ADPLL (TDC)
 
-all-digital PLL, counter + TDC — `presets.adpll_100m_10g()`, 33 fields.
+all-digital PLL, counter + TDC — `presets.adpll_100m_10g()`, 35 fields.
 
 ### Top level
 
@@ -306,6 +306,8 @@ all-digital PLL, counter + TDC — `presets.adpll_100m_10g()`, 33 fields.
 | `kdco_est_error` | — | `0` | KDCO estimate error / KDCO 估计误差 |
 | `bb_jitter_rms_s` | s | `1e-13` | BBPD input jitter / BBPD 输入抖动 |
 | `bb_meta_window_s` | s | `0` | BBPD metastability window / BBPD 亚稳态窗口 |
+| `div_pn_dbchz` | dBc/Hz | `_unset_` | divider PN floor / 分频器噪声底 |
+| `div_pn_fc` | Hz | `_unset_` | divider flicker corner / 分频器闪烁拐角 |
 | `int_band` | Hz,Hz | `(1000, 1e+08)` | integration band / 积分带 |
 
 ### osc — oscillator (`blocks.oscillator.OscConfig`)
@@ -348,7 +350,7 @@ all-digital PLL, counter + TDC — `presets.adpll_100m_10g()`, 33 fields.
 
 ## ADPLL (BBPD)
 
-all-digital PLL, DTC + bang-bang — `presets.adpll_bb_100m_10g()`, 39 fields.
+all-digital PLL, DTC + bang-bang — `presets.adpll_bb_100m_10g()`, 41 fields.
 
 ### Top level
 
@@ -363,6 +365,8 @@ all-digital PLL, DTC + bang-bang — `presets.adpll_bb_100m_10g()`, 39 fields.
 | `kdco_est_error` | — | `0` | KDCO estimate error / KDCO 估计误差 |
 | `bb_jitter_rms_s` | s | `2e-13` | BBPD input jitter / BBPD 输入抖动 |
 | `bb_meta_window_s` | s | `0` | BBPD metastability window / BBPD 亚稳态窗口 |
+| `div_pn_dbchz` | dBc/Hz | `-160` | divider PN floor / 分频器噪声底 |
+| `div_pn_fc` | Hz | `100000` | divider flicker corner / 分频器闪烁拐角 |
 | `int_band` | Hz,Hz | `(1000, 1e+08)` | integration band / 积分带 |
 
 ### osc — oscillator (`blocks.oscillator.OscConfig`)

@@ -2,6 +2,23 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-09 · P2-14: the bang-bang ADPLL's divider makes noise now
+
+- `ADPLLConfig.div_pn_dbchz` / `div_pn_fc` (None = not modelled, and
+  analyze() says so; tdc mode refuses them — no divider there; both or
+  neither).  Linear model: `FlickerFloorPhase` through `h·fcw`, like the
+  CPPLL; time domain: synthesized divider-edge jitter added at the BBPD
+  every cycle, not accumulated in the count (mirrors CPPLL `jit_div`).
+- Measured: adpll_bb_100m_10g with −160 dBc/Hz / 100 kHz (the CPPLL
+  default) reads 139 fs time-domain (114 before), 154 fs linear (139) —
+  N = 100.5 is 40 dB, a −120 dBc/Hz floor at 10 GHz is not negligible.
+  Dartizio (N = 18.5) at −160 read 81 fs; −165 (a 28 nm assumption, the
+  paper does not disclose it) keeps the time domain at 76 fs vs the
+  published 77, linear 59.  Benchmark table, index.html and the deck
+  facts refreshed.
+- Tests: tdc refusal, both-or-neither, unset-is-said, −140 dBc/Hz raises
+  jitter >1.5× in both domains.
+
 ## 2026-09-09 · P2-13: the tuning law says when it stops describing an oscillator
 
 - New boundary `tuning-swing` (`core/boundaries.py` `TUNING_SWING_V` = 1.5 V,

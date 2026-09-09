@@ -3,7 +3,7 @@
   "architectures": 6,
   "presets": 15,
   "examples": 21,
-  "tests": 779,
+  "tests": 862,
   "releases": 14,
   "benchmarks": [
     {
@@ -15,8 +15,8 @@
     {
       "paper": "Dartizio'23 DTC-BB digital PLL 9.25G frac-N",
       "published [fs]": "77",
-      "linear [fs]": 58.9,
-      "time-domain [fs]": "77"
+      "linear [fs]": 59.3,
+      "time-domain [fs]": "76"
     },
     {
       "paper": "Markulic'16 SSPLL 10.24G int-N",
