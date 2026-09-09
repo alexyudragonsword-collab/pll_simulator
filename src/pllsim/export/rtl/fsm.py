@@ -96,6 +96,7 @@ endmodule
 _FLL = """\
 module pllsim_fll #(
   parameter integer W_CNT    = 20,   // per-window cycle-count accumulator width
+  parameter integer W_CYC    = 8,    // per-ref-period cycle-count width (> log2 N)
   parameter integer WINDOW   = 64,   // ref cycles per FD window
   parameter integer N_TARGET = 0,    // expected counts per window (N*WINDOW)
   parameter integer TH_ENG   = 0,    // engage threshold [counts per window]
@@ -104,7 +105,7 @@ module pllsim_fll #(
 ) (
   input  wire                  clk,       // reference clock
   input  wire                  rst_n,
-  input  wire [7:0]            cycles,    // VCO cycles counted this ref period
+  input  wire [W_CYC-1:0]      cycles,    // VCO cycles counted this ref period
   output reg                   engaged,   // 1 = FLL drives, sampler gated off
   output reg  signed [W_CNT:0] ferr,      // last window count error
   output reg                   fd_valid   // pulses when ferr updates
@@ -112,7 +113,7 @@ module pllsim_fll #(
   reg [W_CNT-1:0] acc;
   reg [15:0]      w;
   reg [3:0]       quiet;
-  wire [W_CNT-1:0] acc_next = acc + {{(W_CNT-8){1'b0}}, cycles};
+  wire [W_CNT-1:0] acc_next = acc + {{(W_CNT-W_CYC){1'b0}}, cycles};
   wire window_end = (w == WINDOW - 1);
   wire signed [W_CNT:0] ferr_next = $signed({1'b0, acc_next}) - N_TARGET;
   wire [W_CNT:0] abs_ferr = ferr_next[W_CNT] ? (~ferr_next + 1'b1) : ferr_next;

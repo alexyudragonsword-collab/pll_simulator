@@ -29,13 +29,14 @@ permissions:
 jobs:
   apk:
     runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v5
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: "17"
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         with:
           # Chaquopy's buildPython must match the version in
           # android/app/build.gradle.kts -- 3.10, the newest Python for
@@ -45,7 +46,7 @@ jobs:
           python-version: "3.10"
       - name: Install build tools
         run: pip install build cython
-      - uses: gradle/actions/setup-gradle@v3
+      - uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: "8.2"
 
@@ -93,24 +94,7 @@ jobs:
           ls -la android/app/pysrc/
 
       - name: Check the wheels are the architecture their tag claims
-        run: |
-          python - <<'PY'
-          import glob, sys, zipfile
-          from pathlib import Path
-          ok = True
-          for whl in sorted(glob.glob("android/app/pysrc/pllsim-*.whl")):
-              with zipfile.ZipFile(whl) as z:
-                  so = next(n for n in z.namelist() if n.endswith(".so"))
-                  data = z.read(so)
-              machine = int.from_bytes(data[18:20], "little")   # ELF e_machine
-              names = {0xB7: "AArch64", 0x3E: "x86-64", 0x28: "ARM"}
-              print(f"{Path(whl).name}: {so} -> "
-                    f"{names.get(machine, hex(machine))}")
-              if machine != (0xB7 if "arm64" in whl else 0x3E):
-                  print(f"::error::{whl} is not the architecture it claims")
-                  ok = False
-          sys.exit(0 if ok else 1)
-          PY
+        run: python packaging/apk_check.py wheels android/app/pysrc/pllsim-*.whl
 
       - name: Build compiled APK
         run: gradle -p android :app:assembleDebug
@@ -134,45 +118,6 @@ jobs:
       # would say so.  Look inside instead: one must carry source, the other
       # must carry objects, and neither may carry both.
       - name: Prove the two APKs actually differ
-        run: |
-          python - <<'PY'
-          import io, sys, zipfile
-          from pathlib import Path
-
-          PKGS = ("core", "arch", "blocks", "calibration")
-
-          def payload_names(apk):
-              names = []
-              with zipfile.ZipFile(apk) as z:
-                  for entry in z.namelist():
-                      if not entry.endswith(".imy"):
-                          continue
-                      with zipfile.ZipFile(io.BytesIO(z.read(entry))) as p:
-                          names += p.namelist()
-              return names
-
-          def counts(apk):
-              src = obj = 0
-              for n in payload_names(apk):
-                  if not any(f"pllsim/{p}/" in n for p in PKGS):
-                      continue
-                  if n.endswith((".py", ".pyc")):
-                      src += 1
-                  elif n.endswith(".so"):
-                      obj += 1
-              return src, obj
-
-          ok = True
-          interp = counts("out/pllsim-interpreted-debug.apk")
-          comp = counts("out/pllsim-compiled-debug.apk")
-          print(f"interpreted: {interp[0]} source, {interp[1]} native")
-          print(f"compiled   : {comp[0]} source, {comp[1]} native")
-          if interp[1] or not interp[0]:
-              print("::error::the interpreted APK is not carrying source")
-              ok = False
-          if comp[0] or not comp[1]:
-              print("::error::the compiled APK still carries source for the "
-                    "modelling packages -- the second build reused the first")
-              ok = False
-          sys.exit(0 if ok else 1)
-          PY
+        # packaging/apk_check.py -- linted, typed and unit-tested, unlike the
+        # shell heredoc it replaced
+        run: python packaging/apk_check.py apks out/pllsim-interpreted-debug.apk out/pllsim-compiled-debug.apk

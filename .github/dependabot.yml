@@ -1,0 +1,9 @@
+# Floating major tags (checkout@v5, setup-python@v6, ...) are what the
+# workflows pin to; this is what tells us when a major moves.  Actions only:
+# Python dependency floors are measured (see pyproject) and bumped by hand.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: monthly

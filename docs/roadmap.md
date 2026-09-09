@@ -10,7 +10,7 @@ each entry says what is true today and what would close it.
 
 ## Type checking
 
-1 paths are in the `mypy` gate (`pyproject.toml`).
+2 paths are in the `mypy` gate (`pyproject.toml`).
 Nothing in `src/pllsim` is outside it: `export/` and `webgui/`
 were the last two out, fixed and gated together.  A future
 exclusion goes in this generator's `TYPE_CANDIDATES` so its cost

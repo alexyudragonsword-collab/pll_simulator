@@ -16,7 +16,10 @@ from pllsim import presets
 from pllsim.core.jitter import integrate_pn
 
 
-def _dominance_and_ratio(make, source, boost_field, boost, n_cycles=400_000):
+def _dominance_and_ratio(make, source, boost_field, boost, n_cycles):
+    # n_cycles is deliberately not defaulted: 400k cycles is the single
+    # largest per-call cost in the suite, and it was invisible at the call
+    # sites while it hid in a default
     """(share of that source in analyze, sim/analyze jitter ratio)."""
     p = make()
     setattr_path(p.cfg, boost_field, boost)
@@ -56,7 +59,7 @@ def test_sampler_gm_noise_agrees_across_domains(preset, source):
     that wrong put analyze() 3 dB under the time domain.
     """
     share, ratio = _dominance_and_ratio(
-        presets.ALL_PRESETS[preset], source, "sampler.gm_noise_a2hz", 1e-19)
+        presets.ALL_PRESETS[preset], source, "sampler.gm_noise_a2hz", 1e-19, n_cycles=400_000)
     assert share > 0.9, f"gm only {100 * share:.0f}% of the budget; test is blind"
     assert 0.85 < ratio < 1.15, f"gm noise off by {20 * np.log10(ratio):.1f} dB"
 
@@ -72,7 +75,7 @@ def test_charge_pump_noise_agrees_across_domains(fc):
         p = presets.cppll_19p2m_4p8g()
         p.cfg.cp = replace(p.cfg.cp, flicker_corner=fc)
         return p
-    share, ratio = _dominance_and_ratio(make, "cp", "cp.noise_a2hz", 1e-19)
+    share, ratio = _dominance_and_ratio(make, "cp", "cp.noise_a2hz", 1e-19, n_cycles=400_000)
     assert share > 0.9
     assert 0.85 < ratio < 1.15, f"CP off by {20 * np.log10(ratio):.1f} dB"
 

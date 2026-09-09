@@ -144,11 +144,16 @@ cursor would report numbers the drawn curve does not show.
 |---|---|
 | lint | `ruff check src tests examples packaging` |
 | types | `mypy` (file list in `pyproject.toml`) |
-| tests | `pytest tests/ -m "not sweep and not sensitivity"` on 3.11 and 3.12; the cross-domain sweep and the field-sensitivity gate run in their own parallel job (`-m "sweep or sensitivity" -n 4`, 3.11) |
-| coverage | floor of 88% (`[tool.coverage.report]`) |
+| tests | `pytest tests/ -m "not sweep and not sensitivity" -n 4` on 3.11 and 3.12; the cross-domain sweep and the field-sensitivity gate run in their own parallel job (`-m "sweep or sensitivity" -n 4`, 3.11) |
+| floor | the same suite on **3.10** with the declared minimum `numpy`/`scipy`/`matplotlib` pinned — the interpreter and wheels the phone actually runs — plus both GUI extras, and a step that refuses if an extra moved a pin (`test-minimum` job; read its *selected* count against the 3.11 job, not just the colour) |
+| no silent skips | both test jobs set `PLLSIM_CI=1`: `tests/_require.py` turns a missing optional dependency (streamlit, PySide6, iverilog) into a failure instead of a module-level skip, which reports as *one* item and hides every test in the file — the floor job first went green with 97 fewer tests that way |
+| coverage | floor of 88% (`[tool.coverage.report]`), measured in the 3.11/3.12 job only |
+| apk contents | `packaging/apk_check.py` (unit-tested with synthetic zips; the Android workflow runs it on the real wheels and both APKs) |
 
 What CI does **not** enforce: the Android APK build (manual
-`workflow_dispatch`), the Android page itself (no headless browser in the
+`workflow_dispatch`), the Windows exes (`windows-exe` and
+`windows-exe-nuitka` are two thin entries over one reusable
+`windows-exe-build.yml`, also manual), the Android page itself (no headless browser in the
 test job), and — even in the harness — the hardware back button, the feel of
 the drawer gesture on glass, and display cutouts and gesture bars.  Those need
 a sideload.  The rest is on you —

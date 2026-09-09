@@ -19,7 +19,11 @@ import sys
 from pathlib import Path
 
 import pytest
-import tomllib
+
+try:
+    import tomllib
+except ModuleNotFoundError:          # 3.10, the declared floor
+    import tomli as tomllib
 
 from pllsim import presets
 
@@ -220,8 +224,7 @@ def test_the_roadmap_is_regenerated():
 def test_the_roadmap_names_only_packages_that_are_really_excluded():
     """An entry for a package already in the gate is finished work presented
     as outstanding, which is the way this kind of page usually goes wrong."""
-    import tomllib as _t
-    gated = set(_t.loads((ROOT / "pyproject.toml").read_text())
+    gated = set(tomllib.loads((ROOT / "pyproject.toml").read_text())
                 ["tool"]["mypy"]["files"])
     text = (ROOT / "docs" / "roadmap.md").read_text()
     for path in sorted(gated):

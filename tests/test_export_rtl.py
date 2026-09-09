@@ -3,7 +3,6 @@
 Zero tolerance: expected vectors come from the bit-true Python models
 (core.deltasigma) and fixed-point mirrors (export.fixedpoint).
 """
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -12,10 +11,9 @@ import pytest
 from pllsim.export import golden
 from pllsim.export.formatting import write_file
 from pllsim.export.rtl import dlf, fsm, lms, mash, tb
+from tests._require import require_tool
 
-IVERILOG = shutil.which("iverilog")
-pytestmark = pytest.mark.skipif(IVERILOG is None,
-                                reason="iverilog not installed")
+IVERILOG = require_tool("iverilog")
 
 
 def run_iverilog(workdir: Path, tb_file: str, dut_file: str) -> str:
@@ -87,5 +85,19 @@ def test_fll_bittrue(tmp_path):
     g = golden.fll_vectors(64, 250 * 64, 128, 32, 250, 4096,
                            tmp_path / "vectors")
     fn, ttxt = tb.tb_fll(64, 250 * 64, 128, 32, g["n"])
+    write_file(tmp_path / fn, ttxt)
+    run_iverilog(tmp_path, fn, f"{name}.v")
+
+
+def test_fll_bittrue_n256(tmp_path):
+    # N = 256 (bench_markulic_2016): 256*64 = 16384 counts per window.  An
+    # 8-bit `cycles` port silently truncates N itself to 0 and every ferr reads
+    # -16384; the width has to follow N.
+    name, txt = fsm.emit_fll()
+    write_file(tmp_path / f"{name}.v", txt)
+    g = golden.fll_vectors(64, 256 * 64, 128, 32, 256, 4096,
+                           tmp_path / "vectors")
+    fn, ttxt = tb.tb_fll(64, 256 * 64, 128, 32, g["n"],
+                         w_cyc=g["w_cyc"], w_cnt=g["w_cnt"])
     write_file(tmp_path / fn, ttxt)
     run_iverilog(tmp_path, fn, f"{name}.v")

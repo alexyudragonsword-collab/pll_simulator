@@ -57,3 +57,9 @@ if __name__ == "__main__":
               "tolerances, noise policy)."]
     (OUT / "INDEX.md").write_text("\n".join(index) + "\n")
     print(f"\nindex written to {OUT}/INDEX.md")
+    # a bit-true testbench that fails is a broken export, not a table entry:
+    # the Markulic FLL sat at fll:FAIL in this index for several releases
+    # because nothing read the column
+    failed = [nm for nm, _, _, r, _ in rows if ":FAIL" in r]
+    if failed:
+        raise SystemExit(f"rtl bit-true FAIL in: {', '.join(failed)}")

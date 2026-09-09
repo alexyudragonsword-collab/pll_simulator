@@ -2,6 +2,36 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-09 · P1-B: CI hardening, and the FLL RTL that failed silently for releases
+
+- **FLL RTL width bug** (`export/rtl/fsm.py`): `cycles` was a fixed 8-bit
+  port, so N = 256 (bench_markulic16, 40 MHz → 10.24 GHz) truncated N itself
+  to zero and every window read ferr = −16384.  ex13's INDEX carried
+  `fll:FAIL` for that preset since the FLL export landed; nothing read the
+  column.  Now `W_CYC`/`W_CNT` follow N (`golden.fll_widths`), the golden
+  asserts its stimulus fits, a bit-true test runs N = 256 (red before the
+  fix: 4033 mismatches), a structure test checks the emitted width for every
+  FLL preset, and ex13 exits non-zero on any FAIL.
+- **CI**: `test-minimum` job (3.10 + pinned floor numpy 1.24.4 / scipy 1.8.1
+  / matplotlib 3.7.5, the phone's interpreter); main job `-n 4`; every
+  workflow has `timeout-minutes` and `concurrency`; `setup-gradle@v4`;
+  Dependabot for actions.  `test_conventions` takes its 400k cycles as an
+  explicit argument instead of a default.
+- **Windows**: `windows-exe-build.yml` is one reusable `workflow_call` with
+  `builder: pyinstaller|nuitka`; the two entries are thin wrappers; the web
+  smoke also polls `/_stcore/health`.  Not yet exercised on a runner — first
+  manual dispatch after merge is the proof.
+- **APK check**: the two heredoc Python blocks in `android.yml` are
+  `packaging/apk_check.py` (ruff + mypy + 5 synthetic-zip tests).
+- **What the floor leg found on its first run**: `tomllib` is 3.11+ (the
+  docs test and `gen_roadmap` now fall back to `tomli` on 3.10), and its
+  "4 skipped" were four *modules* — streamlit and PySide6 were not
+  installed, so 97 tests vanished behind four items and the job would have
+  gone green.  `tests/_require.py` + `PLLSIM_CI=1` in both test jobs make a
+  missing optional dependency a failure; the floor job installs both GUI
+  extras and refuses if one moves a pin.
+- Pointer: plan file P1 items 6–8; tests 842 → 844.
+
 ## 2026-09-09 · P1-A: every field must move a number; forms reach every field
 
 - **Field-sensitivity gate** (`tests/test_field_sensitivity.py`, marker
