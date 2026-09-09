@@ -11,6 +11,8 @@ from __future__ import annotations
 
 import dataclasses
 import inspect
+import math
+import re
 from dataclasses import dataclass
 from typing import Any
 
@@ -243,8 +245,45 @@ def enumerate_fields(cfg, prefix: str = "") -> list[FieldSpec]:
     return out
 
 
+# SI prefixes a designer types: 19.2M, 680p, 100k, 2u.  Case matters where
+# it must (m/M); k and K are both kilo because keyboards disagree.
+_SI = {"y": -24, "z": -21, "a": -18, "f": -15, "p": -12, "n": -9, "u": -6,
+       "\u00b5": -6, "\u03bc": -6, "m": -3, "k": 3, "K": 3, "M": 6, "G": 9,
+       "T": 12, "P": 15, "E": 18}
+_UNITS = ("Hz", "hz", "V", "A", "F", "s", "\u03a9", "ohm")
+_NUM = re.compile(r"^([+-]?(?:\d+\.?\d*|\.\d+)(?:[eE][+-]?\d+)?)\s*([a-zA-Z\u00b5\u03bc]?)$")
+
+
+def parse_number(text: str) -> float:
+    """A float from what a designer types: '1.92e7', '19.2M', '680p', '2ms',
+    '3MHz', '100 k'.  A trailing unit (Hz, V, A, F, s, ohm) is dropped; the
+    SI prefix scales.  Exact for decimal input: '15.625m' is the same float
+    as '0.015625', so a form round trip cannot move a value by an ULP.
+    """
+    t = str(text).strip()
+    for u in sorted(_UNITS, key=len, reverse=True):
+        if t.endswith(u) and len(t) > len(u):
+            t = t[:-len(u)].rstrip()
+            break
+    m = _NUM.match(t)
+    if m is None:
+        return float(t)          # let float() raise its own message
+    mant, pre = m.group(1), m.group(2)
+    if not pre:
+        return float(mant)
+    if pre not in _SI:
+        raise ValueError(f"unknown SI prefix {pre!r} in {text!r}")
+    # scale the decimal string, not the float: "6.8e-10" and "680p" must be
+    # the same float, which multiplying by 1e-12 does not guarantee
+    if "e" in mant.lower():
+        base, exp = re.split("[eE]", mant)
+        return float(f"{base}e{int(exp) + _SI[pre]}")
+    return float(f"{mant}e{_SI[pre]}")
+
+
 def parse_value(text: str, kind: str):
-    """Parse a form string back to the field's type ('1e-12', '(1e3,4e7)').
+    """Parse a form string back to the field's type ('1e-12', '19.2M',
+    '(10k, 100M)').
 
     A blank box means None — how an optional field is cleared from a form.
     """
@@ -252,7 +291,7 @@ def parse_value(text: str, kind: str):
     if not text:
         return None
     if kind == "float":
-        return float(text)
+        return parse_number(text)
     if kind == "bool":
         low = text.lower()
         if low in ("true", "1", "yes", "on"):
@@ -261,11 +300,11 @@ def parse_value(text: str, kind: str):
             return False
         raise ValueError(f"not a boolean: {text!r}")
     if kind == "int":
-        return int(float(text))
+        return int(round(parse_number(text)))
     if kind == "tuple":
         parts = [p for p in text.replace("(", "").replace(")", "")
                  .replace(",", " ").split() if p]
-        return tuple(float(p) for p in parts)
+        return tuple(parse_number(p) for p in parts)
     return text
 
 
@@ -293,6 +332,88 @@ def apply_overrides(cfg, overrides: dict[str, str]):
     # reads as hundreds of ps of "jitter" with nothing saying why
     _revalidate(cfg)
     return cfg
+
+
+# ------------------------------------------------------------ config files
+
+CONFIG_FORMAT = "pllsim-config/1"
+
+
+def _version() -> str:
+    try:
+        from importlib.metadata import version
+        return version("pllsim")
+    except Exception:                                    # noqa: BLE001
+        return "0+unknown"
+
+
+def config_to_dict(pll, preset: str) -> dict:
+    """Everything the forms can edit, as JSON-native values, plus provenance.
+
+    Values are stored natively (a float is a float, not '19.2M'), so a file
+    round-trips bit-exactly; the forms' six-digit text is for eyes.  The
+    preset name is the constructor the file rebuilds from -- a config is
+    "this preset, with these fields", never a free-standing dataclass dump,
+    so a file from an older version fails loudly on a field that moved
+    instead of silently losing it.
+    """
+    fields = {}
+    for s in enumerate_fields(pll.cfg):
+        v = s.value
+        fields[s.path] = list(v) if isinstance(v, tuple) else v
+    return {"format": CONFIG_FORMAT, "pllsim": _version(), "preset": preset,
+            "arch": arch_kind(pll), "fields": fields}
+
+
+def config_to_json(pll, preset: str) -> str:
+    import json
+    return json.dumps(config_to_dict(pll, preset), indent=2) + "\n"
+
+
+def _as_text(v) -> str:
+    """A field value as the exact text apply_overrides parses back."""
+    if v is None:
+        return ""
+    if isinstance(v, bool):
+        return "true" if v else "false"
+    if isinstance(v, (list, tuple)):
+        # an empty tuple must not read as a blank box, which means None
+        return "()" if len(v) == 0 else ", ".join(repr(float(x)) for x in v)
+    if isinstance(v, float):
+        return repr(v)
+    return str(v)
+
+
+def config_from_dict(d: dict):
+    """Rebuild (pll, preset_name) from config_to_dict's output.
+
+    Refuses, with the list, a preset this version does not ship or a field
+    the preset's form does not have: both mean the file and the code have
+    drifted apart, and a config that loads with fields quietly dropped is
+    the "reads correctly and does nothing" defect in file form.
+    """
+    if not isinstance(d, dict) or d.get("format") != CONFIG_FORMAT:
+        raise ValueError(f"not a pllsim config (format {d.get('format') if isinstance(d, dict) else None!r}, "
+                         f"expected {CONFIG_FORMAT!r})")
+    preset = d.get("preset")
+    if preset not in presets.ALL_PRESETS:
+        raise ValueError(f"unknown preset {preset!r}; this version ships "
+                         f"{', '.join(presets.ALL_PRESETS)}")
+    pll = presets.ALL_PRESETS[preset]()
+    known = {s.path for s in enumerate_fields(pll.cfg)}
+    fields = d.get("fields") or {}
+    unknown = sorted(set(fields) - known)
+    if unknown:
+        raise ValueError(f"config carries fields {unknown} that preset "
+                         f"{preset!r} has no form field for (written by "
+                         f"pllsim {d.get('pllsim')!r}, this is {_version()})")
+    apply_overrides(pll.cfg, {k: _as_text(v) for k, v in fields.items()})
+    return pll, preset
+
+
+def config_from_json(text: str):
+    import json
+    return config_from_dict(json.loads(text))
 
 
 def _derive_fraction(cfg):
@@ -500,16 +621,46 @@ def arch_kind(pll) -> str:
     return type(pll).__name__
 
 
+_SI_BY_EXP = {e: p for p, e in _SI.items() if p not in ("K", "\u00b5", "\u03bc")}
+
+
+def fmt_number(v: float) -> str:
+    """Engineering notation for a text input: 19.2M, 680p, 100k.
+
+    Values between 1e-3 and 1e3 stay plain (0.15, 2, 15.625), because a
+    ratio written as 150m reads wrong to everyone; outside that band the SI
+    prefix replaces the exponent.  Six significant digits, like before.
+    Beyond yocto/exa the exponent form comes back rather than a wrong prefix.
+    """
+    if v == 0 or not math.isfinite(v):
+        return f"{v:g}"
+    a = abs(v)
+    if 1e-3 <= a < 1e3:
+        return f"{v:.6g}"
+    exp3 = int(math.floor(math.log10(a)) // 3) * 3
+    if exp3 not in _SI_BY_EXP:
+        return f"{v:.6g}"
+    mant = float(f"{v / 10.0 ** exp3:.6g}")
+    if abs(mant) >= 1000.0:            # 999.9996 rounded up a decade
+        exp3 += 3
+        if exp3 not in _SI_BY_EXP:
+            return f"{v:.6g}"
+        mant = float(f"{v / 10.0 ** exp3:.6g}")
+    return f"{mant:.6g}{_SI_BY_EXP[exp3]}"
+
+
 def fmt_value(v) -> str:
-    """Format a field value for a text input (keeps scientific notation)."""
+    """Format a field value for a text input (engineering notation)."""
     if v is None:
         return ""
     if isinstance(v, bool):        # before int: bool is an int subclass
         return "true" if v else "false"
     if isinstance(v, float):
-        return f"{v:.6g}"
+        return fmt_number(v)
     if isinstance(v, tuple):
-        return ", ".join(f"{x:.6g}" for x in v)
+        # "()" rather than "": a blank box means None, and an empty INL
+        # polynomial is a value, not an absence
+        return "()" if len(v) == 0 else ", ".join(fmt_number(float(x)) for x in v)
     return str(v)
 
 

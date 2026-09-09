@@ -28,9 +28,10 @@ designers + jitter-vs-UGB sweep with a dropped-points caption) and
 Benchmarks; v4 added Modulation (two-point GMSK + EVM, with the
 samples-per-symbol caveat computed client-side from `list_presets` frefs)
 and Drift (ramp tracking with the rate-vs-mu precheck as a live caption).
-Still not in the app: Fit, MonteCarlo and Export — 10 of the Qt GUI's 13
-pages have app equivalents. What each would actually cost is measured under
-"Parity with the desktop GUIs" below, which corrects the first guess.
+Still not in the app: MonteCarlo and Export — 11 of the Qt GUI's 13
+pages have app equivalents (Fit joined on 2026-09-09, over a pasted-CSV
+text box). What each would actually cost is measured under "Parity with
+the desktop GUIs" below, which corrects the first guess.
 
 ## Current Conclusions
 
@@ -316,6 +317,42 @@ tested on the *rounded* abscissa, where 6 significant digits at 100 MHz is
 **Parity, deliberate:** the web GUI still has neither zoom nor cursor. Same
 reason as before — Streamlit offers no matplotlib interaction short of
 swapping the plotting backend.
+
+### Fit: the analyzer's CSV through a text box (2026-09-09)
+
+The 11th tab.  Bridge `fit(text, mode, preset)` runs the same three fits
+the web/Qt page runs (Leeson, locked spectrum, budget attribution) over
+`fit.load_pn_csv` on pasted text — any separator, header lines skipped —
+and returns the numbers, the attribution rows and the plot with its
+cursor map; empty text is the desktop pages' synthetic example, so the
+tab demonstrates itself.  The harness pastes an 11-point CSV in a second
+separator and feeds it junk, which must fail in-band.
+
+**Parity, deliberate:** paste, not a file picker — same reason as the
+config files below.  MonteCarlo stays out for now although it is viable
+serially (measured above): a phone-minute with no progress bar is a page
+that reads as hung, and the WebView bridge is one synchronous call with
+no streaming, so a progress channel would have to be built first.  Export
+stays out for good: its product is a file tree for EDA tools.
+
+### Config files: a text box, not a file dialog (2026-09-09)
+
+The three surfaces save and load the same JSON (`guiutil.config_to_json` /
+`config_from_json`: preset name + edited fields as JSON numbers).  Web
+downloads and uploads a file; Qt has Save/Load buttons over `QFileDialog`;
+the phone has neither worth the name inside a WebView, so its workbench
+card carries a collapsible text box with export / copy / load buttons —
+export fills the box (bridge `config_export`), load parses it (bridge
+`config_import`, which returns the preset and only the *edited* fields in
+the form's own text so they land as ordinary edits and light the "edited"
+marker).  A selector candidate cannot be exported on any surface: it has
+no preset to rebuild from, and all three say so.
+
+**Parity, deliberate:** copy/paste instead of a file.  Android's file
+picker through a WebView needs a `WebChromeClient` file-chooser hook and a
+storage permission the app does not ask for (zero permissions is a
+standing rule); the text box needs neither, and a config is a few hundred
+bytes.  The harness round-trips one through the box (`_workbench`).
 
 ### Correction to the earlier "not portable" judgment
 

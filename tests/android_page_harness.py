@@ -205,6 +205,41 @@ def _units(page):
           "warns past small angle, rejects bad input")
 
 
+def _fit(page):
+    """The Fit tab: the synthetic example first, then a pasted CSV in a
+    different separator, then junk -- which must fail in-band, not blank."""
+    open_section(page, "fit")
+    page.click("#fit-run")
+    page.wait_for_selector("#fit-out img.plot", timeout=120_000)
+    txt = page.locator("#fit-out").inner_text()
+    assert "L(1MHz)" in txt and "synthetic" in txt, txt[:200]
+    # a real paste: the demo's own points, semicolon-separated, locked mode
+    rows = page.evaluate("""() => {
+      const t = document.querySelectorAll('#fit-out table.rows td');
+      return t.length; }""")
+    assert rows >= 8, rows
+    csv = "offset_hz;dBc/Hz\n" + "\n".join(
+        f"{f:.4g};{l:.2f}" for f, l in ((1e3, -92.0), (3e3, -101.5), (1e4, -109.0),
+                                        (3e4, -112.5), (1e5, -113.0), (3e5, -113.5),
+                                        (1e6, -118.0), (3e6, -128.0), (1e7, -138.0),
+                                        (3e7, -146.0), (1e8, -150.0)))
+    page.fill("#fit-text", csv)
+    page.select_option("#fit-mode", "locked")
+    page.evaluate("document.getElementById('fit-out').innerHTML = ''")
+    page.click("#fit-run")
+    page.wait_for_selector("#fit-out img.plot", timeout=120_000)
+    txt = page.locator("#fit-out").inner_text()
+    assert "11 points" in txt and "in-band" in txt and "synthetic" not in txt, txt[:200]
+    page.fill("#fit-text", "hello\nworld")
+    page.evaluate("document.getElementById('fit-out').innerHTML = ''")
+    page.click("#fit-run")
+    page.wait_for_function(
+        "document.getElementById('fit-out').textContent.includes('no parseable')",
+        timeout=60_000)
+    print("fit: synthetic Leeson fit, an 11-point pasted CSV in locked mode, "
+          "and junk refused in-band")
+
+
 def _fom(page):
     """The FoM tab, against the numbers the library and the literature give.
 
@@ -288,6 +323,7 @@ def drive(browser, shot: str | None) -> None:
     _synth_mod_drift_bench(page)
     _units(page)
     _fom(page)
+    _fit(page)
 
     if shot:
         page.screenshot(path=shot, full_page=True)
@@ -341,6 +377,40 @@ def _workbench(page):
     assert abs(sum(shares) - 100.0) < 0.3, shares
     print(f"workbench: bank renders; a form edit moved {base} -> {worse}; "
           f"IPN pie sums to {sum(shares):.1f}%")
+    # config file through the text box: export the edited form, move to
+    # another preset, load the text back -- the preset and the edits return
+    page.locator("#wb-cfg summary").click()
+    page.click("#wb-cfg-export")
+    page.wait_for_function(
+        "document.getElementById('wb-cfg-text').value.includes('pllsim-config')",
+        timeout=60_000)
+    text = page.locator("#wb-cfg-text").input_value()
+    assert '"osc.pn_dbchz": -90.0' in text, text[:200]
+    page.select_option("#preset", "spll_100m_8g")
+    page.wait_for_function(
+        "document.querySelector('#preset-info').textContent.includes('SPLL')",
+        timeout=60_000)
+    page.fill("#wb-cfg-text", text)
+    # the export step left the filename (which names the preset) in the
+    # note; clear it, or the wait below passes before the import has run
+    page.evaluate("document.getElementById('wb-cfg-note').textContent = ''")
+    page.click("#wb-cfg-import")
+    page.wait_for_function(
+        "/已载入|loaded/.test(document.getElementById('wb-cfg-note').textContent)",
+        timeout=60_000)
+    assert page.locator("#preset").input_value() == "cppll_19p2m_4p8g"
+    assert page.locator('input[data-path="osc.pn_dbchz"]').input_value() == "-90"
+    assert page.locator('input[data-path="osc.v_max"]').input_value() == "1"
+    page.wait_for_selector("#edited:not([hidden])")
+    # loading a file clears the outputs (it reloads the preset); analyze
+    # again so the imported edits prove themselves -- the same -90 dBc/Hz
+    # number as before -- and the viewer/cursor steps below find a plot
+    page.click("#run-analyze")
+    page.wait_for_selector("#analyze-out img.plot", timeout=180_000)
+    again = page.locator("#analyze-out .metric b").first.inner_text()
+    assert again == worse, (again, worse)
+    print("workbench: config JSON round-tripped through the text box "
+          f"({len(text)} chars, 3 edits came back, analyze reads {again} again)")
 
 
 def _pinch(page, a, b, a2, b2, steps: int = 8):

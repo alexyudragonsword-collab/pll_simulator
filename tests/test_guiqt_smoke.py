@@ -727,3 +727,20 @@ def test_config_form_offers_bool_fields_as_checkboxes(app):
     assert form.overrides() == {"divider_retimed": "true"}
     form._checks["divider_retimed"].setChecked(False)
     assert form.overrides() == {}
+
+
+def test_workbench_saves_and_loads_a_config_file(app, tmp_path):
+    """Save -> load must bring the edit back as an edit, through the same
+    handoff path the selector uses, and name the preset it rebuilds from."""
+    from pllsim.guiqt.page_workbench import WorkbenchPage
+    page = WorkbenchPage()
+    page.preset.setCurrentText("cppll_19p2m_4p8g")
+    page.form._edits["osc.pn_dbchz"].setText("-116")
+    path = str(tmp_path / "wb.pllsim.json")
+    assert page.save_config(path) == "cppll_19p2m_4p8g"
+    page.preset.setCurrentText("spll_100m_8g")          # move away
+    assert page.load_config_file(path) == "cppll_19p2m_4p8g"
+    assert page.source_preset() == "cppll_19p2m_4p8g"
+    assert page._pll().cfg.osc.pn_dbchz == -116.0
+    assert "wb.pllsim.json" in page.info.text()
+    page.deleteLater()

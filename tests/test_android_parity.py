@@ -66,8 +66,10 @@ def test_every_tab_button_has_a_panel():
     assert tabs == panels, f"tab buttons {tabs} vs panels {panels}"
     # a count, not a set, so adding a tab is a decision someone makes on
     # purpose -- the drawer holds nine comfortably, a horizontal bar could
-    # not hold eight, which is why the bar is gone
-    assert len(tabs) == 10, tabs
+    # not hold eight, which is why the bar is gone.  11 since 2026-09-09:
+    # Fit (pasted CSV) joined; MonteCarlo and Export stay out, see
+    # cairn/android-app.md
+    assert len(tabs) == 11, tabs
 
 
 def test_the_drawer_has_its_slide_rule():

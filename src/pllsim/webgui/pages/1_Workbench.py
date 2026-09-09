@@ -41,6 +41,7 @@ if handoff is not None:
               "(not a preset)"))
     if c2.button(L("回到 preset", "back to presets")):
         st.session_state.pop("wb_handoff", None)
+        st.session_state.pop("wb_handoff_preset", None)
         st.rerun()
 
 default = st.session_state.get("workbench_preset", names[0])
@@ -84,6 +85,46 @@ if bank:
         st.markdown("**" + L("粗调频段组 (osc.v_min / v_max)",
                              "Coarse band bank (osc.v_min / v_max)") + "**")
         metric_row([(L(zh, en), val) for en, zh, val in bank])
+
+# ---------------------------------------------------------- config file
+# an edit used to vanish with the process; the file is the preset name plus
+# the edited fields, bit-exact, and loads back through the same handoff path
+# the selector uses
+with st.expander(L("配置文件（JSON：保存 / 载入这套参数）",
+                   "Config file (JSON: save / load this parameter set)")):
+    from pllsim.guiutil import config_from_json, config_to_json
+    src_preset = (st.session_state.get("wb_handoff_preset")
+                  if handoff is not None else preset)
+    cc1, cc2 = st.columns(2)
+    if src_preset is None:
+        cc1.caption(L("选型器候选没有 preset 来源，无法写成配置文件",
+                      "a selector candidate has no preset to rebuild from; "
+                      "it cannot be written as a config file"))
+    else:
+        try:
+            cc1.download_button(
+                L("下载当前配置", "Download current config"),
+                data=config_to_json(build(dict(overrides)), src_preset),
+                file_name=f"{src_preset}.pllsim.json", mime="application/json")
+        except Exception as e:                 # a half-typed override
+            cc1.error(f"{type(e).__name__}: {e}")
+    up = cc2.file_uploader(L("载入配置文件", "Load a config file"),
+                           type=["json"], key="wb_cfg_upload")
+    if up is not None:
+        token = f"{up.name}:{up.size}"
+        if st.session_state.get("wb_cfg_loaded") != token:
+            try:
+                loaded, name = config_from_json(up.getvalue().decode("utf-8"))
+            except Exception as e:
+                st.error(f"{type(e).__name__}: {e}")
+            else:
+                st.session_state["wb_cfg_loaded"] = token
+                st.session_state["wb_handoff"] = loaded
+                st.session_state["wb_handoff_preset"] = name
+                st.session_state["wb_handoff_label"] = f"{up.name} ({name})"
+                st.session_state.pop("wb_ar", None)
+                st.session_state.pop("wb_sim", None)
+                st.rerun()
 
 col_a, col_s = st.columns(2)
 

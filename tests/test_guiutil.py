@@ -53,7 +53,7 @@ def test_parse_and_format():
     assert parse_value("1e-12", "float") == 1e-12
     assert parse_value("64", "int") == 64
     assert parse_value("(1e3, 4e7)", "tuple") == (1e3, 4e7)
-    assert fmt_value(19.2e6) == "1.92e+07"
+    assert fmt_value(19.2e6) == "19.2M"          # engineering notation since 2026-09
     assert parse_value(fmt_value((1e3, 4e7)), "tuple") == (1e3, 4e7)
 
 
@@ -264,3 +264,62 @@ def test_a_bool_override_reaches_the_model():
     assert ar.jitter_fs != base.jitter_fs          # the divider path is gone
     ilcm = make_pll("ilcm_250m_12g", {"ftl": "false"})
     assert ilcm.cfg.ftl is False
+
+
+# --------------------------------------------------- engineering notation
+
+def test_si_prefixes_parse_to_the_same_float_as_scientific():
+    from pllsim.guiutil import parse_number
+    assert parse_number("19.2M") == 19.2e6 == parse_number("1.92e7")
+    assert parse_number("680p") == 6.8e-10
+    assert parse_number("680pF") == 6.8e-10          # unit dropped
+    assert parse_number("2ms") == 2e-3
+    assert parse_number("3MHz") == 3e6 == parse_number("3 M")
+    assert parse_number("100k") == 1e5 == parse_number("100K")
+    assert parse_number("5u") == 5e-6 == parse_number("5µ")
+    assert parse_number("-50M") == -50e6
+    assert parse_number("1.5G") == 1.5e9
+    assert parse_number("15.625m") == 0.015625         # exact, not 0.015625000000000001
+    assert parse_number("1e-12") == 1e-12 and parse_number("2") == 2.0
+    with pytest.raises(ValueError):
+        parse_number("3Q")
+    with pytest.raises(ValueError):
+        parse_number("abc")
+
+
+def test_parse_value_kinds_accept_prefixes():
+    from pllsim.guiutil import parse_value
+    assert parse_value("100k", "int") == 100_000
+    assert parse_value("(10k, 100M)", "tuple") == (1e4, 1e8)
+    assert parse_value("19.2M", "float") == 19.2e6
+
+
+def test_fmt_value_is_engineering_and_round_trips():
+    from pllsim.guiutil import fmt_value, parse_number
+    assert fmt_value(19.2e6) == "19.2M"
+    assert fmt_value(6.8e-10) == "680p"
+    assert fmt_value(1e-9) == "1n"
+    assert fmt_value(100e3) == "100k"
+    assert fmt_value(0.15) == "0.15"                 # ratios stay plain
+    assert fmt_value(2.0) == "2" and fmt_value(0.015625) == "0.015625"
+    assert fmt_value(0.0) == "0" and fmt_value(-50e6) == "-50M"
+    assert fmt_value((1e4, 1e8)) == "10k, 100M"
+    assert fmt_value(()) == "()" and parse_value("()", "tuple") == ()   # not None
+    assert fmt_value(1e-27) == "1e-27"              # below yocto: exponent form
+    for v in (19.2e6, 6.8e-10, 4.8e9, 0.503, 2**-6, 1e-22, 999.9996e3, 123456.7):
+        assert parse_number(fmt_value(v)) == pytest.approx(v, rel=1e-5), v
+
+
+@pytest.mark.parametrize("name", list(presets.ALL_PRESETS))
+def test_every_preset_field_survives_the_form_text(name):
+    """What the form shows must parse back to what the config holds, to
+    six significant digits -- the same contract as before, in new clothes."""
+    from pllsim.guiutil import parse_value
+    for s in enumerate_fields(presets.ALL_PRESETS[name]().cfg):
+        if s.value is None or s.kind in ("str", "bool"):
+            continue
+        back = parse_value(fmt_value(s.value), s.kind)
+        if s.kind == "tuple":
+            assert back == pytest.approx(s.value, rel=1e-5), s.path
+        else:
+            assert back == pytest.approx(s.value, rel=1e-5), s.path
