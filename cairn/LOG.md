@@ -23,6 +23,13 @@ This file records substantive progress in reverse-chronological order — newest
   manual dispatch after merge is the proof.
 - **APK check**: the two heredoc Python blocks in `android.yml` are
   `packaging/apk_check.py` (ruff + mypy + 5 synthetic-zip tests).
+- **What the floor leg found on its first run**: `tomllib` is 3.11+ (the
+  docs test and `gen_roadmap` now fall back to `tomli` on 3.10), and its
+  "4 skipped" were four *modules* — streamlit and PySide6 were not
+  installed, so 97 tests vanished behind four items and the job would have
+  gone green.  `tests/_require.py` + `PLLSIM_CI=1` in both test jobs make a
+  missing optional dependency a failure; the floor job installs both GUI
+  extras and refuses if one moves a pin.
 - Pointer: plan file P1 items 6–8; tests 842 → 844.
 
 ## 2026-09-09 · P1-A: every field must move a number; forms reach every field

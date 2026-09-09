@@ -131,12 +131,28 @@ jobs:
           cache: pip
       - name: Install the floor
         run: |
-          sudo apt-get update -qq && sudo apt-get install -y -qq iverilog
+          sudo apt-get update -qq && sudo apt-get install -y -qq iverilog \
+            libegl1 libgl1 libxkbcommon0 libdbus-1-3
           python -m pip install --upgrade pip
           pip install "numpy==1.24.4" "scipy==1.8.1" "matplotlib==3.7.5"
-          pip install -e .[test] pytest-xdist
-          python -c "import numpy, scipy; print(numpy.__version__, scipy.__version__)"
-      - name: Run the library suite on the floor
+          pip install -e .[test,gui,guiqt] pytest-xdist
+      - name: The floor is still the floor
+        # a GUI extra that quietly pulled a newer numpy would make this job
+        # test some other floor; refuse rather than report the wrong one
+        run: |
+          python - <<'PY'
+          import numpy, scipy, matplotlib
+          got = (numpy.__version__, scipy.__version__, matplotlib.__version__)
+          want = ("1.24.4", "1.8.1", "3.7.5")
+          print("numpy/scipy/matplotlib:", *got)
+          assert got == want, f"floor drifted: {got} != {want}"
+          PY
+      - name: Run the suite on the floor
+        env:
+          QT_QPA_PLATFORM: offscreen
+          PLLSIM_CI: "1"   # a missing optional dependency fails; it must not skip
+        # same selection as the 3.11/3.12 job: read the "[N items]" line and
+        # compare -- a module-level skip hides a whole file behind one item
         run: pytest tests/ -m "not sweep and not sensitivity" -n 4 -v --tb=short
 
   test:
@@ -174,6 +190,7 @@ jobs:
       - name: Run tests
         env:
           QT_QPA_PLATFORM: offscreen
+          PLLSIM_CI: "1"   # a missing optional dependency fails; it must not skip
         # the cross-domain matrix and the field-sensitivity gate run in their
         # own parallel job.  -n 4: the hosted runner has four cores and the
         # suite is deterministic (seed=0 default); measured 15 -> 10 min.

@@ -3,7 +3,6 @@
 Zero tolerance: expected vectors come from the bit-true Python models
 (core.deltasigma) and fixed-point mirrors (export.fixedpoint).
 """
-import shutil
 import subprocess
 from pathlib import Path
 
@@ -12,10 +11,9 @@ import pytest
 from pllsim.export import golden
 from pllsim.export.formatting import write_file
 from pllsim.export.rtl import dlf, fsm, lms, mash, tb
+from tests._require import require_tool
 
-IVERILOG = shutil.which("iverilog")
-pytestmark = pytest.mark.skipif(IVERILOG is None,
-                                reason="iverilog not installed")
+IVERILOG = require_tool("iverilog")
 
 
 def run_iverilog(workdir: Path, tb_file: str, dut_file: str) -> str:

@@ -21,7 +21,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-test = ["pytest>=7", "python-pptx>=0.6"]   # pptx: the deck test must run in CI, not skip
+test = ["pytest>=7", "python-pptx>=0.6",   # pptx: the deck test must run in CI, not skip
+        "tomli>=2; python_version < '3.11'"]   # tomllib is 3.11+; 3.10 is the floor
 gui = ["streamlit>=1.30"]
 guiqt = ["PySide6>=6.5"]
 

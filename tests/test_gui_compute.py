@@ -9,7 +9,9 @@ from pathlib import Path
 
 import pytest
 
-st = pytest.importorskip("streamlit")
+from tests._require import require_module
+
+st = require_module("streamlit")
 from streamlit.testing.v1 import AppTest  # noqa: E402
 
 from pllsim.webgui import package_dir  # noqa: E402
