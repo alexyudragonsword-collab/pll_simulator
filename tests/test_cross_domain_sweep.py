@@ -88,6 +88,16 @@ def _fref_scaled_frac(name: str, fm: float):
     return p
 
 
+def _fout_stepped(name: str, n_steps: int):
+    """Move an integer-N target by n_steps reference multiples, N absorbs
+    it.  The stock loops sit 0.8 V from f0; +10 steps of 19.2 MHz on a
+    60 MHz/V VCO needs 4 V, which is where the unbounded law stops
+    describing an oscillator anyone can build."""
+    p = _preset(name)
+    p.cfg.fout += n_steps * p.cfg.fref
+    return p
+
+
 def _retuned(name: str, m: float, pm: float | None = None):
     p = _preset(name)
     retune_loop(p, m * p.analyze().loop.f_ugb, pm_deg=pm)
@@ -146,6 +156,8 @@ GRID = [
       "CPPLL", [CLIP]),
     P("cppll-fine-m8", lambda: _preset("cppll_19p2m_4p8g"), "CPPLL", [CLIP],
       sim_kwargs={"fine_oversample": 8}),
+    P("cppll-fout+10n", lambda: _fout_stepped("cppll_19p2m_4p8g", 10),
+      "CPPLL", [CLIP, "tuning-swing"]),
     # ---------------------------------------------------------- SSPLL int-N
     P("sspll-stock", lambda: _preset("sspll_19p2m_4p8g"), "SSPLL", [CLIP]),
     P("sspll-ugb-x0.3", lambda: _retuned("sspll_19p2m_4p8g", 0.3), "SSPLL",

@@ -227,3 +227,75 @@ def test_a_short_run_that_converged_from_an_offset_is_not_called_unlocked():
     pll = presets.ALL_PRESETS["sspll_19p2m_4p8g"]()
     sim = pll.simulate(4_000, **simulate_kwargs(pll, seed=1, f_start_offset=5e6))
     assert not any("never reached" in n for n in sim.notes), sim.notes
+
+
+# ------------------------------------------------------------ tuning-law notes
+
+def _cppll_at(fout):
+    pll = presets.ALL_PRESETS["cppll_19p2m_4p8g"]()
+    pll.cfg.fout = fout
+    return pll
+
+
+def test_tuning_predicates():
+    from pllsim.core.boundaries import (
+        TUNING_SWING_V,
+        tuning_law_railed,
+        tuning_swing_exceeded,
+    )
+    assert tuning_law_railed(0.9, 0.0, 0.8)
+    assert tuning_law_railed(-0.1, 0.0, None)
+    assert not tuning_law_railed(0.5, 0.0, 0.8)
+    assert not tuning_law_railed(4.0, None, None)         # no range: no rail
+    assert tuning_swing_exceeded(TUNING_SWING_V + 0.01, None, None)
+    assert tuning_swing_exceeded(-TUNING_SWING_V - 0.01, None, None)
+    assert not tuning_swing_exceeded(TUNING_SWING_V - 0.01, None, None)
+    assert not tuning_swing_exceeded(4.0, 0.0, 1.2)      # range set: rail, not swing
+
+
+@pytest.mark.parametrize("name", ["cppll_19p2m_4p8g", "sspll_19p2m_4p8g",
+                                  "spll_100m_8g"])
+def test_unbounded_law_beyond_a_credible_swing_is_announced(name):
+    """The stock loops sit 0.8-1.0 V from f0; +10 reference multiples on a
+    60-80 MHz/V oscillator need 3-4 V, and every analog loop used to follow
+    that silently."""
+    pll = presets.ALL_PRESETS[name]()
+    pll.cfg.fout += 10 * pll.cfg.fref
+    ar = pll.analyze()
+    assert any("tuning law unbounded" in n for n in ar.notes), ar.notes
+
+
+@pytest.mark.parametrize("name", ["cppll_19p2m_4p8g", "sspll_19p2m_4p8g",
+                                  "spll_100m_8g", "bench_markulic16_sspll_40m_10p24g"])
+def test_stock_operating_points_stay_quiet(name):
+    ar = presets.ALL_PRESETS[name]().analyze()
+    assert not any("tuning law" in n or "rails" in n for n in ar.notes), ar.notes
+
+
+def test_a_set_range_that_excludes_fout_says_the_loop_rails():
+    pll = presets.ALL_PRESETS["cppll_19p2m_4p8g"]()
+    pll.cfg.osc.v_max = 0.5                      # v_op is 0.83 V
+    ar = pll.analyze()
+    assert any("v_max=0.5 V" in n and "rails" in n for n in ar.notes), ar.notes
+    sim = pll.simulate(20_000, seed=1)
+    assert any("railed at v_max=0.5 V" in n for n in sim.notes), sim.notes
+    assert any("never reached" in n for n in sim.notes), sim.notes
+
+
+def test_a_set_range_that_contains_fout_stays_quiet():
+    pll = presets.ALL_PRESETS["cppll_19p2m_4p8g"]()
+    pll.cfg.osc.v_min, pll.cfg.osc.v_max = 0.0, 1.2
+    ar = pll.analyze()
+    assert not any("tuning law" in n or "rails" in n for n in ar.notes), ar.notes
+    sim = pll.simulate(20_000, seed=1)
+    assert not any("railed" in n or "unbounded" in n for n in sim.notes), sim.notes
+
+
+def test_a_run_parked_beyond_the_swing_says_so():
+    """The hop page reaches this without analyze(): a +200 MHz hop on the
+    stock CPPLL parks the loop at +4 V."""
+    pll = _cppll_at(4.8e9 + 10 * 19.2e6)
+    sim = pll.simulate(20_000, seed=1)
+    assert any("parked at v_ctrl=+4" in n for n in sim.notes), sim.notes
+    stock = presets.ALL_PRESETS["cppll_19p2m_4p8g"]().simulate(20_000, seed=1)
+    assert not any("unbounded" in n for n in stock.notes), stock.notes

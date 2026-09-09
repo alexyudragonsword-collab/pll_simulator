@@ -80,6 +80,18 @@ validation pass); supersedes the scattered per-test knowledge before it.
   it.  Analog loops with unbounded tuning laws (no v_min/v_max set) still
   follow fout anywhere — physically optimistic, numerically self-consistent,
   a modelling-range statement rather than a defect.
+  - *Correction, 2026-09-09:* it is now a **stated** modelling-range
+    boundary, `tuning-swing` in the registry.  analyze() notes when fout
+    needs more than ±1.5 V (`TUNING_SWING_V`) of travel from f0 with no
+    range set, or lies outside a set range (the varactor rails); simulate()
+    reads the same from the run's own control-voltage tail (which rail, or
+    "parked at +4 V").  The health-check plan's first idea — give the
+    presets v_min/v_max — was **rejected after measuring** the operating
+    points: every stock loop sits 0.6–1.0 V from f0 and the GUIs' default
+    −100 MHz hop travels 1.67 V on a 60 MHz/V oscillator, so any physical
+    range turns the hop page into a rail demonstration.  The coarse band
+    bank is the physical answer to that hop, and it is a separate feature;
+    the presets stay unbounded and say so when it matters.
 - **`lock_time_s is None` does not mean unlocked.**  The detector thresholds
   are tuned for the design point; off-plan loops converge in fact while it
   stays silent.  NotLockedError requires None *and* tail frequency error

@@ -40,6 +40,8 @@ from .core.boundaries import (
     ct_approx_exceeded,
     flicker_floor_hz,
     jitter_band_clipped,
+    tuning_law_railed,
+    tuning_swing_exceeded,
 )
 from .core.jitter import rms_jitter_fs
 
@@ -132,6 +134,19 @@ def _is_ct_arch(pll: Any) -> bool:
     return type(pll).__name__ in ("CPPLL", "SPLL")
 
 
+def _has_v_law(pll: Any) -> bool:
+    # the three analog loops evaluate OscConfig's control-voltage law; the
+    # ADPLL/MDLL tune by a digital word and the ILCM in Hz
+    return type(pll).__name__ in ("CPPLL", "SSPLL", "SPLL")
+
+
+def _tuning_flag(pll: Any) -> bool:
+    osc = pll.cfg.osc
+    v = osc.v_for(pll.cfg.fout)
+    return tuning_law_railed(v, osc.v_min, osc.v_max) or \
+        tuning_swing_exceeded(v, osc.v_min, osc.v_max)
+
+
 def _has_flicker(pll: Any) -> bool:
     osc = getattr(pll.cfg, "osc", None)
     return bool(osc is not None and getattr(osc, "pn_f1f3", 0.0) > 0.0)
@@ -169,6 +184,19 @@ BOUNDARIES: tuple[Boundary, ...] = (
             "never generated."),
         applies=lambda c: _has_flicker(c.pll) and c.band[0] < flicker_floor_hz(
             c.pll.cfg.fref, c.n_cycles),
+    ),
+    Boundary(
+        code="tuning-swing",
+        statement=(
+            "The analog loops' control-voltage law is unbounded unless "
+            "OscConfig sets v_min/v_max: fout is reached wherever it needs "
+            "the varactor to go.  Flagged when fout needs more than "
+            "+/-1.5 V of travel from f0 (no single band spans that; the "
+            "coarse bank is the physical answer) or, with a range set, lies "
+            "outside it (the loop rails and never reaches fout).  The two "
+            "domains agree here -- both follow the same law -- so this is a "
+            "modelling-range statement, not a comparison tolerance."),
+        applies=lambda c: _has_v_law(c.pll) and _tuning_flag(c.pll),
     ),
     Boundary(
         code="conditional-stability",

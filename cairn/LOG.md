@@ -2,6 +2,20 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-09 · P2-13: the tuning law says when it stops describing an oscillator
+
+- New boundary `tuning-swing` (`core/boundaries.py` `TUNING_SWING_V` = 1.5 V,
+  `tuning_law_railed` / `tuning_swing_exceeded`; `arch/base.tuning_notes` /
+  `tuning_sim_notes` shared by CPPLL/SSPLL/SPLL).  analyze() notes an
+  unbounded law asked for more than ±1.5 V from f0, or a set range that
+  excludes fout; simulate() reads the control-voltage tail and names the
+  rail or the parked voltage.  Sweep grid point `cppll-fout+10n` (N 250→260,
+  v_op 4.0 V) exercises the flag; fires/quiet pairs in `test_boundaries.py`,
+  mutation-checked by lifting the threshold to 150 V.
+- Presets stay unbounded — decision and measurement in
+  `cairn/cross-domain.md` ("A legal fout is not a reachable fout",
+  correction note).
+
 ## 2026-09-09 · P1-B: CI hardening, and the FLL RTL that failed silently for releases
 
 - **FLL RTL width bug** (`export/rtl/fsm.py`): `cycles` was a fixed 8-bit
