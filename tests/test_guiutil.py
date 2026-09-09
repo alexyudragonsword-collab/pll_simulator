@@ -235,3 +235,32 @@ def test_hand_built_mismatch_is_still_refused():
     cfg = presets.ALL_PRESETS["spll_frac_52m_6p253g"]().cfg
     with pytest.raises(ValueError, match="fractional part"):
         dataclasses.replace(cfg, fref=cfg.fref * 2)
+
+
+# --- bool fields --------------------------------------------------------------
+# enumerate_fields skipped bools, so divider_retimed (a few-dB effect) and the
+# ILCM's FTL switch were unsettable from every form: the "reads correctly and
+# does nothing" class, at the form layer.
+
+def test_bool_fields_are_offered_and_round_trip():
+    specs = {s.path: s for s in enumerate_fields(
+        presets.ALL_PRESETS["cppll_19p2m_4p8g"]().cfg)}
+    assert specs["divider_retimed"].kind == "bool"
+    assert specs["divider_retimed"].value is False
+    assert fmt_value(False) == "false" and fmt_value(True) == "true"
+    for txt, want in (("true", True), ("False", False), ("1", True), ("off", False)):
+        assert parse_value(txt, "bool") is want
+    with pytest.raises(ValueError):
+        parse_value("maybe", "bool")
+    assert fmt_value(0) == "0"                   # an int is not a bool
+
+
+def test_a_bool_override_reaches_the_model():
+    base = make_pll("cppll_19p2m_4p8g").analyze()
+    pll = make_pll("cppll_19p2m_4p8g", {"divider_retimed": "true"})
+    ar = pll.analyze()
+    assert pll.cfg.divider_retimed is True
+    assert any("retimed" in n for n in ar.notes), ar.notes
+    assert ar.jitter_fs != base.jitter_fs          # the divider path is gone
+    ilcm = make_pll("ilcm_250m_12g", {"ftl": "false"})
+    assert ilcm.cfg.ftl is False

@@ -711,3 +711,16 @@ def test_fom_page_reports_bad_input_instead_of_a_stale_number(app):
             if lay.itemAt(i).widget() is not None]
     assert not left, f"a stale FoM survived: {left}"
     page.deleteLater()
+
+
+def test_config_form_offers_bool_fields_as_checkboxes(app):
+    from pllsim import presets
+    from pllsim.guiqt.widgets import ConfigForm
+    form = ConfigForm(presets.ALL_PRESETS["cppll_19p2m_4p8g"]().cfg)
+    assert "divider_retimed" in form._checks
+    assert "divider_retimed" not in form._edits
+    assert form.overrides() == {}                     # untouched -> nothing
+    form._checks["divider_retimed"].setChecked(True)
+    assert form.overrides() == {"divider_retimed": "true"}
+    form._checks["divider_retimed"].setChecked(False)
+    assert form.overrides() == {}

@@ -63,3 +63,22 @@ def test_golden_csv_matches_tb_columns(reports):
         for col in header[1:]:
             assert f"dbg_{col}" in tb, f"{rep.name}: tb missing column {col}"
         assert len(csv) == 1024 + 1
+
+
+def test_export_reports_what_it_could_not_compute(tmp_path, monkeypatch):
+    """Two handlers used to swallow a failed analyze(): the AMS testbench got
+    a fabricated settle time and the README silently dropped its flicker line.
+    Every other except in this package reports; these do now too."""
+    from pllsim import presets
+    from pllsim.export import export
+    pll = presets.cppll_19p2m_4p8g()
+
+    def boom(self, f=None):
+        raise RuntimeError("no analysis today")
+    monkeypatch.setattr(type(pll), "analyze", boom)
+    rep = export(pll, tmp_path, name="x", flavors=("ams",), n_golden=256,
+                 n_vectors=128)
+    assert any("settle" in w and "no analysis today" in w for w in rep.warnings), \
+        rep.warnings
+    readme = (tmp_path / "x" / "README.md").read_text()
+    assert "Export warnings" in readme and "no analysis today" in readme

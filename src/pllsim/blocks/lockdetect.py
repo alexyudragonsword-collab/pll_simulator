@@ -27,6 +27,14 @@ class LockDetectConfig:
     count: int = 64                 # consecutive-ish in-window cycles to assert
     down_weight: int = 4            # penalty per out-of-window cycle
 
+    def __post_init__(self):
+        if not self.window_s > 0:
+            raise ValueError(f"LockDetectConfig window_s must be positive, got {self.window_s}")
+        if int(self.count) < 1:
+            raise ValueError(f"LockDetectConfig count must be >= 1, got {self.count}")
+        if self.down_weight < 0:
+            raise ValueError(f"LockDetectConfig down_weight cannot be negative, got {self.down_weight}")
+
 
 class LockDetector:
     def __init__(self, cfg: LockDetectConfig):

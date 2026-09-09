@@ -69,6 +69,14 @@ class FracConfig:
     dtc_cal: "object | None" = None   # gain calibrator (LMSGainCal/SignSignLMS)
     dtc_lut_cal: "object | None" = None   # INL calibrator (LUTCal, seconds)
 
+    def __post_init__(self):
+        if not 0.0 <= self.frac < 1.0:
+            raise ValueError(f"FracConfig frac must be in [0, 1), got {self.frac}")
+        if self.mash_order not in (1, 2, 3):
+            raise ValueError(f"FracConfig mash_order must be 1, 2 or 3, got {self.mash_order}")
+        if not 1 <= int(self.bits) <= 32:
+            raise ValueError(f"FracConfig bits must be in 1..32, got {self.bits}")
+
     def make_mash(self):
         return {1: Efm1, 2: Mash11, 3: Mash111}[self.mash_order](self.bits)
 

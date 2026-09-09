@@ -55,6 +55,14 @@ class DLFConfig:
     rho: float
     iir_lambdas: tuple = ()
 
+    def __post_init__(self):
+        if self.alpha < 0 or self.rho < 0 or not (self.alpha or self.rho):
+            raise ValueError("DLFConfig alpha and rho are non-negative and not "
+                             f"both zero, got alpha={self.alpha}, rho={self.rho}")
+        if any(not 0.0 < lam <= 1.0 for lam in self.iir_lambdas):
+            raise ValueError("DLFConfig iir_lambdas are IIR coefficients in "
+                             f"(0, 1], got {self.iir_lambdas}")
+
 
 @dataclass
 class ADPLLConfig:
@@ -100,6 +108,25 @@ class ADPLLConfig:
                 " regresses a TIMING error against the MASH residue, and"
                 " the bang-bang detector exposes only a sign — wiring it"
                 " naively measurably made the INL spur worse.")
+        if self.osc.nl1 or self.osc.nl2:
+            # the DCO word is an integer in LSB, thousands of them at the
+            # operating point, and analyze() uses the linear Kdco -- a per-volt
+            # nonlinearity applied to that word is not a DCO model.  Found by
+            # the field-sensitivity gate: nl2 = 1e-3 drove the frequency law to
+            # NaN inside the TDC.  Refused, like the ILCM does, rather than
+            # accepted and numerically wrong.
+            raise ValueError(
+                "ADPLL does not model DCO nonlinearity: OscConfig nl1/nl2 are "
+                "per-volt coefficients and the DCO word is in LSB; analyze() "
+                "uses the linear Kdco and the engine would compute garbage")
+        if self.mode == "dtc_bbpd" and self.kdco_est_error:
+            # the BBPD loop filter drives the DCO word directly (LSB in, LSB
+            # out) -- there is no Kdco estimate anywhere in that path for an
+            # error to live in.  The field read correctly and did nothing.
+            raise ValueError(
+                "kdco_est_error applies to the counter/TDC loop only: the "
+                "dtc_bbpd loop filter drives the DCO word directly and never "
+                "normalises by a Kdco estimate")
         if self.osc.n_bands > 1:
             raise ValueError(
                 "the ADPLL engine has no coarse-band search: the DCO word is\n"

@@ -30,6 +30,17 @@ class FilterDesign:
     r3: float = 0.0
     c3: float = 0.0
 
+    def __post_init__(self):
+        if not self.c1 > 0 or not self.c2 > 0:
+            raise ValueError(f"FilterDesign c1 and c2 must be positive, got c1={self.c1}, c2={self.c2}")
+        if self.r2 < 0:
+            raise ValueError(f"FilterDesign r2 cannot be negative, got {self.r2}")
+        if (self.r3 > 0) != (self.c3 > 0) or self.r3 < 0 or self.c3 < 0:
+            # order() reads "third pole present" as both positive; one of the
+            # two set is a filter that reads as third-order and is not
+            raise ValueError("FilterDesign r3 and c3 must both be positive (a "
+                             f"third pole) or both zero, got r3={self.r3}, c3={self.c3}")
+
     @property
     def order(self) -> int:
         return 3 if (self.c3 > 0 and self.r3 > 0) else 2

@@ -110,8 +110,10 @@ function wbArgs(extra) {
 function overrides() {
   const out = {};
   document.querySelectorAll("#form input[data-path]").forEach(inp => {
-    if (inp.value.trim() !== baseline[inp.dataset.path].trim()) {
-      out[inp.dataset.path] = inp.value;
+    const cur = inp.dataset.kind === "bool" ? (inp.checked ? "true" : "false")
+                                            : inp.value;
+    if (cur.trim() !== baseline[inp.dataset.path].trim()) {
+      out[inp.dataset.path] = cur;
     }
   });
   return out;
@@ -146,6 +148,13 @@ async function loadPreset(name) {
       const inner = fs.map(f => {
         const label = (lang === "zh" ? f.label_zh : f.label_en) +
                       (f.unit ? ` [${f.unit}]` : "");
+        if (f.kind === "bool") {
+          // the bridge formats a bool as "true"/"false"; the checkbox's
+          // value must read back the same way so baseline comparison and
+          // apply_overrides both see one vocabulary
+          return `<label class="check"><input type="checkbox" data-path="${esc(f.path)}"
+                  data-kind="bool" ${f.value === "true" ? "checked" : ""}>${esc(label)}</label>`;
+        }
         return `<label>${esc(label)}<input data-path="${esc(f.path)}"
                 value="${esc(f.value)}" inputmode="text"
                 autocapitalize="off" autocorrect="off"></label>`;
@@ -154,8 +163,10 @@ async function loadPreset(name) {
         lang === "zh" ? gl.zh : gl.en)}</summary>
         <div class="field-grid">${inner}</div></details>`;
     }).join("");
-    document.querySelectorAll("#form input[data-path]").forEach(inp =>
-      inp.addEventListener("input", markEdited));
+    document.querySelectorAll("#form input[data-path]").forEach(inp => {
+      inp.addEventListener("input", markEdited);
+      inp.addEventListener("change", markEdited);   // checkboxes fire change
+    });
     markEdited();
     $("fine-row").hidden = !fieldMeta.supports_fine;
     $("bank-out").innerHTML = "";

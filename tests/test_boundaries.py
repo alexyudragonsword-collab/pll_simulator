@@ -134,7 +134,9 @@ def test_ilcm_out_of_range_fout_says_so():
 @pytest.mark.parametrize("name", [n for n in presets.ALL_PRESETS
                                   if not n.startswith("bench_")])
 def test_stock_presets_reach_fout_and_stay_quiet(name):
-    sim = presets.ALL_PRESETS[name]().simulate(8_000, seed=1)
+    # 20k cycles: the BBPD loop is still 200 kHz off at 8k (measured), and
+    # the note is right to say so there
+    sim = presets.ALL_PRESETS[name]().simulate(20_000, seed=1)
     assert not any("never reached" in n for n in sim.notes), sim.notes
 
 
@@ -215,3 +217,13 @@ def test_every_engine_tells_postprocess_its_flicker_corner(name, monkeypatch):
     monkeypatch.setattr(mod, "postprocess", spy)
     pll.simulate(3_000, seed=1)
     assert seen.get("flicker_corner_hz", 0.0) > 0.0, seen
+
+
+def test_a_short_run_that_converged_from_an_offset_is_not_called_unlocked():
+    # found by the field-sensitivity gate: a 4000-cycle SSPLL run starting
+    # 5 MHz off converges to under 1 kHz, but a tail of "the last 5000
+    # samples" was the whole record, transient included
+    from pllsim.guiutil import simulate_kwargs
+    pll = presets.ALL_PRESETS["sspll_19p2m_4p8g"]()
+    sim = pll.simulate(4_000, **simulate_kwargs(pll, seed=1, f_start_offset=5e6))
+    assert not any("never reached" in n for n in sim.notes), sim.notes

@@ -22,6 +22,20 @@ class DTCConfig:
     jitter_rms_s: float = 0.0
     gain_error_residual: float = 0.01   # residual gain error assumed in analyze()
 
+    def __post_init__(self):
+        if not self.t_res > 0:
+            raise ValueError(f"DTCConfig t_res must be positive, got {self.t_res}")
+        if int(self.n_bits) < 1:
+            raise ValueError(f"DTCConfig n_bits must be >= 1, got {self.n_bits}")
+        if self.jitter_rms_s < 0:
+            raise ValueError(f"DTCConfig jitter_rms_s cannot be negative, got {self.jitter_rms_s}")
+        if not 0.0 <= self.gain_error_residual < 1.0:
+            raise ValueError("DTCConfig gain_error_residual is a fraction in "
+                             f"[0, 1), got {self.gain_error_residual}")
+        if self.inl_sin and len(self.inl_sin) != 3:
+            raise ValueError("DTCConfig inl_sin is (amplitude_s, cycles, phase_rad) "
+                             f"or empty, got {self.inl_sin}")
+
     @property
     def range_s(self) -> float:
         return self.t_res * ((1 << self.n_bits) - 1)

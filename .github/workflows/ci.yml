@@ -83,7 +83,8 @@ jobs:
               --target "$GITHUB_SHA" --notes-file "$f"
           done
 
-  # The cross-domain parameter matrix (tests/test_cross_domain_sweep.py).
+  # The cross-domain parameter matrix and the per-field sensitivity gate
+  # (markers `sweep` and `sensitivity`).
   # Its own job, in parallel with `test`, so the ~45-point sweep costs no
   # wall clock on the main suite.  Single Python (3.11), no GUI/iverilog
   # apt packages, no coverage: a subset run would trip the fail_under floor,
@@ -101,7 +102,7 @@ jobs:
           python -m pip install --upgrade pip
           pip install -e .[test] pytest-xdist
       - name: Run the sweep
-        run: pytest tests/test_cross_domain_sweep.py -m sweep -n 4 -v --tb=short
+        run: pytest tests/ -m "sweep or sensitivity" -n 4 -v --tb=short
 
   test:
     runs-on: ubuntu-latest
@@ -136,8 +137,8 @@ jobs:
       - name: Run tests
         env:
           QT_QPA_PLATFORM: offscreen
-        # -m "not sweep": the cross-domain matrix runs in its own parallel job
-        run: pytest tests/ -m "not sweep" -v --tb=short --cov=pllsim --cov-report=term-missing:skip-covered
+        # the cross-domain matrix and the field-sensitivity gate run in their own parallel job
+        run: pytest tests/ -m "not sweep and not sensitivity" -v --tb=short --cov=pllsim --cov-report=term-missing:skip-covered
       - name: Run examples (fast subset)
         if: matrix.python-version == '3.11'
         run: |

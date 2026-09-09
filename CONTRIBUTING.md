@@ -144,7 +144,7 @@ cursor would report numbers the drawn curve does not show.
 |---|---|
 | lint | `ruff check src tests examples packaging` |
 | types | `mypy` (file list in `pyproject.toml`) |
-| tests | `pytest tests/` on 3.11 and 3.12 |
+| tests | `pytest tests/ -m "not sweep and not sensitivity"` on 3.11 and 3.12; the cross-domain sweep and the field-sensitivity gate run in their own parallel job (`-m "sweep or sensitivity" -n 4`, 3.11) |
 | coverage | floor of 88% (`[tool.coverage.report]`) |
 
 What CI does **not** enforce: the Android APK build (manual
