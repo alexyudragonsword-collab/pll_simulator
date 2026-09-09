@@ -87,6 +87,35 @@ def never_locked(ferr_hz: float, fref: float) -> bool:
     return ferr_hz > LOCK_FERR_FRACTION * fref
 
 
+#: Control-voltage travel beyond which no single varactor band is credible.
+#: 28-65 nm supplies are 0.9-1.2 V and 180 nm is 1.8 V, so a law that has to
+#: move further than this from its free-running point describes an
+#: oscillator nobody can build -- the coarse band bank (OscConfig n_bands /
+#: band_step_hz) is the physical answer.  Only meaningful when OscConfig sets
+#: no v_min/v_max: with a range the law rails and `never_locked` says so.
+#: The stock presets sit at 0.6-1.0 V; the GUIs' default -100 MHz hop on a
+#: 60 MHz/V oscillator travels 1.67 V, which is why the presets stay
+#: unbounded and this is a note rather than a refusal.
+TUNING_SWING_V = 1.5
+
+
+def tuning_law_railed(v_needed: float, v_min, v_max) -> bool:
+    """The voltage fout needs lies outside the configured range: the varactor
+    rails there, the loop never reaches fout, and the linear model is being
+    evaluated at a point the loop cannot occupy."""
+    if v_min is not None and v_needed < v_min:
+        return True
+    return v_max is not None and v_needed > v_max
+
+
+def tuning_swing_exceeded(v_needed: float, v_min, v_max) -> bool:
+    """No range is set and fout needs more than TUNING_SWING_V of travel from
+    f0: the unbounded law follows it, a real oscillator would not."""
+    if v_min is not None or v_max is not None:
+        return False
+    return abs(v_needed) > TUNING_SWING_V
+
+
 def conditionally_stable(n_crossings: int) -> bool:
     """More than one gain crossover: phase margin read at one crossing does
     not describe the loop, and the linear jitter integral spans a region

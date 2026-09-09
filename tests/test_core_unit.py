@@ -231,3 +231,22 @@ def test_postprocess_finds_a_planted_spur():
     ph = amp * np.sin(TWOPI * fo * t)
     out = postprocess(_sim(ph, fs=fs), settle_frac=0.0, spur_offsets=[fo])
     assert out.spurs_fft[fo] == pytest.approx(20 * np.log10(amp / 2), abs=0.5)
+
+
+def test_postprocess_ignores_a_slow_wander():
+    """A 1/f-like drift moves the std of one half of the phase record
+    against the other with no transient anywhere; the detector reads the
+    cycle-to-cycle increments, which such a wander barely touches.  Found
+    when the Dartizio bench's new divider term made its converged 250k runs
+    read 0.7-1.95x across seeds on the old phase-std detector."""
+    n = 1 << 14
+    for seed in range(64):            # a random walk whose halves differ
+        rng = np.random.default_rng(seed)
+        ph = rng.normal(0, 1e-3, n) + np.cumsum(rng.normal(0, 3e-5, n))
+        early, late = np.std(ph[:n // 2]), np.std(ph[n // 2:])
+        if max(early, late) / min(early, late) > 1.3:
+            break
+    else:
+        raise AssertionError("no seed produced a >1.3x phase-std wander")
+    # the old phase-std detector would have flagged this record
+    assert not any("still settling" in x for x in postprocess(_sim(ph)).notes)

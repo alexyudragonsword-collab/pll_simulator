@@ -82,6 +82,13 @@ class ADPLLConfig:
     # Costs Kbb by exp(-W^2/2 sigma^2) and therefore widens the input-referred
     # noise by the same factor -- a window equal to sigma_t is 4.34 dB.
     bb_meta_window_s: float = 0.0
+    # Feedback divider phase noise (dtc_bbpd mode only: the TDC path reads the
+    # DCO edge against the reference and has no divider).  None = not
+    # modelled, which analyze() says out loud; the CPPLL/SPLL carry the same
+    # pair with -160 dBc/Hz / 100 kHz defaults, and the ADPLL had no term at
+    # all until the health check listed it.
+    div_pn_dbchz: float | None = None
+    div_pn_fc: float | None = None
     int_band: tuple[float, float] = (1e3, 100e6)
 
     @property
@@ -95,6 +102,16 @@ class ADPLLConfig:
             raise ValueError("tdc mode requires TDCConfig")
         if self.mode == "dtc_bbpd" and self.frac is None:
             raise ValueError("dtc_bbpd mode requires FracConfig (MASH + DTC)")
+        if self.mode == "tdc" and (self.div_pn_dbchz is not None
+                                   or self.div_pn_fc is not None):
+            raise ValueError(
+                "tdc mode has no feedback divider (the TDC reads the DCO edge "
+                "against the reference): div_pn_dbchz / div_pn_fc would be "
+                "accepted and ignored -- leave them unset")
+        if (self.div_pn_dbchz is None) != (self.div_pn_fc is None):
+            raise ValueError(
+                "div_pn_dbchz and div_pn_fc describe one divider: set both "
+                f"or neither (got {self.div_pn_dbchz}, {self.div_pn_fc})")
         if self.frac is not None and \
                 abs((self.fout / self.fref) % 1.0 - self.frac.frac) > 1e-6:
             raise ValueError(
@@ -182,6 +199,15 @@ class ADPLL(PLLBase):
                 ShapedQuantization(name="tdc_quant", unit="rad^2/Hz",
                                    q=TWOPI * q_ui, fs=c.fref, order=0), h))
         else:
+            if c.div_pn_dbchz is not None:
+                # divider output phase enters at the PD like the reference:
+                # low-passed, multiplied up by the ratio
+                paths.append(NoisePath(
+                    FlickerFloorPhase.from_spot("divider", c.div_pn_dbchz,
+                                                c.div_pn_fc), h * c.fcw))
+            else:
+                notes.append("divider phase noise not modelled (div_pn_dbchz "
+                             "unset): the feedback divider is noiseless here")
             # BBPD quantization: total power (1 - 2/pi) white, input-referred
             s_bb = 2.0 * (1.0 - 2.0 / np.pi) / c.fref / kdet**2   # s^2/Hz
             paths.append(NoisePath(
@@ -340,6 +366,15 @@ class ADPLL(PLLBase):
         src = FlickerFloorPhase.from_spot("ref", c.ref_pn_dbchz, c.ref_pn_fc)
         return synth_from_psd(src.psd, c.fref, n_cycles, rng) / (TWOPI * c.fref)
 
+    def _div_jitter(self, n_cycles, rng, noise):
+        """Divider-output edge jitter [s] per reference cycle, the same
+        synthesis the CPPLL uses for its non-retimed divider."""
+        c = self.cfg
+        if not noise or c.div_pn_dbchz is None:
+            return np.zeros(n_cycles)
+        src = FlickerFloorPhase.from_spot("div", c.div_pn_dbchz, c.div_pn_fc)
+        return synth_from_psd(src.psd, c.fref, n_cycles, rng) / (TWOPI * c.fref)
+
     def _sim_tdc(self, n_cycles, noise, calibration, seed, f_start_offset,
                  kdco_cal, tdc_cal, mod_freq=None, mod_dp_gain=1.0,
                  supply_ripple=None):
@@ -477,6 +512,7 @@ class ADPLL(PLLBase):
         osc_noise = osc.noise_steps(n_cycles) if noise else np.zeros(n_cycles)
         prev_phi_n = 0.0
         jit_ref = self._ref_jitter(n_cycles, rng, noise)
+        jit_div = self._div_jitter(n_cycles, rng, noise)
 
         phase_err = np.empty(n_cycles)
         freq_out = np.empty(n_cycles)
@@ -491,7 +527,9 @@ class ADPLL(PLLBase):
                 if dtc_gain_drift is not None:
                     dtc.gain_error = dtc_gain_drift[n]
                 t_ref += dtc.delay(residual_ui / c.fout)
-            e = bb.sample(t_div - t_ref)
+            # the divider's own edge jitter is sampled at the PD and does not
+            # accumulate in the count (same as the CPPLL's jit_div)
+            e = bb.sample(t_div + jit_div[n] - t_ref)
 
             if dtc_cal is not None:
                 dtc_cal.step(e, residual_ui)

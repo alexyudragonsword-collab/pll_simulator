@@ -41,6 +41,8 @@ from .base import (
     pull_spur,
     run_band_select,
     supply_ripple_v,
+    tuning_notes,
+    tuning_sim_notes,
 )
 from .cppll import FracConfig
 
@@ -96,7 +98,10 @@ class SPLLConfig:
             if self.frac.mash_order != 1:
                 raise ValueError(
                     "fractional SPLL uses a 1st-order EFM: its residue spans "
-                    "exactly 1 UI, matching a practical DTC range")
+                    "exactly 1 UI, matching a practical DTC range (measured "
+                    "2026-09: a MASH-2 residue spans 2 UI and MASH-3 4 UI, "
+                    "while the shipped DTCs cover 1.0-1.6 UI -- a higher order "
+                    "needs a DTC of >= 2 UI plus a bipolar target mapping)")
 
 
 class SPLL(PLLBase):
@@ -208,7 +213,8 @@ class SPLL(PLLBase):
                                                       *c.int_band),
                               ipn_dbc=ipn_dbc(f, bd["total"], *c.int_band),
                               int_band=c.int_band, spurs_analytic=spurs,
-                              ntfs={"gol": gol, "h": h, "err": err}, notes=notes)
+                              ntfs={"gol": gol, "h": h, "err": err},
+                              notes=notes + tuning_notes(c.osc, c.osc.v_for(c.fout)))
 
     def _r2_tf(self, f):
         d = self.cfg.filt
@@ -369,6 +375,7 @@ class SPLL(PLLBase):
         spur_offsets = add_pull_offset(spur_offsets, c.osc, c.fref)
         sim = postprocess(sim, int_band=c.int_band, spur_offsets=spur_offsets,
                           flicker_corner_hz=flicker_corner_hz(c))
+        sim = tuning_sim_notes(sim, c.osc)
         if fine is not None:
             return attach_fine(sim, fine, m_os, c.fref, c.int_band, spur_offsets)
         return no_fine_note(sim)

@@ -109,3 +109,37 @@ def test_wu19_consistency():
     assert sim.jitter_fs < 120
     spurs = [v for v in sim.spurs_fft.values() if np.isfinite(v)]
     assert spurs and max(spurs) < -64.0    # published spur bound
+
+
+# --------------------------------------------- Parts 4-6: the missing archs
+# The three architectures the anchor did not cover until 2026-09 (CPPLL,
+# ILCM, MDLL).  Their abstracts give no integration band, so the bounds are
+# class bounds on what the abstracts do give -- see each preset's docstring.
+
+def test_dadalt03_cppll_spot_phase_noise():
+    """Published: L(1 MHz) = -115 dBc/Hz on the 2.488 GHz output.  The
+    integer-N CPPLL anchor is the spot, not the (band-less) 860 fs."""
+    pll = presets.bench_dadalt03_cppll_311m_2p488g()
+    ar = pll.analyze()
+    i1m = np.searchsorted(ar.f, 1e6)
+    l1m = ldbc_from_sphi(ar.pn_breakdown["total"][i1m])
+    assert -118 < l1m < -112, l1m
+    assert pll.cfg.n_div == 8
+    sim = pll.simulate(60_000, seed=3)
+    assert 150 < sim.jitter_fs < 400          # 12 kHz - 20 MHz class
+
+
+def test_helal09_ilcm_consistency():
+    """Published: 130 fs rms integrated, 50 MHz -> 3.2 GHz (x64)."""
+    pll = presets.bench_helal09_ilcm_50m_3p2g()
+    assert pll.cfg.n_mult == 64
+    sim = pll.simulate(60_000, seed=3, f_free_error=1e6)
+    assert 90 < sim.jitter_fs < 190          # published 130 fs class
+
+
+def test_elshazly13_mdll_consistency():
+    """Published: 400 fs rms integrated, 375 MHz -> 1.5 GHz (x4)."""
+    pll = presets.bench_elshazly13_mdll_375m_1p5g()
+    assert pll.cfg.n_mult == 4
+    sim = pll.simulate(60_000, seed=3, f_free_error=1e6)
+    assert 280 < sim.jitter_fs < 560         # published 400 fs class

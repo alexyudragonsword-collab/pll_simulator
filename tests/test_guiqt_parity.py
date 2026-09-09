@@ -202,7 +202,8 @@ def test_benchmarks_page_can_re_run_the_linear_models(app):
              "linear model [fs]": round(
                  float(getattr(presets, mk)().analyze().jitter_fs), 1)}
             for lab, mk, pub in page.LIVE]
-    assert len(rows) == 4
+    from pllsim import presets
+    assert len(rows) == len(presets.BENCHMARKS) >= 8
     assert all(r["linear model [fs]"] > 0 for r in rows)
     page.deleteLater()
 

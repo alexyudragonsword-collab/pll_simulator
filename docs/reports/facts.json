@@ -1,9 +1,9 @@
 {
   "version": "0.9.3",
   "architectures": 6,
-  "presets": 15,
+  "presets": 18,
   "examples": 21,
-  "tests": 779,
+  "tests": 883,
   "releases": 14,
   "benchmarks": [
     {
@@ -15,8 +15,8 @@
     {
       "paper": "Dartizio'23 DTC-BB digital PLL 9.25G frac-N",
       "published [fs]": "77",
-      "linear [fs]": 58.9,
-      "time-domain [fs]": "77"
+      "linear [fs]": 59.3,
+      "time-domain [fs]": "76"
     },
     {
       "paper": "Markulic'16 SSPLL 10.24G int-N",
@@ -35,6 +35,24 @@
       "published [fs]": "75",
       "linear [fs]": 80.9,
       "time-domain [fs]": "78"
+    },
+    {
+      "paper": "Da Dalt'03 CPPLL 2.488G int-N (L(1M) -115 dBc/Hz)",
+      "published [fs]": "860 (band n/a)",
+      "linear [fs]": 257.5,
+      "time-domain [fs]": "244"
+    },
+    {
+      "paper": "Helal'09 PILO/ILCM 3.2G x64",
+      "published [fs]": "130",
+      "linear [fs]": 83.0,
+      "time-domain [fs]": "130"
+    },
+    {
+      "paper": "Elshazly'13 digital MDLL 1.5G x4",
+      "published [fs]": "400",
+      "linear [fs]": 541.4,
+      "time-domain [fs]": "415"
     }
   ]
 }

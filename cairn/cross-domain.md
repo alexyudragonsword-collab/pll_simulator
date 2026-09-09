@@ -80,6 +80,34 @@ validation pass); supersedes the scattered per-test knowledge before it.
   it.  Analog loops with unbounded tuning laws (no v_min/v_max set) still
   follow fout anywhere — physically optimistic, numerically self-consistent,
   a modelling-range statement rather than a defect.
+  - *Correction, 2026-09-09:* it is now a **stated** modelling-range
+    boundary, `tuning-swing` in the registry.  analyze() notes when fout
+    needs more than ±1.5 V (`TUNING_SWING_V`) of travel from f0 with no
+    range set, or lies outside a set range (the varactor rails); simulate()
+    reads the same from the run's own control-voltage tail (which rail, or
+    "parked at +4 V").  The health-check plan's first idea — give the
+    presets v_min/v_max — was **rejected after measuring** the operating
+    points: every stock loop sits 0.6–1.0 V from f0 and the GUIs' default
+    −100 MHz hop travels 1.67 V on a 60 MHz/V oscillator, so any physical
+    range turns the hop page into a rail demonstration.  The coarse band
+    bank is the physical answer to that hop, and it is a separate feature;
+    the presets stay unbounded and say so when it matters.
+- **MASH-2 for the SSPLL/SPLL, evaluated and deferred (2026-09-09, P2-16).**
+  Measured with the modulators themselves (200k steps, three fractions):
+  a MASH-1 residue spans exactly 1 UI (rms 0.29 UI), MASH-2 spans 2 UI
+  (±1, rms 0.41), MASH-3 spans 4 UI (±2, rms 0.71) — not the "4–8 UI" the
+  refusal message used to claim; the message now carries the measured
+  numbers.  The shipped SSPLL/SPLL DTCs cover 1.02–1.60 UI (Wu'19 sits at
+  1.02), so MASH-2 saturates every one of them; supporting it means a DTC
+  of ≥ 2 UI (one more bit at the same LSB, or a coarser LSB with the
+  quantization penalty that implies) *and* a bipolar target mapping in both
+  engines (today's `(1 + r)/fout − range/2` assumes r ∈ [−1, 0]).  The
+  benefit is a residue with 2nd-order shaping instead of the MASH-1 tones
+  the `dsm-tonal` register pins (4.4–9.3 dB); the cost is the DTC range and
+  its INL over twice the span.  Not implemented: no benchmark preset needs
+  it (Markulić and Wu are both MASH-1 designs), and doing it without a
+  paper to anchor the DTC assumptions would be a model change nothing
+  measures.
 - **`lock_time_s is None` does not mean unlocked.**  The detector thresholds
   are tuned for the design point; off-plan loops converge in fact while it
   stays silent.  NotLockedError requires None *and* tail frequency error

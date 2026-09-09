@@ -1,6 +1,8 @@
 """ADPLL: loop metrics, cross-domain PSD, KDCO/TDC calibration, BB mode."""
 import numpy as np
+import pytest
 
+from pllsim import presets
 from pllsim.arch.adpll import ADPLL, ADPLLConfig, DLFConfig
 from pllsim.arch.cppll import FracConfig
 from pllsim.blocks.dtc import DTCConfig
@@ -92,3 +94,50 @@ def test_cross_domain_psd_bbpd():
     assert c.skipped == [], c.skipped
     assert c.worst_db < 4.5, [f"{b.f_lo:.3g}-{b.f_hi:.3g}: {b.err_db:+.2f}"
                               for b in c.bands]
+
+
+# ------------------------------------------------------- divider noise (bb)
+
+def _bb(div=None, fc=None):
+    pll = presets.ALL_PRESETS["adpll_bb_100m_10g"]()
+    pll.cfg.div_pn_dbchz, pll.cfg.div_pn_fc = div, fc
+    pll.cfg.__post_init__()
+    return pll
+
+
+def test_tdc_mode_refuses_a_divider_noise_term():
+    """The TDC path has no feedback divider; a value there would be read
+    and ignored -- the class of parameter this project keeps finding."""
+    pll = presets.ALL_PRESETS["adpll_100m_10g"]()
+    pll.cfg.div_pn_dbchz, pll.cfg.div_pn_fc = -160.0, 100e3
+    with pytest.raises(ValueError, match="no feedback divider"):
+        pll.cfg.__post_init__()
+
+
+def test_divider_noise_needs_both_numbers():
+    with pytest.raises(ValueError, match="set both or neither"):
+        _bb(div=-160.0, fc=None)
+
+
+def test_unset_divider_noise_is_said_not_assumed():
+    ar = _bb().analyze()
+    assert any("divider phase noise not modelled" in n for n in ar.notes), ar.notes
+    assert "divider" not in ar.pn_breakdown
+
+
+def test_divider_noise_enters_the_linear_model_through_the_ratio():
+    """A -140 dBc/Hz divider floor at the PD, multiplied by N=100.5 (40 dB),
+    is a -100 dBc/Hz in-band floor at 10 GHz: it must dominate."""
+    quiet = _bb().analyze()
+    loud = _bb(div=-140.0, fc=100e3).analyze()
+    assert "divider" in loud.pn_breakdown
+    assert not any("not modelled" in n for n in loud.notes)
+    assert loud.jitter_fs > 1.5 * quiet.jitter_fs, (quiet.jitter_fs, loud.jitter_fs)
+
+
+def test_divider_noise_enters_the_time_domain_too():
+    """Same knob, same direction in simulate(): the sampled divider edge
+    jitter is added at the PD every cycle."""
+    quiet = _bb().simulate(60_000, seed=3)
+    loud = _bb(div=-140.0, fc=100e3).simulate(60_000, seed=3)
+    assert loud.jitter_fs > 1.5 * quiet.jitter_fs, (quiet.jitter_fs, loud.jitter_fs)

@@ -173,14 +173,76 @@ def attach_fine(sim: SimResult, fine: np.ndarray, m_os: int, fref: float,
     return sim
 
 
+def tuning_notes(osc_cfg, v_needed: float, what: str = "fout") -> list[str]:
+    """What the control-voltage law says about reaching a frequency.
+
+    Two notes, exclusive: the range is set and the target lies outside it
+    (the varactor rails, the loop cannot get there), or no range is set and
+    the target needs more travel than any single band supplies (the
+    unbounded law follows it, a real oscillator would not).  Shared by the
+    three analog architectures so the wording cannot drift between them.
+    """
+    from ..core.boundaries import (
+        TUNING_SWING_V,
+        tuning_law_railed,
+        tuning_swing_exceeded,
+    )
+    lo, hi = osc_cfg.v_min, osc_cfg.v_max
+    if tuning_law_railed(v_needed, lo, hi):
+        rail = f"v_min={lo:g} V" if lo is not None and v_needed < lo else f"v_max={hi:g} V"
+        return [f"{what} needs v_ctrl={v_needed:+.2f} V but the law is "
+                f"limited at {rail}: the varactor rails and the loop cannot "
+                f"reach {what} -- the linear model is evaluated at a point "
+                "the loop cannot occupy, and a run reads never-locked"]
+    if tuning_swing_exceeded(v_needed, lo, hi):
+        return [f"tuning law unbounded (no v_min/v_max): {what} needs "
+                f"v_ctrl={v_needed:+.2f} V from f0, beyond the "
+                f"+/-{TUNING_SWING_V:g} V no single varactor band spans -- "
+                "the loop follows it here because nothing stops it; set "
+                "v_min/v_max, or a coarse band bank (n_bands/band_step_hz), "
+                "to model the oscillator you can build"]
+    return []
+
+
+def tuning_sim_notes(sim: SimResult, osc_cfg) -> SimResult:
+    """The same statement from a run's own control-voltage record.
+
+    `postprocess` already says "never reached fout" when a railed loop parks
+    off-frequency; this adds *why* (which rail), and for an unbounded law it
+    says when the loop parked beyond any credible swing -- which `postprocess`
+    cannot see, because the unbounded loop does reach fout.
+    """
+    import numpy as np
+
+    from ..core.boundaries import LOCK_TAIL_CYCLES, TUNING_SWING_V
+    ctrl = getattr(sim, "ctrl", None)
+    if ctrl is None or len(ctrl) == 0:
+        return sim
+    n_tail = max(1, min(LOCK_TAIL_CYCLES, len(ctrl) // 4))
+    v = float(np.mean(np.asarray(ctrl[-n_tail:], dtype=float)))
+    lo, hi = osc_cfg.v_min, osc_cfg.v_max
+    if lo is not None and v <= lo + 1e-9:
+        sim.notes.append(f"control voltage railed at v_min={lo:g} V over the "
+                         "tail of the run: the target is below the tuning range")
+    elif hi is not None and v >= hi - 1e-9:
+        sim.notes.append(f"control voltage railed at v_max={hi:g} V over the "
+                         "tail of the run: the target is above the tuning range")
+    elif lo is None and hi is None and abs(v) > TUNING_SWING_V:
+        sim.notes.append(f"tuning law unbounded (no v_min/v_max): the loop "
+                         f"parked at v_ctrl={v:+.2f} V, beyond the "
+                         f"+/-{TUNING_SWING_V:g} V no single varactor band "
+                         "spans -- a real oscillator would have railed")
+    return sim
+
+
 def flicker_corner_hz(c) -> float:
     """Highest configured 1/f corner: reference, divider (if any), oscillator.
 
     Zero when the configuration carries no flicker at all, which is what
     lets postprocess keep its synthesis-floor note quiet for white-only runs.
     """
-    return max(float(getattr(c, "ref_pn_fc", 0.0)),
-               float(getattr(c, "div_pn_fc", 0.0)),
+    return max(float(getattr(c, "ref_pn_fc", 0.0) or 0.0),
+               float(getattr(c, "div_pn_fc", 0.0) or 0.0),   # ADPLL: None = no divider
                float(getattr(c.osc, "pn_f1f3", 0.0)))
 
 

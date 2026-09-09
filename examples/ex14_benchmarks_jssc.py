@@ -1,7 +1,11 @@
-"""Example 14: Three modern JSSC benchmarks — DTC-ADPLL / frac-N SSPLL / frac-N SPLL.
+"""Example 14: JSSC benchmarks — DTC-ADPLL / frac-N SSPLL / frac-N SPLL, and
+the CPPLL / ILCM / MDLL anchors.
 
-Extends the single-point Gao'09 benchmark (ex10) to four points covering the
-three dominant low-jitter fractional-N paradigms of the last decade:
+Extends the single-point Gao'09 benchmark (ex10) to seven points: parts 1-3
+cover the three dominant low-jitter fractional-N paradigms of the last
+decade, parts 4-6 (added 2026-09) give the three architectures that had no
+literature anchor at all -- the integer-N charge-pump PLL, the injection-
+locked clock multiplier and the multiplying DLL:
 
 Part 1  Dartizio et al., "A Low-Spur and Low-Jitter Fractional-N Digital PLL
         Based on an Inverse-Constant-Slope DTC and FCW Subtractive Dithering",
@@ -29,6 +33,26 @@ Part 3  Wu et al., "A 28-nm 75-fs rms Analog Fractional-N Sampling PLL With
         10 kHz - 10 MHz** (note the band!), fractional spur < -64 dBc,
         FoM -249.7 dB.  -> our new `spll_frac` (DTC delays the divided edge
         that samples the reference sine).
+
+Part 4  Da Dalt & Sandner, "A Subpicosecond Jitter PLL for Clock Generation
+        in 0.12-um Digital CMOS", IEEE JSSC vol. 38 no. 7, Jul. 2003
+        (Infineon).  Published: 311 MHz reference, 2.488 GHz (N = 8), two
+        differentially tuned LC-VCOs, L(1 MHz) = -115 dBc/Hz, 860 fs
+        integrated jitter (no band in the abstract), 1.5 V, 35 mW.
+        -> our `cppll` integer-N.  The anchor is the spot phase noise.
+
+Part 5  Helal, Hsu, Johnson & Perrott, "A Low Jitter Programmable Clock
+        Multiplier Based on a Pulse Injection-Locked Oscillator With a
+        Highly-Digital Tuning Loop", IEEE JSSC vol. 44 no. 5, May 2009
+        (MIT, 0.13 um).  Published: 50 MHz -> 3.2 GHz (x64), 130 fs rms
+        integrated phase noise, -63.9 dBc reference spur, 200 fs pp
+        deterministic, 28.6 mW core.  -> our `ilcm`.
+
+Part 6  Elshazly, Inti, Young & Hanumolu, "Clock Multiplication Techniques
+        Using Digital Multiplying Delay-Locked Loops", IEEE JSSC vol. 48
+        no. 6, Jun. 2013 (0.13 um, 1.1 V).  Published: 375 MHz -> 1.5 GHz
+        (x4), 400 fs rms integrated jitter, -55.6 dBc reference spur,
+        890 uW, 1-bit TDC.  -> our `mdll`.
 
 Methodology (same as ex10): published measurements are the targets; circuit
 parameters not disclosed in the papers (sampler gm/C, DCO/VCO free-running
@@ -164,10 +188,91 @@ rows.append(("Wu'19 sampling PLL 6.25G frac-N", "75", ar3.jitter_fs,
 plot_pn_breakdown(ar3, sim3, save=f"{OUT}/ex14_wu19.png", fmax=26e6)
 
 
+# ===================================================================== Part 4
+print()
+print("=" * 74)
+print("Part 4 — Da Dalt & Sandner, JSSC Jul. 2003: integer-N charge-pump PLL,")
+print("         0.12 um digital CMOS, 311 MHz -> 2.488 GHz (N = 8)")
+print("=" * 74)
+
+# Assumptions: VCO -117 dBc/Hz @ 1 MHz, a -138 dBc/Hz on-chip 311 MHz clock
+# (x8 = -120 in-band), UGB 1.5 MHz / PM 60 synthesized.  Integration band
+# 12 kHz - 20 MHz (SONET OC-48 jitter-generation band; the abstract gives
+# none, and a -115 dBc/Hz 1/f^2 profile cannot integrate to 860 fs in it).
+dadalt = presets.bench_dadalt03_cppll_311m_2p488g()
+ar4 = dadalt.analyze()
+sim4 = dadalt.simulate(200_000, seed=5)
+i1m = np.searchsorted(ar4.f, 1e6)
+print(f"{'metric':44s}{'published':>12s}{'model':>12s}")
+print(f"{'L(1 MHz) [dBc/Hz] (linear)':44s}{'-115':>12s}"
+      f"{ldbc_from_sphi(ar4.pn_breakdown['total'][i1m]):12.1f}")
+print(f"{'rms jitter 12k-20M [fs] (linear)':44s}{'860 (n/a)':>12s}"
+      f"{ar4.jitter_fs:12.1f}")
+print(f"{'rms jitter 12k-20M [fs] (time domain)':44s}{'860 (n/a)':>12s}"
+      f"{sim4.jitter_fs:12.1f}")
+print("note: the abstract gives no integration band for its 860 fs; the anchor")
+print("      is the -115 dBc/Hz spot, which the model lands on.  A 1/f^2 profile")
+print("      at that level integrates to ~250 fs over 12 kHz - 20 MHz, so the")
+print("      published figure spans a wider band or includes deterministic")
+print("      jitter -- quoted, not matched.")
+rows.append(("Da Dalt'03 CPPLL 2.488G int-N", "860 (n/a)", ar4.jitter_fs,
+             sim4.jitter_fs))
+plot_pn_breakdown(ar4, sim4, save=f"{OUT}/ex14_dadalt03.png", fmax=100e6)
+
+
+# ===================================================================== Part 5
+print()
+print("=" * 74)
+print("Part 5 — Helal et al., JSSC May 2009: pulse injection-locked oscillator")
+print("         clock multiplier, 0.13 um, 50 MHz -> 3.2 GHz (x64)")
+print("=" * 74)
+
+# Assumptions: LC oscillator -120 dBc/Hz @ 1 MHz, a -165 dBc/Hz "low jitter"
+# 50 MHz reference (x64 = -129 in-band, the dominant term), 15 fs injection
+# path jitter, beta 0.6 (~7 MHz injection bandwidth).  Band 1 kHz - 40 MHz.
+helal = presets.bench_helal09_ilcm_50m_3p2g()
+ar5 = helal.analyze()
+sim5 = helal.simulate(200_000, seed=5, f_free_error=1e6)
+print(f"{'metric':44s}{'published':>12s}{'model':>12s}")
+print(f"{'rms jitter [fs] (linear)':44s}{'130':>12s}{ar5.jitter_fs:12.1f}")
+print(f"{'rms jitter [fs] (time domain)':44s}{'130':>12s}{sim5.jitter_fs:12.1f}")
+print(f"{'reference spur [dBc]':44s}{'-63.9':>12s}"
+      f"{sim5.spurs_fft.get('ref_spur', float('nan')):12.1f}")
+print("note: the ILCM's time domain reads above its linear model (the")
+print("      realignment is a sampled operation the 1-ZOH model smooths); the")
+print("      time domain is the reference, as for the MDLL.")
+rows.append(("Helal'09 PILO/ILCM 3.2G x64", "130", ar5.jitter_fs,
+             sim5.jitter_fs))
+plot_pn_breakdown(ar5, sim5, save=f"{OUT}/ex14_helal09.png", fmax=40e6)
+
+
+# ===================================================================== Part 6
+print()
+print("=" * 74)
+print("Part 6 — Elshazly et al., JSSC Jun. 2013: digital MDLL with a 1-bit TDC,")
+print("         0.13 um / 1.1 V, 375 MHz -> 1.5 GHz (x4), 890 uW")
+print("=" * 74)
+
+# Assumptions: ring -88 dBc/Hz @ 1 MHz (FoM -151 dB at 0.89 mW), 150 fs
+# select-path jitter, -155 dBc/Hz reference.  Band 1 kHz - 100 MHz.
+elsh = presets.bench_elshazly13_mdll_375m_1p5g()
+ar6 = elsh.analyze()
+sim6 = elsh.simulate(200_000, seed=5, f_free_error=1e6)
+print(f"{'metric':44s}{'published':>12s}{'model':>12s}")
+print(f"{'rms jitter [fs] (linear)':44s}{'400':>12s}{ar6.jitter_fs:12.1f}")
+print(f"{'rms jitter [fs] (time domain)':44s}{'400':>12s}{sim6.jitter_fs:12.1f}")
+print("note: with N = 4 the ring accumulates only four cycles between edge")
+print("      replacements; the jitter is the ring's own, which is why a")
+print("      -88 dBc/Hz ring at 0.89 mW reproduces the published class.")
+rows.append(("Elshazly'13 digital MDLL 1.5G x4", "400", ar6.jitter_fs,
+             sim6.jitter_fs))
+plot_pn_breakdown(ar6, sim6, save=f"{OUT}/ex14_elshazly13.png", fmax=300e6)
+
+
 # =================================================================== summary
 print()
 print("=" * 74)
-print("Four-point literature anchor (incl. ex10 Gao'09 integer-N SSPLL)")
+print("Seven-point literature anchor (incl. ex10 Gao'09 integer-N SSPLL)")
 print("=" * 74)
 print(f"{'paper / architecture':36s}{'published':>10s}{'linear':>10s}"
       f"{'timedom':>10s}")
@@ -180,4 +285,5 @@ print("\nassumption policy: every parameter not published (sampler, DTC, "
       "choice; agreement\nis architectural consistency, not parameter "
       "replication.")
 print(f"\nplots: {OUT}/ex14_dartizio23.png, ex14_markulic16.png, "
-      f"ex14_wu19.png")
+      f"ex14_wu19.png, ex14_dadalt03.png, ex14_helal09.png, "
+      f"ex14_elshazly13.png")

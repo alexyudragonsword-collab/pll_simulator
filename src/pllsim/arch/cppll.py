@@ -41,6 +41,8 @@ from .base import (
     pull_spur,
     run_band_select,
     supply_ripple_v,
+    tuning_notes,
+    tuning_sim_notes,
 )
 
 TWOPI = 2.0 * np.pi
@@ -236,6 +238,7 @@ class CPPLL(PLLBase):
                 notes.append("WARNING: Kvco collapsed >5x at this operating "
                              "point — target near the edge of the tuning "
                              "range; loop gain and stability unreliable")
+        notes.extend(tuning_notes(c.osc, v_op))
         bd = output_psd(paths, f)
         jit = rms_jitter_fs(f, bd["total"], c.fout, *c.int_band)
         ref_spur = self._ref_spur_dbc(z)
@@ -519,6 +522,7 @@ class CPPLL(PLLBase):
         sim = postprocess(sim, settle_frac=0.25, int_band=c.int_band,
                           spur_offsets=spur_offsets,
                           flicker_corner_hz=flicker_corner_hz(c))
+        sim = tuning_sim_notes(sim, c.osc)
         if fine is not None:
             sim = attach_fine(sim, fine, m_os, c.fref, c.int_band, spur_offsets)
             sub = tref / m_os
