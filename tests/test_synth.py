@@ -117,7 +117,10 @@ def test_retune_loop_refuses_the_filterless_architectures():
         with pytest.raises(TypeError, match="no loop filter"):
             retune_loop(presets.ALL_PRESETS[name](), 1e6)
         assert name not in sweepable_presets()
-    assert len(sweepable_presets()) == len(presets.ALL_PRESETS) - 2
+    filterless = sum(1 for mk in presets.ALL_PRESETS.values()
+                     if type(mk()).__name__ in ("ILCM", "MDLL"))
+    assert filterless >= 2
+    assert len(sweepable_presets()) == len(presets.ALL_PRESETS) - filterless
 
 
 def test_bang_bang_retune_beats_the_normalized_coefficients():

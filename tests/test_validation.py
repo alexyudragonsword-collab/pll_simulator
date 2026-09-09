@@ -88,6 +88,13 @@ def test_boundary_codes_are_unique():
     assert len(codes) == len(set(codes)), codes
 
 
+def _fout_stepped(name, n_steps):
+    """+10 reference multiples on the stock CPPLL needs 4 V from f0."""
+    p = presets.ALL_PRESETS[name]()
+    p.cfg.fout += n_steps * p.cfg.fref
+    return p
+
+
 @pytest.mark.parametrize("code", [b.code for b in BOUNDARIES])
 def test_every_boundary_code_can_fire(code, quick):
     """A predicate over a field that does not exist is decorative: it reads
@@ -133,6 +140,9 @@ def test_every_boundary_code_can_fire(code, quick):
         "dsm-tonal": BoundaryContext(
             pll=presets.ALL_PRESETS["cppll_frac_38p4m_6g"](), ar=None,
             sim=None, band=(1e5, 1e6), n_cycles=1),
+        "tuning-swing": BoundaryContext(
+            pll=_fout_stepped("cppll_19p2m_4p8g", 10), ar=None, sim=None,
+            band=(1e5, 1e6), n_cycles=1),
     }
     assert code in triggering, f"no trigger case written for {code}"
     entry = next(b for b in BOUNDARIES if b.code == code)
