@@ -8,22 +8,30 @@ from __future__ import annotations
 
 import numpy as np
 
+from .jit import kernel
 from .jitter import rms_jitter_fs
 from .results import SimResult
 from .spectrum import periodogram_psd, phase_psd
 
 
+@kernel
+def _first_hold(ferr: np.ndarray, tol_hz: float, hold: int) -> int:
+    """Index where |ferr| < tol first held for `hold` samples, else -1."""
+    run = 0
+    for i in range(ferr.shape[0]):
+        run = run + 1 if abs(ferr[i]) < tol_hz else 0
+        if run >= hold:
+            return i - hold + 1
+    return -1
+
+
 def detect_lock(t: np.ndarray, ferr: np.ndarray, tol_hz: float, hold: int = 200) -> float | None:
     """First time |ferr| < tol for `hold` consecutive samples."""
-    ok = np.abs(ferr) < tol_hz
-    if ok.size < hold:
+    ferr = np.ascontiguousarray(ferr, dtype=float)
+    if ferr.size < hold:
         return None
-    run = 0
-    for i, v in enumerate(ok):
-        run = run + 1 if v else 0
-        if run >= hold:
-            return float(t[i - hold + 1])
-    return None
+    i = int(_first_hold(ferr, float(tol_hz), int(hold)))
+    return None if i < 0 else float(t[i])
 
 
 def postprocess(sim: SimResult, settle_frac: float = 0.25,

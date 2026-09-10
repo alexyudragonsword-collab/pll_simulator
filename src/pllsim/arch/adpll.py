@@ -13,16 +13,30 @@ the one-cycle update delay.  Time domain runs one step per reference cycle.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
-from ..blocks.oscillator import OscConfig, Oscillator
-from ..blocks.tdc import BBPD, TDC, TDCConfig, meta_gain_penalty
+from ..blocks.dtc import dtc_code, dtc_inl_s, dtc_time
+from ..blocks.oscillator import OscConfig, Oscillator, osc_freq_law
+from ..blocks.tdc import (
+    BBPD,
+    TDC,
+    TDCConfig,
+    bbpd_decide,
+    meta_gain_penalty,
+    tdc_measure,
+)
+from ..calibration.gain_cal import kdco_perturbation, kdco_step, tdc_period_step
+from ..calibration.lms import lms_step
 from ..core.colored import synth_from_psd
+from ..core.deltasigma import mash_residual, mash_step
 from ..core.dtcspurs import frac_spur_offsets
 from ..core.engine import detect_lock, postprocess
 from ..core.freqresp import FreqResponse, default_grid, loop_metrics
+from ..core.jit import kernel
 from ..core.jitter import ipn_dbc, rms_jitter_fs
 from ..core.noise import (
     DcoQuantPhase,
@@ -36,8 +50,11 @@ from ..core.results import AnalysisResult, SimResult
 from .base import (
     PLLBase,
     add_pull_offset,
+    cal_kernel_args,
+    dtc_kernel_args,
     dtc_t_target_of,
     flicker_corner_hz,
+    osc_law_args,
     pull_hz,
     pull_notes,
     pull_spur,
@@ -152,6 +169,193 @@ class ADPLLConfig:
                 "the only tuning control it models, so n_bands would be\n"
                 "accepted and never acted on (and export would still emit a\n"
                 "band-search FSM for it)")
+
+
+@kernel
+def adpll_tdc_kernel(n_cycles: int, tref: float, fout: float, fref: float, fcw: float,
+                     f0: float, gain: float, nl1: float, nl2: float, band_step: float,
+                     n_bands: int, v_lo: float, v_hi: float, pushing: float,
+                     v_sup: np.ndarray, f_pull: np.ndarray, osc_noise: np.ndarray,
+                     jit_ref: np.ndarray, noise_on: bool, calibration: bool,
+                     zn: np.ndarray,
+                     tdc_t_lsb_true: float, tdc_code_max: int, tdc_jitter: float,
+                     tdc_has_sin: bool, tdc_sin_amp: float, tdc_sin_cyc: float,
+                     tdc_sin_ph: float, cpp_nom: float,
+                     has_tcal: bool, tcal_st: np.ndarray, tcal_ema: float,
+                     tcal_trace: np.ndarray,
+                     has_kcal: bool, kcal_st: np.ndarray, kcal_halves: np.ndarray,
+                     kcal_ests: np.ndarray, kcal_amp: float, kcal_meas_n: int,
+                     kcal_rounds: int, kcal_settle: int, kcal_trace: np.ndarray,
+                     kdco_hat0: float, otw_center: float, dlf_alpha: float,
+                     dlf_rho: float, iir_lambdas: np.ndarray, iir_state: np.ndarray,
+                     dither: bool, has_mod: bool, mod_freq: np.ndarray, mod_dp_gain: float,
+                     phase_err: np.ndarray, freq_out: np.ndarray, otw_rec: np.ndarray
+                     ) -> int:
+    """Counter-assisted (Staszewski) loop, one reference cycle per iteration.
+    Returns the normal draws consumed."""
+    kdco_hat = kdco_hat0
+    acc = 0.0
+    qerr = 0.0                       # 1st-order DCO dither state
+    phi_v = 0.0                      # DCO phase [UI]
+    r_acc = 0.0                      # reference accumulator [UI]
+    prev_phi_n = 0.0
+    zi = 0
+    fv = osc_freq_law(otw_center, 0, f0, gain, nl1, nl2, band_step, n_bands, v_lo, v_hi)
+    n_iir = iir_lambdas.shape[0]
+    for n in range(n_cycles):
+        d_phi_n = (osc_noise[n] - prev_phi_n) / TWOPI     # UI
+        prev_phi_n = osc_noise[n]
+        phi_v += fv * tref + d_phi_n
+        r_acc += fcw
+        if has_mod:
+            # lowpass point [UI] — one cycle behind the direct point:
+            # the fv used for phi_v this cycle carries mod_freq[n-1]
+            r_acc += (mod_freq[n - 1] if n > 0 else 0.0) * tref
+        # reference jitter shifts the sampling instant of the DCO phase
+        phi_sample = phi_v + jit_ref[n] * fv
+        count = float(math.floor(phi_sample))
+        frac_ui = phi_sample - count
+        tdco = 1.0 / fv
+        dt_meas = frac_ui * tdco
+        if noise_on and tdc_jitter > 0:
+            dt_meas = dt_meas + tdc_jitter * zn[zi]
+            zi += 1
+        code = tdc_measure(dt_meas, tdc_t_lsb_true, tdc_code_max, tdc_has_sin,
+                           tdc_sin_amp, tdc_sin_cyc, tdc_sin_ph)
+        if has_tcal and calibration:
+            cpp_meas = tdco / tdc_t_lsb_true
+            if noise_on:
+                cpp_meas = cpp_meas + 0.5 * zn[zi]
+                zi += 1
+            tcal_trace[n] = tdc_period_step(tcal_st, cpp_meas, tcal_ema)
+            tdc_ui = code / tcal_st[0]
+        else:
+            tdc_ui = code / cpp_nom
+        e_ui = r_acc - (count + tdc_ui)
+
+        if has_kcal and calibration and kcal_st[3] == 0.0:
+            # open-loop FCAL phase: loop frozen, OTW stepped +/-A; the
+            # frequency is measured from the counter (phase slope)
+            kcal_trace[n] = kdco_step(kcal_st, kcal_halves, kcal_ests, fv, kcal_amp,
+                                      kcal_meas_n, kcal_rounds, kcal_settle)
+            kdco_hat = kcal_st[4]
+            otw = otw_center + kdco_perturbation(kcal_st, kcal_amp, kcal_meas_n)
+            r_acc = count + tdc_ui       # keep PD aligned for loop closure
+            acc = 0.0
+        else:
+            # DLF
+            acc += dlf_rho * e_ui
+            x = dlf_alpha * e_ui + acc
+            for i in range(n_iir):
+                iir_state[i] += iir_lambdas[i] * (x - iir_state[i])
+                x = iir_state[i]
+            otw = x * fref / kdco_hat + otw_center
+        if has_mod:                              # highpass (direct) point
+            otw += mod_freq[n] * mod_dp_gain / kdco_hat
+        # DCO quantization with optional 1st-order dither
+        if dither:
+            otw_q = float(math.floor(otw + qerr))
+            qerr = otw + qerr - otw_q
+        else:
+            otw_q = float(round(otw))
+        fv = (osc_freq_law(otw_q, 0, f0, gain, nl1, nl2, band_step, n_bands, v_lo, v_hi)
+              + pushing * v_sup[n] + f_pull[n])
+
+        phase_err[n] = TWOPI * (phi_v - (n + 1) * fcw)
+        freq_out[n] = fv
+        otw_rec[n] = otw_q
+    return zi
+
+
+@kernel
+def adpll_bbpd_kernel(n_cycles: int, tref: float, fout: float, n_int: int,
+                      f0: float, gain: float, nl1: float, nl2: float, band_step: float,
+                      n_bands: int, v_lo: float, v_hi: float, pushing: float,
+                      v_sup: np.ndarray, f_pull: np.ndarray, osc_noise: np.ndarray,
+                      jit_ref: np.ndarray, jit_div: np.ndarray, noise_on: bool,
+                      zn: np.ndarray, mash_order: int, mash_bits: int,
+                      mash_st: np.ndarray, frac_word: int,
+                      has_dtc: bool, dtc_range_s: float, dtc_t_res: float,
+                      dtc_code_max: int, dtc_inl_poly: np.ndarray, dtc_has_sin: bool,
+                      dtc_sin_amp: float, dtc_sin_cyc: float, dtc_sin_ph: float,
+                      dtc_jitter: float, dtc_gain_error: float, has_drift: bool,
+                      dtc_gain_drift: np.ndarray,
+                      has_cal: bool, cal_kind: int, cal_st: np.ndarray, cal_mu: float,
+                      cal_mu_final: float, cal_gear: float, cal_ema: float,
+                      cal_center: bool, cal_trace: np.ndarray,
+                      bb_jitter: float, bb_meta: float, otw_center: float,
+                      dlf_alpha: float, dlf_rho: float, dither: bool,
+                      phase_err: np.ndarray, freq_out: np.ndarray, otw_rec: np.ndarray
+                      ) -> tuple[int, int]:
+    """Divider + MASH + DTC-aligned bang-bang loop, one reference cycle per
+    iteration.  Returns (metastable decisions, normal draws consumed)."""
+    acc = 0.0
+    qerr = 0.0
+    phi_out = 0.0
+    t_div = 0.0
+    prev_phi_n = 0.0
+    gain_corr = 1.0
+    gain_err = dtc_gain_error
+    n_meta = 0
+    zi = 0
+    fv = osc_freq_law(otw_center, 0, f0, gain, nl1, nl2, band_step, n_bands, v_lo, v_hi)
+    for n in range(n_cycles):
+        t_ref = n * tref + jit_ref[n]
+        residual_ui = mash_residual(mash_bits, mash_st)
+        if has_dtc:
+            if has_drift:
+                gain_err = dtc_gain_drift[n]
+            code = dtc_code(residual_ui / fout, dtc_range_s, gain_corr, dtc_t_res,
+                            dtc_code_max)
+            inl = dtc_inl_s(code, dtc_code_max, dtc_inl_poly, dtc_has_sin, dtc_sin_amp,
+                            dtc_sin_cyc, dtc_sin_ph)
+            d = dtc_time(code, dtc_t_res, gain_err, inl)
+            if noise_on and dtc_jitter > 0:
+                d += dtc_jitter * zn[zi]
+                zi += 1
+            t_ref += d
+        # the divider's own edge jitter is sampled at the PD and does not
+        # accumulate in the count (same as the CPPLL's jit_div)
+        dt = t_div + jit_div[n] - t_ref
+        if noise_on and bb_jitter > 0:
+            dt = dt + bb_jitter * zn[zi]
+            zi += 1
+        if bb_meta > 0 and abs(dt) < bb_meta:
+            n_meta += 1
+            if noise_on:
+                # a coin flip: the sign of the next draw of the pool
+                e = 1 if zn[zi] < 0.0 else -1
+                zi += 1
+            else:
+                e = bbpd_decide(dt)
+        else:
+            e = bbpd_decide(dt)
+
+        if has_cal and has_dtc:
+            gain_corr = lms_step(cal_kind, cal_st, float(e), residual_ui, cal_mu,
+                                 cal_mu_final, cal_gear, cal_ema, cal_center)
+            cal_trace[n] = gain_corr
+
+        acc += dlf_rho * e
+        otw = dlf_alpha * e + acc + otw_center
+        if dither:
+            otw_q = float(math.floor(otw + qerr))
+            qerr = otw + qerr - otw_q
+        else:
+            otw_q = float(round(otw))
+        fv = (osc_freq_law(otw_q, 0, f0, gain, nl1, nl2, band_step, n_bands, v_lo, v_hi)
+              + pushing * v_sup[n] + f_pull[n])
+
+        n_next = n_int + mash_step(mash_order, mash_bits, mash_st, frac_word)
+        d_osc = osc_noise[n] - prev_phi_n
+        prev_phi_n = osc_noise[n]
+        t_div += n_next / fv - d_osc / (TWOPI * fv)
+
+        phi_out += TWOPI * (fv - fout) * tref + d_osc
+        phase_err[n] = phi_out
+        freq_out[n] = fv
+        otw_rec[n] = otw_q
+    return n_meta, zi
 
 
 class ADPLL(PLLBase):
@@ -390,78 +594,49 @@ class ADPLL(PLLBase):
         tdc = TDC(c.tdc, rng, noise=noise)
         kdco_hat = c.osc.gain * (1.0 + c.kdco_est_error)
         otw_center = (c.fout - c.osc.f0) / c.osc.gain + f_start_offset / c.osc.gain
-
-        # DLF state
-        acc = 0.0
-        iir_state = [0.0] * len(c.dlf.iir_lambdas)
-        qerr = 0.0                       # 1st-order DCO dither state
-        phi_v = 0.0                      # DCO phase [UI]
-        r_acc = 0.0                      # reference accumulator [UI]
         cpp_nom = (1.0 / c.fout) / c.tdc.t_res    # nominal codes per period
-
         osc_noise = osc.noise_steps(n_cycles) if noise else np.zeros(n_cycles)
-        prev_phi_n = 0.0
         jit_ref = self._ref_jitter(n_cycles, rng, noise)
 
         phase_err = np.empty(n_cycles)
         freq_out = np.empty(n_cycles)
         otw_rec = np.empty(n_cycles)
-        fv = c.osc.freq_law(otw_center)
-
-        for n in range(n_cycles):
-            d_phi_n = (osc_noise[n] - prev_phi_n) / TWOPI     # UI
-            prev_phi_n = osc_noise[n]
-            phi_v += fv * tref + d_phi_n
-            r_acc += fcw
-            if mod_freq is not None:
-                # lowpass point [UI] — one cycle behind the direct point:
-                # the fv used for phi_v this cycle carries mod_freq[n-1]
-                r_acc += (mod_freq[n - 1] if n > 0 else 0.0) * tref
-            # reference jitter shifts the sampling instant of the DCO phase
-            phi_sample = phi_v + jit_ref[n] * fv
-            count = np.floor(phi_sample)
-            frac_ui = phi_sample - count
-            tdco = 1.0 / fv
-            code = tdc.measure(frac_ui * tdco)
-            if tdc_cal is not None and calibration:
-                cpp_meas = tdco / tdc.t_lsb_true + rng.normal(0.0, 0.5) if noise \
-                    else tdco / tdc.t_lsb_true
-                tdc_cal.step(cpp_meas)
-                tdc_ui = tdc_cal.code_to_ui(code)
-            else:
-                tdc_ui = code / cpp_nom
-            e_ui = r_acc - (count + tdc_ui)
-
-            if kdco_cal is not None and calibration and not kdco_cal.done:
-                # open-loop FCAL phase: loop frozen, OTW stepped +/-A; the
-                # frequency is measured from the counter (phase slope)
-                kdco_cal.step(fv)
-                kdco_hat = kdco_cal.value
-                otw = otw_center + kdco_cal.perturbation
-                r_acc = count + tdc_ui       # keep PD aligned for loop closure
-                acc = 0.0
-            else:
-                # DLF
-                acc += c.dlf.rho * e_ui
-                x = c.dlf.alpha * e_ui + acc
-                for i, lam in enumerate(c.dlf.iir_lambdas):
-                    iir_state[i] += lam * (x - iir_state[i])
-                    x = iir_state[i]
-                otw = x * c.fref / kdco_hat + otw_center
-            if mod_freq is not None:                 # highpass (direct) point
-                otw += mod_freq[n] * mod_dp_gain / kdco_hat
-            # DCO quantization with optional 1st-order dither
-            if c.dco_dither_order > 0:
-                otw_q = np.floor(otw + qerr)
-                qerr = otw + qerr - otw_q
-            else:
-                otw_q = np.round(otw)
-            fv = (c.osc.freq_law(otw_q) + c.osc.pushing_hz_v * v_sup[n]
-                  + f_pull[n])
-
-            phase_err[n] = TWOPI * (phi_v - (n + 1) * fcw)
-            freq_out[n] = fv
-            otw_rec[n] = otw_q
+        # at most two draws per cycle (TDC jitter, the period-cal counter
+        # noise), taken from a pool in the order the loop consumes them
+        zn = rng.standard_normal(2 * n_cycles) if noise else np.zeros(0)
+        has_tcal = tdc_cal is not None
+        has_kcal = kdco_cal is not None
+        tcal_trace = np.empty(n_cycles if has_tcal else 0)
+        kcal_trace = np.empty(n_cycles if has_kcal else 0)
+        kcal_trace[:] = kdco_cal.value if has_kcal else 0.0
+        args: tuple[Any, ...] = (
+            n_cycles, tref, float(c.fout), float(c.fref), float(fcw),
+            *osc_law_args(c.osc), float(c.osc.pushing_hz_v), v_sup, f_pull, osc_noise,
+            jit_ref, bool(noise), bool(calibration), zn,
+            float(tdc.t_lsb_true), int(tdc.code_max), float(c.tdc.jitter_rms_s),
+            *c.tdc.inl_scalars(), float(cpp_nom),
+            has_tcal, tdc_cal.st if has_tcal else np.zeros(1),
+            float(tdc_cal._ema) if has_tcal else 0.0, tcal_trace,
+            has_kcal, kdco_cal.st if has_kcal else np.zeros(7),
+            kdco_cal.halves if has_kcal else np.zeros(1),
+            kdco_cal.ests if has_kcal else np.zeros(1),
+            float(kdco_cal.amp) if has_kcal else 0.0,
+            int(kdco_cal.meas_n) if has_kcal else 1,
+            int(kdco_cal.rounds) if has_kcal else 0,
+            int(kdco_cal.settle) if has_kcal else 0, kcal_trace,
+            float(kdco_hat), float(otw_center), float(c.dlf.alpha), float(c.dlf.rho),
+            np.asarray(c.dlf.iir_lambdas, dtype=float),
+            np.zeros(len(c.dlf.iir_lambdas)), c.dco_dither_order > 0,
+            mod_freq is not None,
+            np.asarray(mod_freq, dtype=float) if mod_freq is not None else np.zeros(0),
+            float(mod_dp_gain), phase_err, freq_out, otw_rec)
+        adpll_tdc_kernel(*args)
+        if has_tcal and calibration:
+            tdc_cal.trace.extend(tcal_trace.tolist())
+        if has_kcal and calibration:
+            # the object's trace grows only while its FCAL phase ran
+            n_ran = min(n_cycles, max(kdco_cal.n, 0))
+            kdco_cal.trace.extend(kcal_trace[:n_ran].tolist())
 
         t = np.arange(n_cycles) * tref
         lock = detect_lock(t, freq_out - c.fout, tol_hz=c.fout * 2e-5)
@@ -493,26 +668,22 @@ class ADPLL(PLLBase):
         osc = Oscillator(c.osc, c.fref, rng, noise=noise, name="dco")
         bb = BBPD(c.bb_jitter_rms_s, rng, noise=noise,
                   meta_window_s=c.bb_meta_window_s)
-        mash = c.frac.make_mash()
-        frac_word = c.frac.frac_word
+        frac = c.frac
+        assert frac is not None      # __post_init__ requires it in this mode
+        mash = frac.make_mash()
+        frac_word = frac.frac_word
         n_int = int(c.fout // c.fref)
         otw_center = (c.fout - c.osc.f0) / c.osc.gain + f_start_offset / c.osc.gain
 
         dtc = None
         dtc_cal = None
-        if c.frac.dtc is not None:
+        if frac.dtc is not None:
             from ..blocks.dtc import DTC
-            dtc = DTC(c.frac.dtc, rng, noise=noise, gain_error=dtc_gain_init_error)
+            dtc = DTC(frac.dtc, rng, noise=noise, gain_error=dtc_gain_init_error)
             if calibration:
-                dtc_cal = c.frac.dtc_cal
+                dtc_cal = frac.dtc_cal
 
-        acc = 0.0
-        qerr = 0.0
-        phi_out = 0.0
-        t_div = 0.0
-        n_next = n_int
         osc_noise = osc.noise_steps(n_cycles) if noise else np.zeros(n_cycles)
-        prev_phi_n = 0.0
         jit_ref = self._ref_jitter(n_cycles, rng, noise)
         jit_div = self._div_jitter(n_cycles, rng, noise)
 
@@ -520,43 +691,29 @@ class ADPLL(PLLBase):
         freq_out = np.empty(n_cycles)
         otw_rec = np.empty(n_cycles)
         cal_trace = np.empty(n_cycles if dtc_cal is not None else 0)
-        fv = c.osc.freq_law(otw_center)
-
-        for n in range(n_cycles):
-            t_ref = n * tref + jit_ref[n]
-            residual_ui = mash.residual_ui()
-            if dtc is not None:
-                if dtc_gain_drift is not None:
-                    dtc.gain_error = dtc_gain_drift[n]
-                t_ref += dtc.delay(residual_ui / c.fout)
-            # the divider's own edge jitter is sampled at the PD and does not
-            # accumulate in the count (same as the CPPLL's jit_div)
-            e = bb.sample(t_div + jit_div[n] - t_ref)
-
-            if dtc_cal is not None and dtc is not None:
-                dtc_cal.step(e, residual_ui)
-                dtc.gain_corr = dtc_cal.value
-                cal_trace[n] = dtc_cal.value
-
-            acc += c.dlf.rho * e
-            otw = c.dlf.alpha * e + acc + otw_center
-            if c.dco_dither_order > 0:
-                otw_q = np.floor(otw + qerr)
-                qerr = otw + qerr - otw_q
-            else:
-                otw_q = np.round(otw)
-            fv = (c.osc.freq_law(otw_q) + c.osc.pushing_hz_v * v_sup[n]
-                  + f_pull[n])
-
-            n_next = n_int + mash.step(frac_word)
-            d_osc = osc_noise[n] - prev_phi_n
-            prev_phi_n = osc_noise[n]
-            t_div += n_next / fv - d_osc / (TWOPI * fv)
-
-            phi_out += TWOPI * (fv - c.fout) * tref + d_osc
-            phase_err[n] = phi_out
-            freq_out[n] = fv
-            otw_rec[n] = otw_q
+        # at most three draws per cycle (DTC jitter, BBPD jitter, a
+        # metastable coin), from a pool in the order the loop consumes them
+        zn = rng.standard_normal(3 * n_cycles) if noise else np.zeros(0)
+        dtc_args = dtc_kernel_args(frac.dtc)
+        cal_args = cal_kernel_args(dtc_cal)
+        cal_st = cal_args[2]
+        args: tuple[Any, ...] = (
+            n_cycles, tref, float(c.fout), int(n_int), *osc_law_args(c.osc),
+            float(c.osc.pushing_hz_v), v_sup, f_pull, osc_noise, jit_ref, jit_div,
+            bool(noise), zn, int(frac.mash_order), int(frac.bits), mash.st,
+            int(frac_word), dtc is not None, *dtc_args,
+            float(dtc_gain_init_error), dtc_gain_drift is not None,
+            (np.asarray(dtc_gain_drift, dtype=float) if dtc_gain_drift is not None
+             else np.zeros(0)),
+            *cal_args, cal_trace,
+            float(c.bb_jitter_rms_s), float(c.bb_meta_window_s), float(otw_center),
+            float(c.dlf.alpha), float(c.dlf.rho), c.dco_dither_order > 0,
+            phase_err, freq_out, otw_rec)
+        n_meta, _ = adpll_bbpd_kernel(*args)
+        if dtc_cal is not None:
+            dtc_cal.load_state(cal_st)
+            dtc_cal.trace.extend(cal_trace.tolist())
+        bb.n_meta = n_meta
 
         t = np.arange(n_cycles) * tref
         lock = detect_lock(t, freq_out - c.fout, tol_hz=c.fout * 2e-5)

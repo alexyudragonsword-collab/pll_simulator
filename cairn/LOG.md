@@ -2,6 +2,91 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-10 · A streamlit AppTest flake on the 3.10 leg (open, not diagnosed)
+
+- `tests/test_gui_compute.py::test_modulation_runs_and_reports_evm` failed
+  once on `test-minimum` with `KeyError: 'client_state'` -- a key inside
+  streamlit's own AppTest, not in this library.  Evidence, all on the same
+  commit (6b58413): attempt 1 read `1 failed, 885 passed, 1 skipped`,
+  attempt 2 read `886 passed, 1 skipped`; the same test passed on 3.11 and
+  3.12 in that run; the commit touched only `loopfilter.cmag` and the
+  packaging script, neither of which can reach a streamlit session.
+- Recorded rather than fixed: the cause is not established, and a change
+  made to something that reproduces once in ten runs is a guess.  Six
+  repetitions on the exact floor stack (3.10.20, streamlit 1.63.0, numpy
+  1.24.4) came back 24 of 24 clean each time with zero `client_state`
+  occurrences -- but *serially*, because that venv has no xdist.  CI runs
+  the leg under `-n 4`, so parallelism is the one variable left untested
+  and the first place to look if it recurs; after that, AppTest state
+  leaking between the pages one worker runs in sequence (`_run()` giving a
+  fresh script context).
+
+## 2026-09-10 · The mypy gate wants numba and mypy 2.x together
+
+- CI's mypy (2.3.1, with numba's stubs installed by the new `[fast]` extra)
+  rejected `core/jit.py`'s `from numba import njit as _x` / `_x = None`
+  fallback; the container's 1.19 and the numba-less `venv_ci` both passed
+  it.  `_load_njit()` returns instead of rebinding, and the pattern was
+  confirmed red-then-green in a venv built with mypy 2.3.1 + numba.
+- Pitfall recorded in `cairn/compiled-kernels.md`: the gate is one venv with
+  *both*, not whichever mypy is on PATH.
+
+## 2026-09-10 · Tolerance provenance, batches 1-4 (plan item 25)
+
+- ~60 of the bare tolerance bounds in `tests/` now say where the number came
+  from: the measured value with seed and run length, or the statistic it is
+  a multiple of.  Covered: conventions, digital impairments, block units,
+  core units, phase units, the five architecture files, and the synthesis,
+  colored-noise, settling, modulation and drift files.
+- Convention written down in CONTRIBUTING ("A tolerance says where it came
+  from"): algebra / measurement / statistic, and say what you measured when
+  you widen one.
+- Two findings worth keeping: the ILCM's FTL residual sits at exactly -4 LSB
+  against a 5 LSB bound (a bang-bang loop cannot beat its own LSB, so that
+  bound has one LSB of margin by design, not by luck), and the SSPLL's
+  false-lock test lands on -1.0000 fref to four decimals.
+- Third finding: `design_sspll_filter` is the one synthesis call that uses
+  most of its window (-1.7 % UGB, -2.2 deg PM against 6 % / 3.5 deg), because
+  it targets the exact sampled model at UGB/fref = 1/19; the CP and DLF
+  designs land inside 0.13 % and exactly.  Tightening that one would be false
+  precision, and the comment now says so.
+- The remaining bare sites are mostly GUI smoke bounds ("did it produce a
+  plausible number") and `abs=1e-9` identities; the cross-domain `worst_db`
+  ones only looked bare to a line scanner -- their provenance is in the
+  enclosing docstring.
+
+## 2026-09-10 · P4: the six loops are kernels, compiled by numba when it is there
+
+- Every engine loop and every block's per-cycle arithmetic is a plain
+  function under `core.jit.kernel`; `pip install -e .[fast]` compiles them,
+  otherwise the same function interprets.  Measured 12-40x on the
+  once-per-edge loops, ~50x oversampled, 4-7x where the FFT dominates.
+  Decision (numba over the plan's Cython), the old-vs-new goldens (ILCM /
+  MDLL / ADPLL bit-identical; the analog loops at 1e-9 because BLAS left the
+  loop filter), the BBPD coin-flip realization change and every pitfall are
+  in `cairn/compiled-kernels.md`.
+- Gate: `tests/test_kernels.py` runs all 18 presets both ways in
+  subprocesses and requires bit-identity.  It went red twice before it went
+  green: numba's `np.exp`/`**`, then numpy-scalar complex division in the
+  interpreted path (one bit, once in 3000 cycles), found by logging and
+  replaying every filter update.  Both are rules in `core/jit.py` now.
+- Pitfall: the container's mypy passed while the CI stack's (numpy 2.4.6
+  stubs) flagged `fine = None` on an ndarray-typed local; `venv_ci` is the
+  gate to run, not the system mypy.
+
+## 2026-09-10 · v0.9.4 released; the hand-typed test count was 14 short
+
+- PR #59 squash-merged (ad2db99); auto-release tagged v0.9.4 on that
+  commit and published the notes within 21 s of the push.  CI on main:
+  883 passed on 3.10 / 3.11 / 3.12, sweep 75 passed, every example ran.
+- The notes, README and index.html said 944 tests / 869 in the main job:
+  P3's numbers copied forward before the hygiene pass added 14.
+  `facts.json` (measured) said 958 all along; the prose count test allows
+  ±15 %, so nothing went red.  Fixed to 958 / 883 with a correction note
+  in the release notes; the GitHub release body keeps the original text.
+  Pitfall: refresh the count *after* the last test file lands, not when
+  the notes are first drafted.
+
 ## 2026-09-09 · v0.9.4 cut
 
 - `pyproject` 0.9.4 + `docs/release-notes/v0.9.4.md` in one commit, as the

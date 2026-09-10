@@ -28,15 +28,18 @@ its residual sets the spur, which ex06 sweeps.
 """
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
 from ..blocks.oscillator import OscConfig, Oscillator
-from ..calibration.ftl import FTL
+from ..calibration.ftl import FTL, InjTimingCal, ftl_step, inj_timing_step
 from ..core.colored import synth_from_psd
 from ..core.engine import postprocess
 from ..core.freqresp import FreqResponse, LoopMetrics, default_grid
+from ..core.jit import kernel, sgn
 from ..core.jitter import ipn_dbc, rms_jitter_fs
 from ..core.noise import FlickerFloorPhase, NoisePath, output_psd
 from ..core.results import AnalysisResult, SimResult
@@ -123,6 +126,64 @@ def injection_spur_dbc(dphi_drift: float, beta: float) -> float:
     return float(20.0 * np.log10(max(b1 / 2.0, 1e-30)))
 
 
+@kernel
+def ilcm_kernel(n_cycles: int, tref: float, fout: float, f0: float, f_free_error: float,
+                pushing: float, v_sup: np.ndarray, f_pull: np.ndarray,
+                osc_noise: np.ndarray, jit_ref: np.ndarray, beta: float,
+                noise_on: bool, inj_jitter: float, zn: np.ndarray,
+                has_ftl: bool, ftl_st: np.ndarray, ftl_f_lsb: float, ftl_mu: float,
+                ftl_mu_final: float, ftl_gear: float, ftl_det_offset: float,
+                has_tcal: bool, tcal_st: np.ndarray, tcal_t_step: float, tcal_mu: float,
+                m_os: int, fine: np.ndarray, phase_err: np.ndarray, freq_out: np.ndarray,
+                ctrl: np.ndarray, ftl_trace: np.ndarray, tcal_trace: np.ndarray
+                ) -> tuple[int, int]:
+    """One reference cycle per iteration; see the module docstring for the
+    realignment model.  Returns (cycle slips, normal draws consumed)."""
+    prev_on = 0.0
+    e = 0.0                       # phase error at injection instants [rad@fout]
+    f_corr = 0.0                  # FTL frequency correction [Hz]
+    n_slips = 0
+    zi = 0
+    for nn in range(n_cycles):
+        d_osc = osc_noise[nn] - prev_on
+        prev_on = osc_noise[nn]
+        f_free = (f0 + f_free_error + f_corr + pushing * v_sup[nn] + f_pull[nn])
+        dphi_drift = TWOPI * (f_free - fout) * tref
+        e_pre = e + dphi_drift + d_osc          # drifted phase at injection
+        if m_os > 1:
+            # intra-period linear phase ramp from post-injection e to e_pre
+            for k in range(m_os):
+                fine[nn * m_os + k] = e + (dphi_drift + d_osc) * k / m_os
+        phi_inj = TWOPI * fout * jit_ref[nn]
+        if noise_on and inj_jitter > 0:
+            phi_inj += TWOPI * fout * (inj_jitter * zn[zi])
+            zi += 1
+        # the pulse realigns toward the NEAREST output edge: wrap at +/-pi
+        # (this nonlinearity is what limits the lock range to beta*fref/2)
+        e_wrap = ((e_pre + math.pi) % TWOPI) - math.pi
+        if abs(e_wrap - e_pre) > 1e-9:
+            n_slips += 1
+        e = (1.0 - beta) * e_wrap + beta * phi_inj    # realignment
+
+        if has_ftl:
+            # FD observes the pre-injection drift (replica/gated PD) plus
+            # its input-referred offset; the FTL nulls the MEASURED drift
+            t_off = ftl_det_offset + (tcal_st[0] if has_tcal else 0.0)
+            drift_obs = (e_pre - e) / beta + TWOPI * fout * t_off
+            f_corr = ftl_step(ftl_st, sgn(drift_obs), ftl_f_lsb, ftl_mu,
+                              ftl_mu_final, ftl_gear)
+            ftl_trace[nn] = f_corr
+            if has_tcal:
+                # second detector: the injection's own phase jump sees the
+                # TRUE drift and bang-bang corrects the offset
+                tcal_trace[nn] = inj_timing_step(tcal_st, e_pre - e, tcal_t_step,
+                                                 tcal_mu)
+        phase_err[nn] = e
+        freq_out[nn] = f_free
+        ctrl[nn] = f_corr
+    return n_slips, zi
+
+
 class ILCM(PLLBase):
     def __init__(self, cfg: ILCMConfig):
         self.cfg = cfg
@@ -201,7 +262,6 @@ class ILCM(PLLBase):
 
         osc = Oscillator(c.osc, c.fref, rng, noise=noise)
         ftl = FTL(f_lsb=c.ftl_f_lsb, mu=c.ftl_mu) if (c.ftl and calibration) else None
-        from ..calibration.ftl import InjTimingCal
         tcal = InjTimingCal(t_step=c.timing_cal_step_s) \
             if (c.timing_cal and calibration) else None
 
@@ -210,60 +270,42 @@ class ILCM(PLLBase):
             c.fref, n_cycles, rng) / (TWOPI * c.fref)) if noise else np.zeros(n_cycles)
 
         osc_noise = osc.noise_steps(n_cycles) if noise else np.zeros(n_cycles)
-        prev_on = 0.0
-
-        e = 0.0                       # phase error at injection instants [rad@fout]
-        f_corr = 0.0                  # FTL frequency correction [Hz]
-        n_slips = 0
+        m_os = int(fine_oversample)
+        fine_rec = np.empty(n_cycles * m_os) if m_os > 1 else np.empty(0)
         phase_err = np.empty(n_cycles)
         freq_out = np.empty(n_cycles)
         ctrl = np.empty(n_cycles)
-        m_os = int(fine_oversample)
-        fine = np.empty(n_cycles * m_os) if m_os > 1 else None
-
-        for nn in range(n_cycles):
-            d_osc = osc_noise[nn] - prev_on
-            prev_on = osc_noise[nn]
-            f_free = (c.osc.f0 + f_free_error + f_corr
-                      + c.osc.pushing_hz_v * v_sup[nn] + f_pull[nn])
-            dphi_drift = TWOPI * (f_free - c.fout) * tref
-            e_pre = e + dphi_drift + d_osc          # drifted phase at injection
-            if fine is not None:
-                # intra-period linear phase ramp from post-injection e to e_pre
-                fine[nn * m_os:(nn + 1) * m_os] = \
-                    e + (dphi_drift + d_osc) * np.arange(m_os) / m_os
-            phi_inj = TWOPI * c.fout * jit_ref[nn]
-            if noise and c.inj_jitter_rms_s > 0:
-                phi_inj += TWOPI * c.fout * rng.normal(0.0, c.inj_jitter_rms_s)
-            # the pulse realigns toward the NEAREST output edge: wrap at +/-pi
-            # (this nonlinearity is what limits the lock range to beta*fref/2)
-            e_wrap = ((e_pre + np.pi) % TWOPI) - np.pi
-            if abs(e_wrap - e_pre) > 1e-9:
-                n_slips += 1
-            e = (1.0 - b) * e_wrap + b * phi_inj    # realignment
-
-            if ftl is not None:
-                # FD observes the pre-injection drift (replica/gated PD) plus
-                # its input-referred offset; the FTL nulls the MEASURED drift
-                t_off = c.ftl_det_offset_s + (tcal.value if tcal else 0.0)
-                drift_obs = (e_pre - e) / b + TWOPI * c.fout * t_off
-                f_corr = ftl.step(np.sign(drift_obs))
-                if tcal is not None:
-                    # second detector: the injection's own phase jump sees the
-                    # TRUE drift and bang-bang corrects the offset
-                    tcal.step(e_pre - e)
-            phase_err[nn] = e
-            freq_out[nn] = f_free
-            ctrl[nn] = f_corr
+        ftl_trace = np.empty(n_cycles if ftl is not None else 0)
+        tcal_trace = np.empty(n_cycles if tcal is not None else 0)
+        # one standard-normal draw per cycle at most (the injection jitter),
+        # taken from a pool in the order the loop consumes it
+        zn = (rng.standard_normal(n_cycles)
+              if noise and c.inj_jitter_rms_s > 0 else np.zeros(0))
+        args: tuple[Any, ...] = (
+            n_cycles, tref, float(c.fout), float(c.osc.f0), float(f_free_error),
+            float(c.osc.pushing_hz_v), v_sup, f_pull, osc_noise, jit_ref, float(b),
+            bool(noise), float(c.inj_jitter_rms_s), zn,
+            ftl is not None, ftl.st if ftl is not None else np.zeros(2),
+            *(ftl.params() if ftl is not None else (0.0, 0.0, float("nan"), -1.0)),
+            float(c.ftl_det_offset_s), tcal is not None,
+            tcal.st if tcal is not None else np.zeros(1),
+            float(c.timing_cal_step_s), float(tcal.mu) if tcal is not None else 0.0,
+            m_os, fine_rec, phase_err, freq_out, ctrl, ftl_trace, tcal_trace)
+        n_slips, _ = ilcm_kernel(*args)
+        if ftl is not None:
+            ftl.trace.extend(ftl_trace.tolist())
+        if tcal is not None:
+            tcal.trace.extend(tcal_trace.tolist())
+        fine: np.ndarray | None = fine_rec if m_os > 1 else None
 
         t = np.arange(n_cycles) * tref
         sim = SimResult(fs=c.fref, f0=c.fout, t=t, phase_err_out=phase_err,
                         freq_out=freq_out, ctrl=ctrl, lock_time_s=None)
         sim.extra["slips"] = n_slips
         if ftl is not None:
-            sim.cal_traces["ftl_fcorr"] = np.asarray(ftl.trace)
+            sim.cal_traces["ftl_fcorr"] = ftl_trace
         if tcal is not None:
-            sim.cal_traces["inj_timing"] = np.asarray(tcal.trace)
+            sim.cal_traces["inj_timing"] = tcal_trace
         sim = postprocess(sim, int_band=c.int_band,
                           spur_offsets=add_pull_offset(None, c.osc, c.fref),
                           flicker_corner_hz=flicker_corner_hz(c))

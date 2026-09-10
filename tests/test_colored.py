@@ -31,6 +31,9 @@ def test_synth_psd_slopes(slope):
     f, s = phase_psd(x, fs, nfft=1 << 16, detrend="constant")
     # lowest band starts ~3x the Welch resolution bin (fs/nfft ~ 1.5 kHz)
     errs = band_avg_db_error(f, s, target(f), 5e3, 1e7)
+    # measured 2026-09-10: 0.21 / 0.11 / 0.26 dB worst band for the three
+    # slopes; 1 dB is Welch's own spread over these bands, and a missing
+    # factor of 2 in the shaping would be 3 dB
     assert np.all(np.abs(errs) < 1.0)
 
 
@@ -45,6 +48,9 @@ def test_random_walk_variance():
     assert np.allclose(add, 0.0)
     var = np.var(d)
     expect = 2 * np.pi**2 * prof.k2 / fs
+    # measured -0.19 % over 200k increments (seed 7); the sampling spread of
+    # a variance is 1/sqrt(2N) = 0.16 %, so 5 % is ~30 sigma and still an
+    # order of magnitude under the 2 pi^2 factor this pins
     assert abs(var - expect) / expect < 0.05
 
 
@@ -59,4 +65,5 @@ def test_oscgen_full_profile_psd():
     phi = np.cumsum(d) + add
     f, s = phase_psd(phi, fs, nfft=1 << 17)
     errs = band_avg_db_error(f, s, prof.psd(f), 1e4, 2e7)
+    # measured 0.34 dB worst band across the 1/f^3 and 1/f^2 regions
     assert np.all(np.abs(errs) < 1.5)

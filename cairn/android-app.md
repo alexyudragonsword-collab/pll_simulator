@@ -318,6 +318,26 @@ tested on the *rounded* abscissa, where 6 significant digits at 100 MHz is
 reason as before — Streamlit offers no matplotlib interaction short of
 swapping the plotting backend.
 
+### Kernels: the phone interprets them (2026-09-10)
+
+`core/jit.py` compiles the per-cycle kernels with numba on the desktop;
+Chaquopy has no numba, so the APK runs the same functions as Python under
+Cython (the compiled build cythonises `core/`, `arch/`, `blocks/`,
+`calibration/` as before -- a kernel is an ordinary module-level function to
+Cython).  Nothing to wire: `jit.backend()` reads `"python"` there and the
+results are the desktop's to the last bit.
+
+**Parity, deliberate:** no fast path on the phone.  A 40k-cycle run that
+takes 30 ms compiled takes the old 0.4-1.4 s interpreted; the phone's
+defaults were chosen for that budget.
+
+**Pitfall:** the first kernel version used `abs()` on a complex, which
+Cython lowers to `cabs()` without pulling in `<complex.h>` on bionic.  The
+interpreted APK built and uploaded; the compiled one failed to
+cross-compile, and `packaging/android_wheel.py --host` had been green.
+See `cairn/compiled-kernels.md` for the fix and why `--host` did not catch
+it.
+
 ### Fit: the analyzer's CSV through a text box (2026-09-09)
 
 The 11th tab.  Bridge `fit(text, mode, preset)` runs the same three fits

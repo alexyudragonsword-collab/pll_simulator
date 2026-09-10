@@ -31,6 +31,8 @@ def test_the_worked_example_by_hand():
     rad = 0.810 * math.pi / 180.0                    # 0.014137 rad
     assert u.rad == pytest.approx(rad, rel=1e-12)
     assert u.jitter_s == pytest.approx(rad / (2 * math.pi * F0), rel=1e-12)
+    # 225.08 fs from the hand-worked example below; 0.5 fs is the last digit
+    # the docstring's arithmetic carries, not a measured spread
     assert u.jitter_fs == pytest.approx(225.0, abs=0.5)
     assert u.ipn_dbc_dsb == pytest.approx(-36.99, abs=0.01)
     assert u.ipn_dbc_ssb == pytest.approx(-40.00, abs=0.01)

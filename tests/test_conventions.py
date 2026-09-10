@@ -60,6 +60,9 @@ def test_sampler_gm_noise_agrees_across_domains(preset, source):
     """
     share, ratio = _dominance_and_ratio(
         presets.ALL_PRESETS[preset], source, "sampler.gm_noise_a2hz", 1e-19, n_cycles=400_000)
+    # measured 2026-09-10 (seed 5, 400k): share 0.970 / 0.994, ratio 0.999 /
+    # 0.960 (-0.01 / -0.36 dB); +/-1.4 dB is the 400k-cycle Welch spread with
+    # margin, and 3 dB (the bug this catches) is twice outside it
     assert share > 0.9, f"gm only {100 * share:.0f}% of the budget; test is blind"
     assert 0.85 < ratio < 1.15, f"gm noise off by {20 * np.log10(ratio):.1f} dB"
 
@@ -76,6 +79,10 @@ def test_charge_pump_noise_agrees_across_domains(fc):
         p.cfg.cp = replace(p.cfg.cp, flicker_corner=fc)
         return p
     share, ratio = _dominance_and_ratio(make, "cp", "cp.noise_a2hz", 1e-19, n_cycles=400_000)
+    # measured 2026-09-10 (seed 5, 400k): share 0.965 / 0.975 / 0.993 for
+    # fc = 0 / 100k / 1M, ratio 0.923 / 0.933 / 0.967 (-0.69 / -0.60 / -0.29
+    # dB) -- the white-only time domain read ~2 dB low before the corner was
+    # primed, which the 0.85 floor (-1.4 dB) still catches
     assert share > 0.9
     assert 0.85 < ratio < 1.15, f"CP off by {20 * np.log10(ratio):.1f} dB"
 
@@ -99,6 +106,8 @@ def test_leakage_reference_spur_is_the_single_impulse_sideband():
     z = abs(LoopFilter(c.filt, 1.0 / c.fref).transimpedance(np.array([c.fref]))[0])
     beta = c.osc.gain * (2.0 * dq * c.fref * z) / c.fref
     expect = 20.0 * np.log10(beta / 2.0)
+    # measured 2026-09-10: -101.091 vs -101.091 dBc, identical to 3 decimals;
+    # the 1 dB is for the single-impulse form of a narrow pulse, not for slack
     assert abs(got - expect) < 1.0, f"{got:.1f} dBc vs textbook {expect:.1f} dBc"
 
 
@@ -121,6 +130,9 @@ def test_mismatch_reference_spur_is_doublet_suppressed():
     z = abs(LoopFilter(c.filt, 1.0 / c.fref).transimpedance(np.array([c.fref]))[0])
     naive = 20.0 * np.log10(c.osc.gain * (2.0 * dq * c.fref * z) / c.fref / 2.0)
     suppression = 20.0 * np.log10(2.0 * np.sin(np.pi * c.fref * c.cp.t_reset / 2.0))
+    # measured 2026-09-10: -100.47 vs naive+suppression -100.73 (+0.26 dB;
+    # the exact Fourier coefficient against the small-angle doublet form),
+    # and 38.1 dB under the naive answer
     assert abs(got - (naive + suppression)) < 1.5
     assert got < naive - 30.0, "the doublet suppression is the whole point"
 
@@ -141,6 +153,7 @@ def test_reference_spur_matches_the_time_domain(mismatch, leakage):
     want = p.analyze().spurs_analytic["ref_spur"]
     m = int(np.ceil(1.0 / (c.fref * c.cp.t_reset)))
     got = p.simulate(4000, noise=False, fine_oversample=m).spurs_fft[c.fref]
+    # measured 2026-09-10: +0.00 / -0.10 / -0.06 dB for the three cases
     assert abs(got - want) < 1.0, f"time domain {got:.1f} vs analytic {want:.1f}"
 
 
@@ -155,6 +168,9 @@ def test_dtc_jitter_reaches_the_linear_budget(preset):
     hi = presets.ALL_PRESETS[preset]()
     hi.cfg.frac.dtc = replace(hi.cfg.frac.dtc, jitter_rms_s=1e-12)
     j_lo, j_hi = lo.analyze().jitter_fs, hi.analyze().jitter_fs
+    # measured 2026-09-10: 1 ps of DTC jitter multiplies the budget by 2.32 /
+    # 2.27 / 1.72 / 1.17 (CPPLL / ADPLL-bb / SSPLL / SPLL); 1 % is the
+    # "moved at all" floor, and the one that was blind moved by exactly 1.00
     assert j_hi > 1.01 * j_lo, (
         f"{preset}: 1 ps of DTC jitter moved analyze() from {j_lo:.1f} to "
         f"{j_hi:.1f} fs — the budget is blind to it")
@@ -168,6 +184,8 @@ def test_bbpd_sigma_includes_dtc_jitter():
     lo.cfg.frac.dtc = replace(lo.cfg.frac.dtc, jitter_rms_s=0.0)
     hi = presets.adpll_bb_100m_10g()
     hi.cfg.frac.dtc = replace(hi.cfg.frac.dtc, jitter_rms_s=500e-15)
+    # measured 2026-09-10: 500 fs of DTC jitter on a 100 fs BBPD puts the UGB
+    # at 0.403 of the clean one; 0.97 asks only that it moved
     assert hi.analyze().loop.f_ugb < 0.97 * lo.analyze().loop.f_ugb
 
 
@@ -191,7 +209,7 @@ def test_adpll_rejects_kwargs_its_mode_cannot_honour():
 
 def test_fll_stability_says_which_architectures_have_an_fll():
     from pllsim.settling import fll_stability
-    assert fll_stability(presets.sspll_19p2m_4p8g())["margin"] > 0
+    assert fll_stability(presets.sspll_19p2m_4p8g())["margin"] > 0   # 1.36 measured
     for nm in ("cppll_19p2m_4p8g", "adpll_100m_10g", "ilcm_250m_12g",
                "mdll_150m_2p4g"):
         with pytest.raises(TypeError, match="no FLL hand-off"):
@@ -202,10 +220,10 @@ def test_unconverged_calibration_is_flagged_not_silently_reported():
     """bench_dartizio23 gear-shifts its DTC LMS at 100k cycles; below that the
     jitter is dominated by an uncalibrated fractional spur."""
     short = presets.bench_dartizio23_adpllbb_500m_9p2515g().simulate(80_000, seed=1)
-    assert short.jitter_fs > 1000            # ~20 ps, not the 78 fs headline
+    assert short.jitter_fs > 1000            # 24 ps measured, not the 78 fs headline
     assert any("still settling" in n for n in short.notes), short.notes
     long = presets.bench_dartizio23_adpllbb_500m_9p2515g().simulate(250_000, seed=1)
-    assert long.jitter_fs < 150
+    assert long.jitter_fs < 150                # 79.1 fs measured 2026-09-10 (seed 1)
     assert not any("still settling" in n for n in long.notes)
 
 
@@ -224,6 +242,9 @@ def test_tuning_nonlinearity_reaches_every_engine_that_has_a_tuning_law(preset):
     v = q.cfg.osc.v_for(q.cfg.fout)
     q.cfg.osc = replace(q.cfg.osc, nl1=-0.2 / max(abs(v), 1e-9))
     moved = q.simulate(20_000, seed=1).ctrl[-2000:].mean()
+    # measured 2026-09-10: the control moves by 38 % on the four voltage /
+    # word loops (0.833 -> 1.152 V, 2515 -> 3476 LSB) and the MDLL's tuning
+    # word by 800x; 1 % is the "moved at all" floor
     assert abs(moved - base) > 0.01 * max(abs(base), 1e-9), (
         f"{preset} ignores Kvco nonlinearity: control settled at {base:.6g} "
         f"either way")
@@ -257,6 +278,8 @@ def test_no_spur_reported_when_there_is_nothing_to_report():
     for nm in ("ilcm_250m_12g", "mdll_150m_2p4g"):
         assert presets.ALL_PRESETS[nm]().analyze().spurs_analytic == {}
     ar = presets.ilcm_250m_12g().analyze(f_free_error=2e6)
+    # -41.9 dBc measured 2026-09-10; the window says "a real sideband", not
+    # a -600 dBc placeholder and not a positive number
     assert -60 < ar.spurs_analytic["inj_spur_ref_offset"] < 0
 
 
@@ -307,6 +330,8 @@ def test_band_search_runs_in_every_architecture_that_accepts_bands(preset):
     p.cfg.osc = replace(p.cfg.osc, n_bands=32, band_step_hz=40e6)
     sim = p.simulate(40_000, seed=1)
     assert sim.cal_traces.get("band_select") is not None
+    # measured 2026-09-10 (seed 1, 40k): |ferr|/fout = 5.7e-7 / 2.3e-7 /
+    # 1.0e-6 (CPPLL / SSPLL / SPLL) -- the loop's noise floor, 100x under
     assert abs(sim.freq_out[-1] - p.cfg.fout) < 1e-4 * p.cfg.fout
 
 

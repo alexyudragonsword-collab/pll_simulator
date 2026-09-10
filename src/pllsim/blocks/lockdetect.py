@@ -13,12 +13,17 @@ function looks at the FREQUENCY error over the whole record with hindsight,
 which is fine for a report but is not available to the chip and says nothing
 when a loop is frequency-locked yet phase-slipping.  The detector here sees
 only the present cycle's phase error, which is the quantity the silicon has.
+
+The counter is a kernel (core.jit) over an int64 state vector, shared with
+the CPPLL's compiled loop; the class is the object view.
 """
 from __future__ import annotations
 
 from dataclasses import dataclass
 
 import numpy as np
+
+from ..core.jit import kernel
 
 
 @dataclass
@@ -36,31 +41,57 @@ class LockDetectConfig:
             raise ValueError(f"LockDetectConfig down_weight cannot be negative, got {self.down_weight}")
 
 
+# state vector (int64): counter, LOCK flag, cycles seen, first lock cycle (-1
+# = never)
+LD_ACC, LD_LOCKED, LD_N, LD_FIRST = range(4)
+
+
+@kernel
+def lockdet_step(st: np.ndarray, dt: float, window_s: float, count: int,
+                 down_weight: int) -> bool:
+    if abs(dt) <= window_s:
+        st[LD_ACC] = min(st[LD_ACC] + 1, count)
+    else:
+        st[LD_ACC] = max(st[LD_ACC] - down_weight, 0)
+    if st[LD_ACC] >= count:
+        if st[LD_LOCKED] == 0:
+            st[LD_LOCKED] = 1
+            if st[LD_FIRST] < 0:
+                st[LD_FIRST] = st[LD_N]
+    elif st[LD_ACC] == 0:
+        st[LD_LOCKED] = 0
+    st[LD_N] += 1
+    return st[LD_LOCKED] != 0
+
+
+def new_lockdet_state() -> np.ndarray:
+    return np.array([0, 0, 0, -1], dtype=np.int64)
+
+
 class LockDetector:
     def __init__(self, cfg: LockDetectConfig):
         self.cfg = cfg
-        self.acc = 0
-        self.locked = False
+        self.st = new_lockdet_state()
         self.trace: list[float] = []
-        self._n = 0
-        self.first_lock_cycle: int | None = None
+
+    @property
+    def acc(self) -> int:
+        return int(self.st[LD_ACC])
+
+    @property
+    def locked(self) -> bool:
+        return bool(self.st[LD_LOCKED] != 0)
+
+    @property
+    def first_lock_cycle(self) -> int | None:
+        return None if self.st[LD_FIRST] < 0 else int(self.st[LD_FIRST])
 
     def step(self, dt: float) -> bool:
         c = self.cfg
-        if abs(dt) <= c.window_s:
-            self.acc = min(self.acc + 1, c.count)
-        else:
-            self.acc = max(self.acc - c.down_weight, 0)
-        if self.acc >= c.count:
-            if not self.locked:
-                self.locked = True
-                if self.first_lock_cycle is None:
-                    self.first_lock_cycle = self._n
-        elif self.acc == 0:
-            self.locked = False
-        self.trace.append(1.0 if self.locked else 0.0)
-        self._n += 1
-        return self.locked
+        locked = bool(lockdet_step(self.st, float(dt), float(c.window_s),
+                                   int(c.count), int(c.down_weight)))
+        self.trace.append(1.0 if locked else 0.0)
+        return locked
 
     def lock_time_s(self, tref: float) -> float | None:
         """When LOCK first asserted, or None if it never did."""
@@ -76,7 +107,6 @@ class LockDetector:
 @dataclass
 class LockStats:
     """What the detector saw over a whole run."""
-
     lock_time_s: float | None
     lock_fraction: float            # of cycles with LOCK asserted
     n_unlock_events: int            # times LOCK dropped after being asserted

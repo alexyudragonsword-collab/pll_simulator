@@ -26,10 +26,14 @@ checked**, by running them rather than by reading them:
 
 ```bash
 QT_QPA_PLATFORM=offscreen pytest tests/test_gui_smoke.py \
-    tests/test_gui_compute.py -q            # web pages, via Streamlit AppTest
-QT_QPA_PLATFORM=offscreen pytest tests/test_guiqt_smoke.py -q   # read the count
-pytest tests/test_appbridge.py -q           # the Android bridge, no SDK needed
+    tests/test_gui_compute.py               # web pages, via Streamlit AppTest
+QT_QPA_PLATFORM=offscreen pytest tests/test_guiqt_smoke.py    # read the count
+pytest tests/test_appbridge.py              # the Android bridge, no SDK needed
 ```
+
+No `-q` on any of those: `pyproject` already sets it, a second one makes it
+`-qq`, and pytest then prints no count at all — which is the number the Qt
+line above tells you to read.
 
 The Android *page* is not covered by any of those.  `python
 tests/android_page_harness.py` is: it stands up its own shim for
@@ -205,6 +209,26 @@ blanket ignore reads as "type-checked".
   blank.  A sub-sampling loop reports no reference spur *because it has none*,
   and that sentence is the deliverable.
 
+* **The per-cycle code is a kernel, and it has two readers.**  Every
+  engine loop and every block's per-cycle arithmetic is a plain function of
+  scalars and arrays under `core.jit.kernel`; numba compiles it when the
+  `[fast]` extra is installed and Python runs it otherwise, and
+  `tests/test_kernels.py` requires the two to agree to the last bit on every
+  preset.  The rules that keep them agreeing are in the `core/jit.py`
+  docstring — `math.*` not `np.*` on scalars, no `**`, no numpy array
+  operations in the loop, complex division written out, random draws from a
+  pool through a cursor — and every one of them was found by breaking it.
+  A block gets its state as an array and its parameters as scalars; the
+  `*_kernel_args()` helpers in `arch/base.py` build those runs from the
+  block objects, and the kernel call takes them as one tuple (mypy cannot
+  count arguments after a star-argument of unknown length).  A new random
+  draw is one more slot per cycle in the pool and one more cursor step, in
+  the place the object used to draw; `cairn/compiled-kernels.md` has the
+  measurements and the pitfalls.  Coverage is measured on the interpreted
+  leg only, because a compiled function never executes its Python lines —
+  with the kernels compiled the same passing suite reads 84 % instead of
+  92 %.
+
 ## Testing
 
 Two habits this codebase learned the hard way.
@@ -221,6 +245,17 @@ whose `or` branch accepted anything, and a button test that pressed by index
 and kept passing after a button was inserted ahead of it.  Where the check is
 subtle, leave the mutation in the docstring so the next reader knows what it
 is guarding.
+
+**A tolerance says where it came from.**  Every bound in a test is one of
+three things, and the line should make clear which: *algebra* (both sides are
+the same expression, so `rel=1e-9` and tighter is round-off and needs no more
+than a word), *a measurement* (state the value you saw, the seed and the run
+length: `# measured 2026-09-10 (seed 5, 400k): ratio 0.999, -0.01 dB`), or
+*a statistic* (state the spread the bound is a multiple of: `1/sqrt(2N) =
+0.35 %, so 3 % is ~8 sigma`).  A bare `< 0.35` is unfalsifiable a year later
+— nobody can tell a real budget from a number that was widened until the test
+went green, which is exactly how a 4.3 dB spur error survived.  When you widen
+a tolerance, say what you measured that made you widen it.
 
 **Numbers in prose are code.**  `tests/test_docs_consistency.py` pins the
 counts in `README.md`, `docs/index.html` and the management deck against the

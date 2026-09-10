@@ -4,6 +4,11 @@ The architecture tests exercise these through a closed loop, where a sign
 error or a factor of two is often absorbed by the feedback and shows up only
 as a slightly different jitter number.  These pin each block's contract on its
 own so a wrong one fails here, where the message says which block.
+
+Tolerance convention in this file: `rel=1e-9` and tighter means the two
+sides are the same algebra and the only gap is double-precision round-off
+(measured 1e-16..1e-9 where stated); anything looser is measured and its
+provenance is on the line.
 """
 import numpy as np
 import pytest
@@ -39,6 +44,8 @@ def test_kvco_at_is_the_derivative_of_freq_law():
     o = OscConfig(f0=4.8e9, gain=60e6, nl1=-0.3, nl2=0.1)
     v, h = 0.7, 1e-6
     numeric = (o.freq_law(v + h) - o.freq_law(v - h)) / (2 * h)
+    # the central difference is O(h^2) truncated: measured -3.9e-9 relative
+    # at h = 1 us, so 1e-5 is the difference quotient's error, not the law's
     assert o.kvco_at(v) == pytest.approx(numeric, rel=1e-5)
 
 
@@ -108,6 +115,8 @@ def test_lock_offset_zeroes_the_net_charge():
     """The static offset a type-II loop parks at, by construction."""
     cfg = CPConfig(icp=300e-6, mismatch_pct=3.0, leakage_a=2e-9, t_reset=0.2e-9)
     cp = ChargePump(cfg, TREF, rng(), noise=False)
+    # the offset is solved to make the net charge zero: -3.7e-32 C measured,
+    # against a per-cycle mismatch charge of ~1e-14 C
     assert cp.charge(cp.lock_offset_s()) == pytest.approx(0.0, abs=1e-24)
 
 
@@ -140,6 +149,8 @@ def test_flicker_priming_adds_low_frequency_content():
     f, s = np.fft.rfftfreq(seq.size, TREF)[1:], np.abs(np.fft.rfft(seq))[1:] ** 2
     lo = np.mean(s[(f > f[0]) & (f < 1e5)])
     hi = np.mean(s[f > 5e6])
+    # measured 21.9x; white charge would read 1.0, so 3x is the midpoint in
+    # the log and catches an AR(1) shaping (which gives 1/f^2, far steeper)
     assert lo > 3 * hi, "a primed 1/f sequence must be low-frequency heavy"
 
 
@@ -150,6 +161,8 @@ def test_transimpedance_matches_the_state_space_dc_behaviour():
     lf = LoopFilter(d, TREF)
     f = np.array([1e3, 1e4])
     z = np.abs(lf.transimpedance(f))
+    # a decade of 1/f integration; measured 9.923 (-0.8 %), the shortfall
+    # being the zero at 1/(2 pi R2 C1) = 80 kHz already lifting the 10 kHz point
     assert z[0] / z[1] == pytest.approx(10.0, rel=0.05)
 
 
@@ -258,6 +271,8 @@ def test_seg_integral_branches_agree_where_they_meet():
     w = lf._w[None, :]
     ref = (np.expm1(w * p) - np.expm1(w * q)) / w
     assert np.max(np.abs(ref)) > 0.1 * TREF, "the fixture must do something"
+    # both forms of the same integral: the series and expm1 branches agree to
+    # 1e-16 relative at the 1e-8 switch point, so 1e-13 is three decades of room
     assert np.max(np.abs(series - ref)) < 1e-13 * np.max(np.abs(ref))
 
 
@@ -280,6 +295,8 @@ def test_third_order_filter_adds_a_pole():
     z2 = np.abs(LoopFilter(FilterDesign(1e-9, 2e3, 100e-12), TREF).transimpedance(f))
     z3 = np.abs(LoopFilter(FilterDesign(1e-9, 2e3, 100e-12, r3=1e3, c3=20e-12),
                            TREF).transimpedance(f))
+    # measured 0.079 at 100 MHz -- the third pole sits at 1/(2 pi R3 C3) =
+    # 8 MHz, so a decade past it costs 22 dB; 0.5 asks only that it exists
     assert z3[-1] < 0.5 * z2[-1], "the extra pole must roll off harder"
 
 
@@ -288,6 +305,7 @@ def test_sampler_gain_is_the_sine_slope_at_the_origin():
     s = SamplerConfig(amp_v=0.4, pedestal_v=0.0)
     pd = SamplingPD(s, TREF, rng(), noise=False)
     assert pd.sample(0.0) == pytest.approx(0.0)
+    # A*sin(x) vs A*x at x = 1 mrad: the cubic term is x^2/6 = 1.7e-7
     assert pd.sample(1e-3) == pytest.approx(0.4 * 1e-3, rel=1e-5)
 
 
@@ -301,6 +319,9 @@ def test_ktc_noise_has_the_right_variance():
     s = SamplerConfig(amp_v=0.4, c_samp=50e-15, pedestal_v=0.0)
     pd = SamplingPD(s, TREF, np.random.default_rng(1))
     v = np.array([pd.sample(0.0) for _ in range(40000)])
+    # measured -0.6 % over 40k draws (seed 1); the sampling spread of a std
+    # is 1/sqrt(2N) = 0.35 %, so 3 % is ~8 sigma -- wide enough not to flake,
+    # narrow enough that a missing sqrt(2) (41 %) or a factor of 2 cannot pass
     assert np.std(v) == pytest.approx(s.ktc_sigma_v, rel=0.03)
 
 
@@ -346,6 +367,8 @@ def test_bbpd_is_the_sign_and_nothing_else():
 def test_bbpd_jitter_randomizes_near_the_threshold():
     bb = BBPD(1e-12, np.random.default_rng(3))
     out = np.array([bb.sample(0.0) for _ in range(5000)])
+    # measured +0.0044 over 5000 decisions (seed 3); the binomial spread of
+    # the mean is 1/sqrt(5000) = 0.014, so 0.05 is 3.5 sigma
     assert abs(out.mean()) < 0.05, "at zero error the sign must be unbiased"
 
 
@@ -364,6 +387,8 @@ def test_dtc_gain_correction_moves_the_code_not_the_device():
     base = d.last_code
     d.gain_corr = 1.0 / 1.2
     d.delay(0.0)
+    # code 106 against 106.667: the 0.6 % is the rounding to an integer code,
+    # one LSB being 0.94 % here -- the tolerance is one LSB, not slack
     assert d.last_code == pytest.approx(base / 1.2, rel=1e-2)
 
 

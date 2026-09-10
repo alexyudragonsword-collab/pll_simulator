@@ -1,11 +1,13 @@
 """Charge pump with mismatch, leakage and noise."""
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
 
 from ..core.colored import synth_from_psd
+from ..core.jit import kernel
 from ..core.noise import CurrentNoise
 
 
@@ -67,6 +69,103 @@ class CPConfig:
     def v_dependent(self) -> bool:
         return self.mismatch_slope_pct_v != 0.0 or self.leakage_slope_a_v != 0.0
 
+    # ---- kernel view: the fields a compiled loop unpacks (see CP_* indices)
+    def params(self) -> np.ndarray:
+        return np.array([self.icp, self.mismatch_pct, self.mismatch_slope_pct_v,
+                         self.v_ref, self.t_reset, self.dead_zone_s,
+                         self.leakage_a, self.leakage_slope_a_v,
+                         self.default_noise(),
+                         1.0 if self.pfd_mode == "wrap" else 0.0])
+
+
+# indices into CPConfig.params()
+(CP_ICP, CP_MM, CP_MM_SLOPE, CP_VREF, CP_TRESET, CP_DEAD, CP_LEAK, CP_LEAK_SLOPE,
+ CP_I2, CP_WRAP) = range(10)
+
+
+@kernel
+def cp_up_dn(icp: float, mm_pct: float, mm_slope: float, v_ref: float,
+             v: float) -> tuple[float, float]:
+    """UP and DOWN currents [A] at a control voltage."""
+    mm = mm_pct + mm_slope * (v - v_ref)
+    return icp * (1.0 + 0.005 * mm), icp * (1.0 - 0.005 * mm)
+
+
+@kernel
+def cp_charge_det(dt: float, v: float, icp: float, mm_pct: float, mm_slope: float,
+                  v_ref: float, t_reset: float, dead_zone: float, leak_a: float,
+                  leak_slope: float, tref: float) -> float:
+    """The deterministic charge of one cycle: mismatch, error-dependent
+    charge (suppressed inside the dead zone) and leakage over the period."""
+    up, dn = cp_up_dn(icp, mm_pct, mm_slope, v_ref, v)
+    # both sources on during reset pulse: net mismatch charge every cycle
+    dq = (up - dn) * t_reset
+    # error-dependent charge (the acting source is up or dn depending on
+    # sign), suppressed entirely inside a residual dead zone
+    if abs(dt) >= dead_zone:
+        dq += (up if dt > 0 else dn) * dt
+    # leakage integrates over the whole period
+    dq += (leak_a + leak_slope * (v - v_ref)) * tref
+    return dq
+
+
+@kernel
+def cp_noise_sigma(dt: float, t_reset: float, i2: float) -> float:
+    """Std of the thermal noise charge over this cycle's on-time [C]."""
+    return math.sqrt(i2 * (abs(dt) + t_reset))
+
+
+@kernel
+def pfd_error(dt: float, tref: float, wrap: bool) -> tuple[float, bool]:
+    """Detector output for a raw timing error, and whether it slipped.
+
+    clamp: saturating, |dt| <= 0.45*Tref.
+    wrap:  tri-state PFD -- linear over +/-2pi of divider phase (|dt| <
+           Tref) and periodic in 4pi beyond, so a large frequency error
+           drives the characteristic through its own reversal and the loop
+           slips cycles instead of pulling in monotonically.
+    """
+    if not wrap:
+        lim = 0.45 * tref
+        return min(max(dt, -lim), lim), abs(dt) > lim
+    wrapped = ((dt + tref) % (2.0 * tref)) - tref
+    return wrapped, abs(dt) > tref
+
+
+@kernel
+def cp_segments(dt: float, v: float, icp: float, mm_pct: float, mm_slope: float,
+                v_ref: float, t_reset: float, dead_zone: float, amp: np.ndarray,
+                dur: np.ndarray) -> int:
+    """The CP output current as (amplitude [A], duration [s]) segments,
+    written to ``amp``/``dur`` (length >= 2); returns the count.
+
+    A tri-state PFD raises whichever output its early edge belongs to, then
+    raises the other on the late edge and resets t_reset afterwards.  So one
+    source conducts alone for |dt| and BOTH conduct for t_reset:
+
+        dt > 0 (divider late, ref first):  +Iup for dt, then (Iup-Idn) for t_reset
+        dt < 0 (divider early):            -Idn for |dt|, then (Iup-Idn) for t_reset
+
+    Their sum is exactly what the charge is, which is why lumping them into
+    one net pulse is fine for the loop dynamics and useless for the
+    reference spur: in lock the loop parks at the static offset that makes
+    the NET zero, so a net-charge model puts zero ripple on the control node
+    and predicts no reference spur at all.  The spur comes from the shape --
+    a down pulse followed by an up pulse that cancel in area but not in
+    time, which is precisely what these segments carry.
+    """
+    up, dn = cp_up_dn(icp, mm_pct, mm_slope, v_ref, v)
+    n = 0
+    if abs(dt) >= dead_zone and dt != 0.0:
+        amp[n] = up if dt > 0 else -dn
+        dur[n] = abs(dt)
+        n += 1
+    if t_reset > 0:
+        amp[n] = up - dn
+        dur[n] = t_reset
+        n += 1
+    return n
+
 
 class ChargePump:
     def __init__(self, cfg: CPConfig, tref: float, rng: np.random.Generator,
@@ -80,6 +179,13 @@ class ChargePump:
         # 1/f charge sequence, primed per run (None = not primed)
         self._flicker: np.ndarray | None = None
         self._n = 0
+
+    def _det_args(self, vctrl: float | None
+                  ) -> tuple[float, float, float, float, float, float, float]:
+        c = self.cfg
+        v = c.v_ref if vctrl is None else vctrl
+        return (v, c.icp, c.mismatch_pct, c.mismatch_slope_pct_v, c.v_ref,
+                c.t_reset, c.dead_zone_s)
 
     def charge(self, dt: float, vctrl: float | None = None) -> float:
         """Net charge delivered for a PFD timing error dt.
@@ -95,18 +201,8 @@ class ChargePump:
         is the old constant-mismatch behaviour.
         """
         c = self.cfg
-        v = c.v_ref if vctrl is None else vctrl
-        mm = c.mismatch_at(v)
-        up = c.icp * (1.0 + 0.005 * mm)
-        dn = c.icp * (1.0 - 0.005 * mm)
-        # both sources on during reset pulse: net mismatch charge every cycle
-        dq = (up - dn) * c.t_reset
-        # error-dependent charge (the acting source is up or dn depending on
-        # sign), suppressed entirely inside a residual dead zone
-        if abs(dt) >= c.dead_zone_s:
-            dq += (up if dt > 0 else dn) * dt
-        # leakage integrates over the whole period
-        dq += c.leakage_at(v) * self.tref
+        dq = float(cp_charge_det(dt, *self._det_args(vctrl), c.leakage_a,
+                                 c.leakage_slope_a_v, self.tref))
         return dq + self.noise_charge(dt)
 
     def noise_charge(self, dt: float) -> float:
@@ -120,42 +216,19 @@ class ChargePump:
         if not self.noise_on:
             self._n += 1
             return 0.0
-        t_on = abs(dt) + self.cfg.t_reset
-        dq = self.rng.normal(0.0, np.sqrt(self._i2 * t_on))
+        dq = float(cp_noise_sigma(dt, self.cfg.t_reset, self._i2)) \
+            * self.rng.standard_normal()
         dq += self._flicker[self._n] if self._flicker is not None else 0.0
         self._n += 1
         return dq
 
     def segments(self, dt: float, vctrl: float | None = None
                  ) -> list[tuple[float, float]]:
-        """The CP output current as (amplitude [A], duration [s]) segments.
-
-        A tri-state PFD raises whichever output its early edge belongs to, then
-        raises the other on the late edge and resets t_reset afterwards.  So one
-        source conducts alone for |dt| and BOTH conduct for t_reset:
-
-            dt > 0 (divider late, ref first):  +Iup for dt, then (Iup-Idn) for t_reset
-            dt < 0 (divider early):            -Idn for |dt|, then (Iup-Idn) for t_reset
-
-        Their sum is exactly what charge() returns, which is why lumping them
-        into one net pulse is fine for the loop dynamics and useless for the
-        reference spur: in lock the loop parks at the static offset that makes
-        the NET zero, so a net-charge model puts zero ripple on the control node
-        and predicts no reference spur at all.  The spur comes from the shape --
-        a down pulse followed by an up pulse that cancel in area but not in
-        time, which is precisely what these segments carry.
-        """
-        c = self.cfg
-        v = c.v_ref if vctrl is None else vctrl
-        mm = c.mismatch_at(v)
-        up = c.icp * (1.0 + 0.005 * mm)
-        dn = c.icp * (1.0 - 0.005 * mm)
-        segs = []
-        if abs(dt) >= c.dead_zone_s and dt != 0.0:
-            segs.append((up if dt > 0 else -dn, abs(dt)))
-        if c.t_reset > 0:
-            segs.append((up - dn, c.t_reset))
-        return segs
+        """The CP output current as (amplitude [A], duration [s]) segments;
+        see cp_segments."""
+        amp, dur = np.empty(2), np.empty(2)
+        n = int(cp_segments(dt, *self._det_args(vctrl), amp, dur))
+        return [(float(amp[i]), float(dur[i])) for i in range(n)]
 
     def lock_offset_s(self, vctrl: float | None = None) -> float:
         """Static PFD offset the loop parks at so the net charge is zero.
@@ -202,19 +275,10 @@ class ChargePump:
         return float(2.0 * abs(tot) / self.tref)
 
     def pfd_error(self, dt: float) -> tuple[float, bool]:
-        """Detector output for a raw timing error, and whether it slipped.
-
-        clamp: saturating, |dt| <= 0.45*Tref.
-        wrap:  tri-state PFD -- linear over +/-2pi of divider phase (|dt| <
-               Tref) and periodic in 4pi beyond, so a large frequency error
-               drives the characteristic through its own reversal and the loop
-               slips cycles instead of pulling in monotonically.
-        """
-        t = self.tref
-        if self.cfg.pfd_mode == "clamp":
-            return min(max(dt, -0.45 * t), 0.45 * t), abs(dt) > 0.45 * t
-        wrapped = ((dt + t) % (2.0 * t)) - t
-        return wrapped, abs(dt) > t
+        """Detector output for a raw timing error, and whether it slipped
+        (see pfd_error)."""
+        e, oor = pfd_error(dt, self.tref, self.cfg.pfd_mode == "wrap")
+        return float(e), bool(oor)
 
     def prime_flicker(self, n_cycles: int) -> None:
         """Pre-generate the 1/f charge sequence for a run of n_cycles.

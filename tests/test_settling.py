@@ -27,6 +27,9 @@ def test_fll_segment_scales_with_hop():
     assert np.isfinite(r1.t_phase_s) and np.isfinite(r2.t_phase_s)
     # charge-budget slew: ~5x the hop needs ~3-7x the FLL time
     ratio = r2.fll_engaged_s / r1.fll_engaged_s
+    # measured 5.10 for a 5x hop (seed 1, 120k): the FLL slews on a fixed
+    # charge budget, so the time is linear in the hop.  3-7x brackets that
+    # line without asserting the exact 5.0 a proportional taper never gives
     assert 3.0 < ratio < 7.0
 
 
@@ -35,11 +38,14 @@ def test_fll_stability_bound():
     for nm in ("sspll_19p2m_4p8g", "sspll_frac_19p2m_4p806g",
                "spll_100m_8g", "spll_frac_52m_6p253g"):
         st = fll_stability(presets.ALL_PRESETS[nm]())
+        # measured 2026-09-10: 1.360 (both SSPLLs), 1.934 and 1.909 (SPLLs).
+        # 1.3 sits just under the tightest of the four -- the point is that
+        # every shipped preset clears the hand-off bound, not by how much
         assert st["margin"] > 1.3, f"{nm}: margin {st['margin']:.2f}"
     # 4x the current violates the bound -> the documented limit cycle
     pll = presets.spll_frac_52m_6p253g()
     pll.cfg.fll_i *= 4.0
-    assert fll_stability(pll)["margin"] < 1.0
+    assert fll_stability(pll)["margin"] < 1.0    # 0.477 at 4x the current
 
 
 def test_hop_works_on_free_running_architectures():

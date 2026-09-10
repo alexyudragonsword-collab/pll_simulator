@@ -9,18 +9,39 @@ reference/fractional spurs and DTC calibration transients.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
-from ..blocks.chargepump import ChargePump, CPConfig
-from ..blocks.dtc import DTCConfig
-from ..blocks.loopfilter import FilterDesign, LoopFilter
-from ..blocks.oscillator import OscConfig, Oscillator
+from ..blocks.chargepump import (
+    CP_DEAD,
+    CP_I2,
+    CP_ICP,
+    CP_LEAK,
+    CP_LEAK_SLOPE,
+    CP_MM,
+    CP_MM_SLOPE,
+    CP_TRESET,
+    CP_VREF,
+    CP_WRAP,
+    ChargePump,
+    CPConfig,
+    cp_charge_det,
+    cp_noise_sigma,
+    cp_segments,
+    pfd_error,
+)
+from ..blocks.dtc import DTCConfig, dtc_code, dtc_inl_s, dtc_time
+from ..blocks.lockdetect import lockdet_step
+from ..blocks.loopfilter import FilterDesign, LoopFilter, lf_drive_fine, lf_pulse
+from ..blocks.oscillator import OscConfig, Oscillator, osc_freq
+from ..calibration.lms import lms_step, lut_bin, lut_step
 from ..core.colored import synth_from_psd
-from ..core.deltasigma import Efm1, Mash11, Mash111
+from ..core.deltasigma import Efm1, Mash11, Mash111, mash_residual, mash_step
 from ..core.dtcspurs import frac_spur_offsets
 from ..core.engine import detect_lock, postprocess
 from ..core.freqresp import FreqResponse, default_grid, loop_metrics
+from ..core.jit import kernel, sgn
 from ..core.jitter import ipn_dbc, rms_jitter_fs
 from ..core.noise import (
     FlickerFloorPhase,
@@ -35,9 +56,15 @@ from .base import (
     PLLBase,
     add_pull_offset,
     attach_fine,
+    cal_kernel_args,
+    dtc_kernel_args,
     dtc_t_target_of,
     flicker_corner_hz,
+    lockdet_kernel_args,
+    lut_kernel_args,
+    mash_kernel_args,
     no_fine_note,
+    osc_law_args,
     pull_hz,
     pull_notes,
     pull_spur,
@@ -121,6 +148,170 @@ class CPPLLConfig:
                     f"does not match FracConfig.frac {self.frac.frac}: the divider "
                     f"locks at (n_int + frac)*fref, not at fout -- change fout or "
                     f"frac together with fref")
+
+
+@kernel
+def cppll_kernel(n_cycles: int, tref: float, fout: float, f_floor: float,
+                 n_nom: float, n_int: int,
+                 band: int, f0: float, gain: float, nl1: float, nl2: float,
+                 band_step: float, n_bands: int, v_lo: float, v_hi: float,
+                 pushing: float, v_sup: np.ndarray, f_pull: np.ndarray,
+                 osc_noise: np.ndarray, jit_ref: np.ndarray, jit_div: np.ndarray,
+                 noise_on: bool, zn: np.ndarray,
+                 has_mash: bool, mash_order: int, mash_bits: int, mash_st: np.ndarray,
+                 frac_word: int,
+                 has_dtc: bool, dtc_range_s: float, dtc_t_res: float, dtc_code_max: int,
+                 dtc_inl_poly: np.ndarray, dtc_has_sin: bool, dtc_sin_amp: float,
+                 dtc_sin_cyc: float, dtc_sin_ph: float, dtc_jitter: float,
+                 dtc_gain_error: float, has_drift: bool, dtc_gain_drift: np.ndarray,
+                 has_cal: bool, cal_kind: int, cal_st: np.ndarray, cal_mu: float,
+                 cal_mu_final: float, cal_gear: float, cal_ema: float, cal_center: bool,
+                 cal_trace: np.ndarray,
+                 has_lut: bool, lut: np.ndarray, lut_counts: np.ndarray, lut_xs: np.ndarray,
+                 lut_st: np.ndarray, lut_lo: float, lut_hi: float, lut_k: int,
+                 lut_mu: float, lut_ema: float, lut_ortho: int, lut_snaps: np.ndarray,
+                 cp_p: np.ndarray, has_flicker: bool, cp_flicker: np.ndarray,
+                 lf_x: np.ndarray, lf_ad: np.ndarray, lf_b: np.ndarray, lf_w: np.ndarray,
+                 lf_v: np.ndarray, lf_vinv: np.ndarray, lf_vinv_b: np.ndarray,
+                 lf_tmp: np.ndarray, lf_xe: np.ndarray, lf_xe0: np.ndarray,
+                 has_det: bool, det_st: np.ndarray, det_window: float, det_count: int,
+                 det_down: int, det_trace: np.ndarray,
+                 m_os: int, fine: np.ndarray, f_sub: np.ndarray, seg_amp: np.ndarray,
+                 seg_dur: np.ndarray, vs: np.ndarray,
+                 phase_err: np.ndarray, freq_out: np.ndarray, vctrl_rec: np.ndarray
+                 ) -> tuple[int, int, int, int]:
+    """The reference-edge loop, one iteration per cycle: MASH residue and DTC,
+    PFD, charge pump into the filter, VCO, divider edge.  Returns (cycle
+    slips, PFD out-of-range cycles, LUT snapshots taken, normal draws
+    consumed).  Block state lives in the arrays passed in; the caller copies
+    it back into the block objects."""
+    icp = cp_p[CP_ICP]
+    mm_pct = cp_p[CP_MM]
+    mm_slope = cp_p[CP_MM_SLOPE]
+    v_ref = cp_p[CP_VREF]
+    t_reset = cp_p[CP_TRESET]
+    dead_zone = cp_p[CP_DEAD]
+    leak_a = cp_p[CP_LEAK]
+    leak_slope = cp_p[CP_LEAK_SLOPE]
+    i2 = cp_p[CP_I2]
+    wrap = cp_p[CP_WRAP] != 0.0
+    nlf = lf_x.shape[0]
+    sub = tref / m_os
+
+    t_div = 0.0
+    phi_out = 0.0        # true output phase deviation vs ideal fout timebase
+    prev_osc_phi = 0.0
+    gain_corr = 1.0
+    gain_err = dtc_gain_error
+    n_next = n_nom if not has_mash else float(n_int)
+    n_slips = 0
+    n_oor = 0
+    n_snap = 0
+    zi = 0
+    fv = osc_freq(lf_x[nlf - 1], band, v_sup[0], 0.0, pushing, f0, gain, nl1, nl2,
+                  band_step, n_bands, v_lo, v_hi)
+
+    for n in range(n_cycles):
+        t_ref = n * tref + jit_ref[n]
+        residual_ui = 0.0
+        if has_mash:
+            residual_ui = mash_residual(mash_bits, mash_st)
+        if has_dtc:
+            if has_drift:
+                gain_err = dtc_gain_drift[n]
+            # positive residual = divider has counted extra cycles = its edge
+            # is late by residual*Tvco; delay the reference edge to match
+            # (DTC adds a static mid-range offset, absorbed as phase offset)
+            t_target = residual_ui / fout
+            if has_lut:
+                t_target += lut[lut_bin(residual_ui, lut_lo, lut_hi, lut_k)]
+            code = dtc_code(t_target, dtc_range_s, gain_corr, dtc_t_res, dtc_code_max)
+            inl = dtc_inl_s(code, dtc_code_max, dtc_inl_poly, dtc_has_sin, dtc_sin_amp,
+                            dtc_sin_cyc, dtc_sin_ph)
+            d = dtc_time(code, dtc_t_res, gain_err, inl)
+            if noise_on and dtc_jitter > 0:
+                d += dtc_jitter * zn[zi]
+                zi += 1
+            t_ref += d
+        dt = t_div + jit_div[n] - t_ref
+        dt_eff, out_of_range = pfd_error(dt, tref, wrap)
+        if out_of_range:
+            n_oor += 1
+            # a saturating detector cannot slip by construction; only the
+            # wrapping one reverses its own error signal
+            if wrap:
+                n_slips += 1
+        if has_det:
+            det_trace[n] = 1.0 if lockdet_step(det_st, dt, det_window, det_count,
+                                               det_down) else 0.0
+        v = lf_x[nlf - 1]
+        # the stochastic charge of this cycle: one thermal draw and one
+        # sample of the primed 1/f sequence, whichever level of detail follows
+        dq_noise = 0.0
+        if noise_on:
+            dq_noise = cp_noise_sigma(dt_eff, t_reset, i2) * zn[zi]
+            zi += 1
+            dq_noise += cp_flicker[n] if has_flicker else 0.0
+        if m_os == 1:
+            dq = cp_charge_det(dt_eff, v, icp, mm_pct, mm_slope, v_ref, t_reset,
+                               dead_zone, leak_a, leak_slope, tref) + dq_noise
+            t_on = min(abs(dt_eff) + t_reset, 0.9 * tref)
+            lf_pulse(lf_x, lf_ad, lf_b, lf_w, lf_v, lf_vinv, lf_vinv_b, dq / t_on, t_on,
+                     tref, lf_tmp, lf_xe)
+            fv = max(osc_freq(lf_x[nlf - 1], band, v_sup[n], f_pull[n], pushing, f0,
+                              gain, nl1, nl2, band_step, n_bands, v_lo, v_hi), f_floor)
+        else:
+            # drive the filter with the actual CP current waveform instead
+            # of one net pulse: the up/down segments cancel in area but not
+            # in time, and that residue IS the reference spur
+            nseg = cp_segments(dt_eff, v, icp, mm_pct, mm_slope, v_ref, t_reset,
+                               dead_zone, seg_amp, seg_dur)
+            i_bias = leak_a + leak_slope * (v - v_ref)
+            lf_drive_fine(lf_x, lf_w, lf_v, lf_vinv, lf_vinv_b, tref, seg_amp, seg_dur,
+                          nseg, m_os, i_bias, dq_noise, vs, lf_xe0, lf_xe)
+            for k in range(m_os):
+                f_sub[k] = max(osc_freq(vs[k], band, v_sup[n], f_pull[n], pushing, f0,
+                                        gain, nl1, nl2, band_step, n_bands, v_lo, v_hi),
+                               f_floor)
+            fv = f_sub[m_os - 1]
+
+        if has_cal and has_dtc:
+            # under-delayed reference (gain_corr low) makes dt correlate
+            # positively with the requested delay -> positive-sign update
+            gain_corr = lms_step(cal_kind, cal_st, sgn(dt), residual_ui, cal_mu,
+                                 cal_mu_final, cal_gear, cal_ema, cal_center)
+            cal_trace[n] = gain_corr
+        if has_lut:
+            n_snap = lut_step(lut, lut_counts, lut_xs, lut_st, dt, residual_ui, lut_lo,
+                              lut_hi, lut_k, lut_mu, lut_ema, lut_ortho, lut_snaps,
+                              n_snap)
+
+        if has_mash:
+            n_next = float(n_int + mash_step(mash_order, mash_bits, mash_st, frac_word))
+        # divider edge advance: N cycles of the VCO at current freq,
+        # oscillator accumulated phase noise shifts the edge
+        d_osc = osc_noise[n] - prev_osc_phi
+        prev_osc_phi = osc_noise[n]
+        t_div += n_next / fv - d_osc / (TWOPI * fv)
+
+        # output phase deviation = integrated frequency error + osc noise
+        # (the divider-edge wobble from the DSM is NOT output phase — the
+        # loop lowpasses it; the VCO only sees it through vctrl)
+        if m_os == 1:
+            phi_out += TWOPI * (fv - fout) * tref + d_osc
+        else:
+            # integrate the sub-samples instead of holding the end-of-
+            # period frequency across the whole period; the oscillator's
+            # own phase step is spread evenly over the M sub-intervals
+            cs = 0.0
+            for k in range(m_os):
+                cs += TWOPI * (f_sub[k] - fout) * sub + d_osc / m_os
+                fine[n * m_os + k] = phi_out + cs
+            phi_out = fine[(n + 1) * m_os - 1]
+        phase_err[n] = phi_out
+        freq_out[n] = fv
+        vctrl_rec[n] = lf_x[nlf - 1]
+    return n_slips, n_oor, n_snap, zi
 
 
 class CPPLL(PLLBase):
@@ -362,7 +553,6 @@ class CPPLL(PLLBase):
                 * np.where(np.arange(n_cycles) % 2 == 0, 1.0, -1.0)
 
         mash = c.frac.make_mash() if c.frac is not None else None
-        frac_word = c.frac.frac_word if c.frac is not None else 0
 
         # optional DTC (wired when blocks.dtc present in config)
         dtc = None
@@ -381,101 +571,58 @@ class CPPLL(PLLBase):
             from ..blocks.lockdetect import LockDetector
             det = LockDetector(c.lock_detect)
 
-        t_div = 0.0
-        phi_out = 0.0        # true output phase deviation vs ideal fout timebase
         phase_err = np.empty(n_cycles)
         freq_out = np.empty(n_cycles)
         vctrl_rec = np.empty(n_cycles)
-        cal_trace = np.empty(n_cycles) if dtc_cal is not None else None
+        cal_trace = np.empty(n_cycles if dtc_cal is not None else 0)
         osc_noise = osc.noise_steps(n_cycles) if noise else np.zeros(n_cycles)
-        prev_osc_phi = 0.0
-        fv = osc.freq(lf.vctrl, v_sup[0])
-        n_next = n_nom if mash is None else int(c.fout // c.fref)
         m_os = max(int(fine_oversample), 1)
-        fine = np.empty(n_cycles * m_os) if m_os > 1 else None
-        n_slips = 0
-        n_oor = 0
-
-        for n in range(n_cycles):
-            t_ref = n * tref + jit_ref[n]
-            residual_ui = 0.0
-            if mash is not None:
-                residual_ui = mash.residual_ui()
-            if dtc is not None:
-                if dtc_gain_drift is not None:
-                    dtc.gain_error = dtc_gain_drift[n]
-                # positive residual = divider has counted extra cycles = its edge
-                # is late by residual*Tvco; delay the reference edge to match
-                # (DTC adds a static mid-range offset, absorbed as phase offset)
-                t_target = residual_ui / c.fout
-                if lut_cal is not None:
-                    t_target += lut_cal.correction(residual_ui)
-                t_ref += dtc.delay(t_target)
-            dt = t_div + jit_div[n] - t_ref
-            dt_eff, out_of_range = cp.pfd_error(dt)
-            n_oor += int(out_of_range)
-            # a saturating detector cannot slip by construction; only the
-            # wrapping one reverses its own error signal
-            n_slips += int(out_of_range and c.cp.pfd_mode == "wrap")
-            if det is not None:
-                det.step(dt)
-            if fine is None:
-                dq = cp.charge(dt_eff, lf.vctrl)
-                t_on = min(abs(dt_eff) + c.cp.t_reset, 0.9 * tref)
-                lf.update_pulse(dq / t_on, t_on)
-                fv = max(osc.freq(lf.vctrl, v_sup[n], f_pull[n]),
-                         0.05 * c.osc.f0)
-            else:
-                # drive the filter with the actual CP current waveform instead
-                # of one net pulse: the up/down segments cancel in area but not
-                # in time, and that residue IS the reference spur
-                vs = lf.drive_fine(cp.segments(dt_eff, lf.vctrl), m_os,
-                                   i_bias=c.cp.leakage_at(lf.vctrl),
-                                   dq_impulse=cp.noise_charge(dt_eff))
-                f_sub = np.maximum(
-                    np.array([osc.freq(v, v_sup[n], f_pull[n]) for v in vs]),
-                    0.05 * c.osc.f0)
-                fv = float(f_sub[-1])
-
-            if dtc_cal is not None and dtc is not None and cal_trace is not None:
-                # under-delayed reference (gain_corr low) makes dt correlate
-                # positively with the requested delay -> positive-sign update
-                dtc_cal.step(np.sign(dt), residual_ui)
-                dtc.gain_corr = dtc_cal.value
-                cal_trace[n] = dtc_cal.value
-            if lut_cal is not None:
-                lut_cal.step(dt, residual_ui)
-
-            if mash is not None:
-                n_next = int(c.fout // c.fref) + mash.step(frac_word)
-            # divider edge advance: N cycles of the VCO at current freq,
-            # oscillator accumulated phase noise shifts the edge
-            d_osc = osc_noise[n] - prev_osc_phi
-            prev_osc_phi = osc_noise[n]
-            t_div += n_next / fv - d_osc / (TWOPI * fv)
-
-            # output phase deviation = integrated frequency error + osc noise
-            # (the divider-edge wobble from the DSM is NOT output phase — the
-            # loop lowpasses it; the VCO only sees it through vctrl)
-            if fine is None:
-                phi_out += TWOPI * (fv - c.fout) * tref + d_osc
-            else:
-                # integrate the sub-samples instead of holding the end-of-
-                # period frequency across the whole period; the oscillator's
-                # own phase step is spread evenly over the M sub-intervals
-                inc = TWOPI * (f_sub - c.fout) * (tref / m_os) + d_osc / m_os
-                fine[n * m_os:(n + 1) * m_os] = phi_out + np.cumsum(inc)
-                phi_out = float(fine[(n + 1) * m_os - 1])
-            phase_err[n] = phi_out
-            freq_out[n] = fv
-            vctrl_rec[n] = lf.vctrl
+        fine_rec = np.empty(n_cycles * m_os) if m_os > 1 else np.empty(0)
+        # at most two draws per cycle (DTC jitter, charge-pump thermal
+        # charge), from a pool in the order the loop consumes them
+        zn = rng.standard_normal(2 * n_cycles) if noise else np.zeros(0)
+        dtc_args = dtc_kernel_args(c.frac.dtc if c.frac is not None else None)
+        mash_args = mash_kernel_args(mash, c.frac)
+        cal_args = cal_kernel_args(dtc_cal)
+        cal_st = cal_args[2]
+        lut_args = lut_kernel_args(lut_cal, n_cycles)
+        lut_st, lut_snaps = lut_args[4], lut_args[11]
+        det_trace = np.empty(n_cycles if det is not None else 0)
+        args: tuple[Any, ...] = (
+            n_cycles, tref, float(c.fout), 0.05 * c.osc.f0, float(n_nom),
+            int(c.fout // c.fref), int(osc.band), *osc_law_args(c.osc),
+            float(c.osc.pushing_hz_v), v_sup, f_pull, osc_noise, jit_ref, jit_div,
+            bool(noise), zn,
+            *mash_args, dtc is not None, *dtc_args,
+            float(dtc_gain_init_error), dtc_gain_drift is not None,
+            (np.asarray(dtc_gain_drift, dtype=float) if dtc_gain_drift is not None
+             else np.zeros(0)),
+            *cal_args, cal_trace,
+            *lut_args,
+            c.cp.params(), cp._flicker is not None,
+            cp._flicker if cp._flicker is not None else np.zeros(0),
+            lf.x, lf.ad, lf.b, lf._w, lf._v, lf._vinv, lf._vinv_b, lf._tmp, lf._xe,
+            lf._xe0,
+            *lockdet_kernel_args(det), det_trace,
+            m_os, fine_rec, np.empty(m_os), np.empty(2), np.empty(2), np.empty(m_os),
+            phase_err, freq_out, vctrl_rec)
+        n_slips, n_oor, n_snap, _ = cppll_kernel(*args)
+        if dtc_cal is not None:
+            dtc_cal.load_state(cal_st)
+            dtc_cal.trace.extend(cal_trace.tolist())
+        if lut_cal is not None:
+            lut_cal.load_state(lut_st)
+            lut_cal.trace.extend(lut_snaps[i].copy() for i in range(n_snap))
+        if det is not None:
+            det.trace.extend(det_trace.tolist())
+        fine: np.ndarray | None = fine_rec if m_os > 1 else None
 
         t = np.arange(n_cycles) * tref
         lock = detect_lock(t, freq_out - c.fout, tol_hz=c.fout * 1e-5)
         sim = SimResult(fs=c.fref, f0=c.fout, t=t,
                         phase_err_out=phase_err, freq_out=freq_out, ctrl=vctrl_rec,
                         lock_time_s=lock)
-        if dtc_cal is not None and cal_trace is not None:
+        if dtc_cal is not None:
             sim.cal_traces["dtc_gain"] = cal_trace
         if band_trace is not None:
             sim.cal_traces["band_select"] = band_trace

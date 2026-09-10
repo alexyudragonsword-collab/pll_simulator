@@ -24,8 +24,12 @@ def test_kvco_nonlinearity_shifts_loop_and_still_locks():
     ar = pll.analyze()
     ar_lin = CPPLL(CPPLLConfig(**BASE,
                                osc=OscConfig(f0=4.6e9, gain=60e6, **PN))).analyze()
+    # Kvco compressed to 0.577 of nominal at the operating point takes the UGB
+    # to 0.638 of the linear loop's -- the ratio is the gain, as it should be
     assert ar.loop.f_ugb < 0.75 * ar_lin.loop.f_ugb
     sim = pll.simulate(50_000, seed=1, noise=False, f_start_offset=-20e6)
+    # 0.01 Hz measured (noise off): a type-II loop has infinite DC gain, so
+    # the residue is round-off; 1 kHz on 4.8 GHz would still be 0.2 ppm
     assert abs(np.mean(sim.freq_out[-3000:]) - 4.8e9) < 1e3
 
 

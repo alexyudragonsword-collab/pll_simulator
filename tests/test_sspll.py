@@ -25,6 +25,7 @@ def pll():
 def test_no_n_penalty_on_cp_noise(pll):
     """SSPLL beats an equivalent CPPLL (ex01 config lands ~260 fs)."""
     ar = pll.analyze()
+    # measured 2026-09-10: 152.4 fs, UGB 0.869 MHz, PM 68.4 deg
     assert 80 < ar.jitter_fs < 220
     assert 0.6e6 < ar.loop.f_ugb < 2.5e6
     assert ar.loop.pm_deg > 50
@@ -36,7 +37,7 @@ def test_fll_acquires_and_hands_off(pll):
     handoff = np.where(np.diff(eng) < 0)[0]
     assert handoff.size >= 1
     assert sim.lock_time_s is not None
-    assert abs(np.mean(sim.freq_out[-20_000:]) - 4.8e9) < 5e4
+    assert abs(np.mean(sim.freq_out[-20_000:]) - 4.8e9) < 5e4   # 207 Hz measured
     # FLL quiet after handoff (no chatter)
     assert eng[handoff[0] + 1000:].sum() == 0
 
@@ -46,6 +47,9 @@ def test_false_lock_without_fll(pll):
     ferr = np.mean(sim.freq_out[-5000:]) - 4.8e9
     # parks at an integer multiple of fref away, not at the target
     assert abs(ferr) > 5e6
+    # measured: exactly -1.0000 fref away (to four decimals).  The SSPD has a
+    # false-lock point every pi of output phase, so without the FLL the loop
+    # settles on a neighbouring one; 0.05 asks that it is ON one, not near it
     assert abs(ferr / 19.2e6 - round(ferr / 19.2e6)) < 0.05
 
 

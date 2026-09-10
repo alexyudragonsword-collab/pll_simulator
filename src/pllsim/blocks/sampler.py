@@ -1,9 +1,17 @@
-"""Sampling phase detector front-end (SSPLL / SPLL)."""
+"""Sampling phase detector front-end (SSPLL / SPLL).
+
+The sample, charge and segment laws are kernels (core.jit) shared with the
+sampling loops' compiled engines; the class is the object view with its own
+RNG.
+"""
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass
 
 import numpy as np
+
+from ..core.jit import kernel
 
 KB = 1.380649e-23
 T0 = 290.0
@@ -54,6 +62,50 @@ class SamplerConfig:
             return self.gm_noise_a2hz
         return 4.0 * KB * self.temp_k * (2.0 / 3.0) * 2.0 * self.gm
 
+    def charge_sigma(self) -> float:
+        """Std of the gm pulse's integrated current noise charge [C]."""
+        return float(np.sqrt(self.gm_i2() * self.pulse_width))
+
+
+@kernel
+def pd_sample_det(phase_err_rad: float, amp_v: float, pedestal_v: float) -> float:
+    """The held voltage before kT/C noise: A*sin(err) + pedestal."""
+    return amp_v * math.sin(phase_err_rad) + pedestal_v
+
+
+@kernel
+def pd_charge_det(v_held: float, gm: float, pulse_width: float) -> float:
+    """The gm pulse's charge before its current noise: gm * v * tau."""
+    return gm * v_held * pulse_width
+
+
+@kernel
+def pd_segments(dq: float, kick_q_c: float, kick_delay_s: float,
+                pulse_width: float, amp: np.ndarray, dur: np.ndarray) -> int:
+    """Control-node current as (amplitude, duration) segments, kickback
+    first; fills ``amp``/``dur`` (length >= 3) and returns the count.
+
+    The kickback is a charge, not a current, so it is spread over a tenth of
+    the gm window: narrow enough to act as an impulse at this timescale and
+    wide enough that the sub-sampled record does not have to land on a
+    zero-width event.
+    """
+    n = 0
+    if kick_q_c != 0.0:
+        w = max(0.1 * pulse_width, 1e-15)
+        amp[n] = kick_q_c / w
+        dur[n] = w
+        n += 1
+        gap = kick_delay_s - w
+        if gap > 0:
+            amp[n] = 0.0
+            dur[n] = gap
+            n += 1
+    amp[n] = dq / max(pulse_width, 1e-15)
+    dur[n] = pulse_width
+    n += 1
+    return n
+
 
 class SamplingPD:
     """Sample-and-slope PD: v = A*sin(phase_err) + kT/C noise, then a gm pulse
@@ -66,37 +118,26 @@ class SamplingPD:
         self.rng = rng
         self.noise_on = noise
         self._i2 = cfg.gm_i2()
+        self._sig_q = cfg.charge_sigma()
 
     def sample(self, phase_err_rad: float) -> float:
-        v = self.cfg.amp_v * np.sin(phase_err_rad) + self.cfg.pedestal_v
+        v = float(pd_sample_det(phase_err_rad, self.cfg.amp_v, self.cfg.pedestal_v))
         if self.noise_on:
-            v += self.rng.normal(0.0, self.cfg.ktc_sigma_v)
+            v += self.cfg.ktc_sigma_v * self.rng.standard_normal()
         return v
 
     def charge(self, v_held: float) -> float:
-        dq = self.cfg.gm * v_held * self.cfg.pulse_width
+        dq = float(pd_charge_det(v_held, self.cfg.gm, self.cfg.pulse_width))
         if self.noise_on:
-            dq += self.rng.normal(0.0, np.sqrt(self._i2 * self.cfg.pulse_width))
+            dq += self._sig_q * self.rng.standard_normal()
         return dq
 
     def segments(self, dq: float) -> list[tuple[float, float]]:
-        """Control-node current as (amplitude, duration), kickback first.
-
-        The kickback is a charge, not a current, so it is spread over a tenth of
-        the gm window: narrow enough to act as an impulse at this timescale and
-        wide enough that the sub-sampled record does not have to land on a
-        zero-width event.
-        """
+        """Control-node current as (amplitude, duration), kickback first."""
         c = self.cfg
-        segs = []
-        if c.kick_q_c != 0.0:
-            w = max(0.1 * c.pulse_width, 1e-15)
-            segs.append((c.kick_q_c / w, w))
-            gap = c.kick_delay_s - w
-            if gap > 0:
-                segs.append((0.0, gap))
-        segs.append((dq / max(c.pulse_width, 1e-15), c.pulse_width))
-        return segs
+        amp, dur = np.empty(3), np.empty(3)
+        n = int(pd_segments(dq, c.kick_q_c, c.kick_delay_s, c.pulse_width, amp, dur))
+        return [(float(amp[i]), float(dur[i])) for i in range(n)]
 
     def ripple_fundamental_a(self, tref: float) -> float:
         """Peak amplitude [A] of the control-node current at fref, in lock.

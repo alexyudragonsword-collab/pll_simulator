@@ -25,6 +25,10 @@ test = ["pytest>=7", "python-pptx>=0.6",   # pptx: the deck test must run in CI,
         "tomli>=2; python_version < '3.11'"]   # tomllib is 3.11+; 3.10 is the floor
 gui = ["streamlit>=1.30"]
 guiqt = ["PySide6>=6.5"]
+# Compiles the per-cycle kernels (core/jit.py): 30-100x on the time-domain
+# loops, measured 2026-09.  Optional because it is a 100 MB LLVM and because
+# the phone cannot have it; without it the same functions run as Python.
+fast = ["numba>=0.59"]
 
 [project.scripts]
 pllsim = "pllsim.cli:main"
