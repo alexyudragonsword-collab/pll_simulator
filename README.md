@@ -66,7 +66,7 @@ Coverage targets: fref = 19.2–500 MHz, fout up to 12 GHz, integrated jitter
 
 ```bash
 pip install -e .          # numpy, scipy, matplotlib
-pytest tests/             # 944 tests: closed-form math + architecture behavior
+pytest tests/             # 958 tests: closed-form math + architecture behavior
 python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 ```
 

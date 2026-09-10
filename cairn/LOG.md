@@ -2,6 +2,19 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-10 · v0.9.4 released; the hand-typed test count was 14 short
+
+- PR #59 squash-merged (ad2db99); auto-release tagged v0.9.4 on that
+  commit and published the notes within 21 s of the push.  CI on main:
+  883 passed on 3.10 / 3.11 / 3.12, sweep 75 passed, every example ran.
+- The notes, README and index.html said 944 tests / 869 in the main job:
+  P3's numbers copied forward before the hygiene pass added 14.
+  `facts.json` (measured) said 958 all along; the prose count test allows
+  ±15 %, so nothing went red.  Fixed to 958 / 883 with a correction note
+  in the release notes; the GitHub release body keeps the original text.
+  Pitfall: refresh the count *after* the last test file lands, not when
+  the notes are first drafted.
+
 ## 2026-09-09 · v0.9.4 cut
 
 - `pyproject` 0.9.4 + `docs/release-notes/v0.9.4.md` in one commit, as the
