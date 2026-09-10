@@ -2,6 +2,21 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-10 · P4 on main, and what the split matrix costs the 3.11 leg
+
+- PR #60 squash-merged as `7202a55`; auto-release did nothing, as intended
+  (v0.9.4 is already tagged on `ad2db99` and this batch adds no notes -- the
+  job printed only `v0.9.1: marked no-tag, skipping`).  Main's run 325 read
+  887 passed on 3.11 and on 3.12, 886 passed + 1 skipped on the 3.10 floor,
+  coverage 92.38 % against the 88 % floor, all 21 examples green.
+- Measured, and the reason this entry exists: the 3.11 leg is now the
+  *interpreted* one **and** on main it runs every example, a combination
+  that did not exist when `timeout-minutes: 45` was chosen.  It took 31:39
+  in pytest and 35:00 for the whole job -- 10 minutes of headroom, and the
+  same step took 26:10 on the branch, so runner variance alone is worth
+  ~5 minutes of it.  Nothing failed; raise the budget or move the
+  every-example step to the compiled leg before assuming it will hold.
+
 ## 2026-09-10 · A streamlit AppTest flake on the 3.10 leg (open, not diagnosed)
 
 - `tests/test_gui_compute.py::test_modulation_runs_and_reports_evm` failed
