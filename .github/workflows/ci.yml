@@ -10,8 +10,22 @@ permissions:
 
 # A newer push to the same branch supersedes the run in flight; on main the
 # in-flight run may be tagging a release, so it is left to finish.
+#
+# Keyed on the BRANCH, not on github.ref, because this workflow answers to
+# both `push` and `pull_request` and those two see different refs for the
+# same commit -- refs/heads/<branch> and refs/pull/<n>/merge.  Under
+# `ci-${{ github.ref }}` they landed in different groups and neither could
+# cancel the other, so every push to a branch with an open PR ran the whole
+# suite twice: five Dependabot PRs recreated at once produced ten runs in
+# 25 seconds (runs 329-338), about 57 runner-minutes each.
+#
+# `github.head_ref` is set on pull_request only and `github.ref_name` on
+# push, so the fallback yields the same string for both events.  Note it is
+# the branch NAME: a PR from a fork whose branch shares a name with a local
+# one would share this group.  There are no forks here, and the failure mode
+# is a cancelled run rather than a wrong result.
 concurrency:
-  group: ci-${{ github.ref }}
+  group: ci-${{ github.head_ref || github.ref_name }}
   cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
