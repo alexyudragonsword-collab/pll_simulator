@@ -328,10 +328,12 @@ tests/         closed-form core math + architecture-level regressions
 `ruff` on `src tests examples packaging`; `mypy` on the whole package
 (`files = ["src/pllsim"]` in `pyproject.toml` — `export/` and `webgui/` were
 the last two paths outside, fixed rather than silenced); the full test suite
-on Python 3.11 and 3.12 with a coverage floor, and on the declared floor
-(3.10, numpy 1.24) without numba; the 3.11/3.12 jobs install `[fast]`, so
-the compiled kernels are what most of the suite exercises there and the
-bit-identity test compares them against the interpreted ones.
+three ways: on 3.11 with the kernels interpreted (this leg carries the
+coverage floor), on 3.12 with them compiled, and on the declared floor
+(3.10, numpy 1.24) where numba is absent entirely.  The split is not
+cosmetic — a compiled function never executes its Python lines, so
+measuring coverage with the kernels compiled reads 84 % against a real
+92 %.
 
 Two things the coverage number does not say.  The Streamlit pages are driven
 by 23 tests through `AppTest`, which execs each file rather than importing it,

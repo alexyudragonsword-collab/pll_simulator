@@ -191,10 +191,25 @@ jobs:
         env:
           QT_QPA_PLATFORM: offscreen
           PLLSIM_CI: "1"   # a missing optional dependency fails; it must not skip
+          # 3.11 runs the kernels interpreted and carries the coverage floor;
+          # 3.12 runs them compiled and carries no coverage.  Both legs must
+          # exist: a numba-compiled function never executes its Python lines,
+          # so measuring coverage with the kernels compiled read 84% against
+          # a real 92% and failed the floor on nothing.  Coverage is "which
+          # lines ran", and the kernel source lines are the lines; the
+          # compiled path is proved equal to them by tests/test_kernels.py,
+          # which drives both in its own subprocesses whatever this says.
+          PLLSIM_JIT: ${{ matrix.python-version == '3.11' && '0' || '1' }}
         # the cross-domain matrix and the field-sensitivity gate run in their
         # own parallel job.  -n 4: the hosted runner has four cores and the
         # suite is deterministic (seed=0 default); measured 15 -> 10 min.
-        run: pytest tests/ -m "not sweep and not sensitivity" -n 4 -v --tb=short --cov=pllsim --cov-report=term-missing:skip-covered
+        run: |
+          if [ "${PLLSIM_JIT}" = "0" ]; then
+            pytest tests/ -m "not sweep and not sensitivity" -n 4 -v --tb=short \
+              --cov=pllsim --cov-report=term-missing:skip-covered
+          else
+            pytest tests/ -m "not sweep and not sensitivity" -n 4 -v --tb=short -p no:cacheprovider
+          fi
       - name: Run examples (fast subset)
         if: matrix.python-version == '3.11'
         run: |

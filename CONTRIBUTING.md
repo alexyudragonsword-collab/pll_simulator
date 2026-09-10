@@ -220,7 +220,10 @@ blanket ignore reads as "type-checked".
   count arguments after a star-argument of unknown length).  A new random
   draw is one more slot per cycle in the pool and one more cursor step, in
   the place the object used to draw; `cairn/compiled-kernels.md` has the
-  measurements and the pitfalls.
+  measurements and the pitfalls.  Coverage is measured on the interpreted
+  leg only, because a compiled function never executes its Python lines —
+  with the kernels compiled the same passing suite reads 84 % instead of
+  92 %.
 
 ## Testing
 

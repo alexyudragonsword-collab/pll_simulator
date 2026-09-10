@@ -97,6 +97,13 @@ kernel, then cached under `__pycache__`).
   rounds; a `rounds > 8` run would differ at the ULP.
 - `LUTCal`'s projection used `w @ lut`; now a serial sum.  ULP-level on the
   one LUT test, inside its 20 % margin.
+- **Coverage cannot see inside a compiled kernel.**  Installing the `[fast]`
+  extra in the coverage job dropped the reported total from 92.4 % to
+  84.0 % and failed the 88 % floor while all 887 tests passed: numba never
+  executes the Python lines, so `loopfilter` read 54 %, `lms` 54 %,
+  `deltasigma` 59 %.  CI now runs 3.11 interpreted with the floor and 3.12
+  compiled without it; `tests/test_kernels.py` drives both paths in its own
+  subprocesses either way, so nothing is lost.
 - **The mypy gate needs numba AND mypy 2.x in the same environment.**  The
   container ships mypy 1.19, where rebinding an imported `njit` to None is
   accepted; CI installs 2.3.1, where it is "None into an overloaded
