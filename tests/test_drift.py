@@ -45,4 +45,7 @@ def test_drift_overrides_init_error():
                        dtc_gain_drift=drift)
     # converging toward 1/1.05, not 1/1.2
     g = sim.cal_traces["dtc_gain"][-1]
+    # measured 0.95231 against 1/1.05 = 0.95238, i.e. 7e-5 out: the LMS
+    # tracks the drifted gain, not the initial 1/1.2 = 0.833 it started from,
+    # and 0.05 is well inside the gap between those two answers
     assert abs(g - 1.0 / 1.05) < 0.05

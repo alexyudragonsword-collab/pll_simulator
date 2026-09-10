@@ -11,16 +11,18 @@ def test_gmsk_trajectory_properties():
     # all-ones: +pi/2 per symbol, peak deviation h*Rb/2
     bits = np.ones(64, dtype=int)
     fdev, ph = gmsk_trajectory(bits, 100e6, 10e6)
-    assert abs(fdev.max() - 2.5e6) < 0.05e6
+    assert abs(fdev.max() - 2.5e6) < 0.05e6     # exact to 0.1 kHz measured
     # steady-state phase slope: pi/2 per symbol (10 samples per symbol)
     mid = slice(300, 500)
     slope = np.polyfit(np.arange(len(ph[mid])), ph[mid], 1)[0]
-    assert abs(slope - (np.pi / 2) / 10.0) < 0.01
+    assert abs(slope - (np.pi / 2) / 10.0) < 0.01    # 8e-17 measured: pure algebra
 
 
 def test_prbs_balanced():
     b = prbs(32767)
     assert b.size == 32767
+    # a maximal-length PRBS has exactly one more 1 than 0 in 2^15-1 bits:
+    # 0.50002 measured, so the window only guards against a broken generator
     assert 0.48 < b.mean() < 0.52
 
 
@@ -46,4 +48,6 @@ def test_sspll_two_point_markulic_class():
     e0 = _run(_markulic(0.2503), 40e6, 2.5e6, 1.0, seed=2)
     assert e0["evm_pct"] < 2.0          # published class: -40 dB = 1%
     e10 = _run(_markulic(0.2503), 40e6, 2.5e6, 1.10, seed=2)
+    # a 10 % gain mismatch between the two modulation points is the classic
+    # two-point failure; 1.8x is the "it clearly got worse" divider
     assert e10["evm_pct"] > 1.8 * e0["evm_pct"]

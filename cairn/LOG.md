@@ -12,12 +12,13 @@ This file records substantive progress in reverse-chronological order — newest
 - Pitfall recorded in `cairn/compiled-kernels.md`: the gate is one venv with
   *both*, not whichever mypy is on PATH.
 
-## 2026-09-10 · Tolerance provenance, batches 1-3 (plan item 25)
+## 2026-09-10 · Tolerance provenance, batches 1-4 (plan item 25)
 
-- ~45 of the bare tolerance bounds in `tests/` now say where the number came
+- ~60 of the bare tolerance bounds in `tests/` now say where the number came
   from: the measured value with seed and run length, or the statistic it is
   a multiple of.  Covered: conventions, digital impairments, block units,
-  core units, phase units, and the five architecture files.
+  core units, phase units, the five architecture files, and the synthesis,
+  colored-noise, settling, modulation and drift files.
 - Convention written down in CONTRIBUTING ("A tolerance says where it came
   from"): algebra / measurement / statistic, and say what you measured when
   you widen one.
@@ -25,9 +26,15 @@ This file records substantive progress in reverse-chronological order — newest
   against a 5 LSB bound (a bang-bang loop cannot beat its own LSB, so that
   bound has one LSB of margin by design, not by luck), and the SSPLL's
   false-lock test lands on -1.0000 fref to four decimals.
+- Third finding: `design_sspll_filter` is the one synthesis call that uses
+  most of its window (-1.7 % UGB, -2.2 deg PM against 6 % / 3.5 deg), because
+  it targets the exact sampled model at UGB/fref = 1/19; the CP and DLF
+  designs land inside 0.13 % and exactly.  Tightening that one would be false
+  precision, and the comment now says so.
 - The remaining bare sites are mostly GUI smoke bounds ("did it produce a
-  plausible number"); the cross-domain `worst_db` ones only looked bare to a
-  line scanner -- their provenance is in the enclosing docstring.
+  plausible number") and `abs=1e-9` identities; the cross-domain `worst_db`
+  ones only looked bare to a line scanner -- their provenance is in the
+  enclosing docstring.
 
 ## 2026-09-10 · P4: the six loops are kernels, compiled by numba when it is there
 
