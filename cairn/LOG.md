@@ -2,6 +2,25 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-10 · P4: the six loops are kernels, compiled by numba when it is there
+
+- Every engine loop and every block's per-cycle arithmetic is a plain
+  function under `core.jit.kernel`; `pip install -e .[fast]` compiles them,
+  otherwise the same function interprets.  Measured 12-40x on the
+  once-per-edge loops, ~50x oversampled, 4-7x where the FFT dominates.
+  Decision (numba over the plan's Cython), the old-vs-new goldens (ILCM /
+  MDLL / ADPLL bit-identical; the analog loops at 1e-9 because BLAS left the
+  loop filter), the BBPD coin-flip realization change and every pitfall are
+  in `cairn/compiled-kernels.md`.
+- Gate: `tests/test_kernels.py` runs all 18 presets both ways in
+  subprocesses and requires bit-identity.  It went red twice before it went
+  green: numba's `np.exp`/`**`, then numpy-scalar complex division in the
+  interpreted path (one bit, once in 3000 cycles), found by logging and
+  replaying every filter update.  Both are rules in `core/jit.py` now.
+- Pitfall: the container's mypy passed while the CI stack's (numpy 2.4.6
+  stubs) flagged `fine = None` on an ndarray-typed local; `venv_ci` is the
+  gate to run, not the system mypy.
+
 ## 2026-09-10 · v0.9.4 released; the hand-typed test count was 14 short
 
 - PR #59 squash-merged (ad2db99); auto-release tagged v0.9.4 on that

@@ -11,6 +11,7 @@ from dataclasses import dataclass
 import numpy as np
 
 from ..core.colored import OscPhaseNoiseGen
+from ..core.jit import kernel
 from ..core.noise import LeesonOscillator
 
 
@@ -181,9 +182,16 @@ class OscConfig:
         The control voltage is clamped to ``[v_min, v_max]`` when a range is set,
         so a band that cannot reach the target rails instead of pretending to.
         """
-        v = self.clamp_v(v)
-        f_band = self.band_center_hz(band)
-        return f_band + self.gain * v * (1.0 + self.nl1 * v + self.nl2 * v * v)
+        return float(osc_freq_law(float(v), int(band), *self.law_params()))
+
+    # ---- kernel view: the law's scalars as a compiled loop takes them
+    def law_params(self) -> tuple[float, float, float, float, float, int, float, float]:
+        """(f0, gain, nl1, nl2, band_step_hz, n_bands, v_lo, v_hi); an unset
+        range bound is +/-inf, which clamps nothing."""
+        return (float(self.f0), float(self.gain), float(self.nl1), float(self.nl2),
+                float(self.band_step_hz), int(self.n_bands),
+                -np.inf if self.v_min is None else float(self.v_min),
+                np.inf if self.v_max is None else float(self.v_max))
 
     def kvco_at(self, v: float) -> float:
         """Local small-signal gain df/dv at operating point v."""
@@ -209,6 +217,27 @@ class OscConfig:
         return float(real[np.argmin(np.abs(real - target))])
 
 
+@kernel
+def osc_freq_law(v: float, band: int, f0: float, gain: float, nl1: float, nl2: float,
+                 band_step: float, n_bands: int, v_lo: float, v_hi: float) -> float:
+    """f(v, band): clamp to the range, band offset, Kvco with nonlinearity."""
+    v = max(v, v_lo)
+    v = min(v, v_hi)
+    f_band = f0 if n_bands <= 1 else f0 + (band - (n_bands - 1) / 2.0) * band_step
+    return f_band + gain * v * (1.0 + nl1 * v + nl2 * v * v)
+
+
+@kernel
+def osc_freq(v: float, band: int, v_supply: float, f_pull: float, pushing_hz_v: float,
+             f0: float, gain: float, nl1: float, nl2: float, band_step: float,
+             n_bands: int, v_lo: float, v_hi: float) -> float:
+    """The law plus supply pushing and injection pulling for one cycle."""
+    f = osc_freq_law(v, band, f0, gain, nl1, nl2, band_step, n_bands, v_lo, v_hi)
+    if pushing_hz_v != 0.0:
+        f += pushing_hz_v * v_supply
+    return f + f_pull
+
+
 class Oscillator:
     def __init__(self, cfg: OscConfig, fs: float, rng: np.random.Generator,
                  noise: bool = True, name: str = "vco"):
@@ -220,10 +249,9 @@ class Oscillator:
 
     def freq(self, ctrl: float, v_supply: float = 0.0,
              f_pull: float = 0.0) -> float:
-        f = self.cfg.freq_law(ctrl, self.band)
-        if self.cfg.pushing_hz_v != 0.0:
-            f += self.cfg.pushing_hz_v * v_supply
-        return f + f_pull
+        return float(osc_freq(float(ctrl), int(self.band), float(v_supply),
+                              float(f_pull), float(self.cfg.pushing_hz_v),
+                              *self.cfg.law_params()))
 
     def pull_hz(self, n_cycles: int, tref: float) -> np.ndarray:
         """Per-cycle frequency perturbation from an aggressor [Hz].

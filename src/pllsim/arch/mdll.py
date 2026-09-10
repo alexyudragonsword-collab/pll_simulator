@@ -26,13 +26,15 @@ sawtooth-of-random-walk noise floor.
 from __future__ import annotations
 
 from dataclasses import dataclass
+from typing import Any
 
 import numpy as np
 
-from ..blocks.oscillator import OscConfig, Oscillator
+from ..blocks.oscillator import OscConfig, Oscillator, osc_freq_law
 from ..core.colored import synth_from_psd
 from ..core.engine import postprocess
 from ..core.freqresp import FreqResponse, LoopMetrics, default_grid
+from ..core.jit import kernel, sgn
 from ..core.jitter import ipn_dbc, rms_jitter_fs
 from ..core.noise import FlickerFloorPhase, NoisePath, NoiseSource, output_psd
 from ..core.results import AnalysisResult, SimResult
@@ -42,6 +44,7 @@ from .base import (
     attach_fine,
     flicker_corner_hz,
     no_fine_note,
+    osc_law_args,
     pull_hz,
     pull_notes,
     pull_spur,
@@ -76,6 +79,47 @@ class MDLLConfig:
         if abs(n - round(n)) > 1e-9:
             raise ValueError("MDLL requires integer fout/fref")
         return int(round(n))
+
+
+@kernel
+def mdll_kernel(n_cycles: int, tref: float, fout: float, f_free_error: float,
+                pushing: float, f0: float, gain: float, nl1: float, nl2: float,
+                band_step: float, n_bands: int, v_lo: float, v_hi: float,
+                v_sup: np.ndarray, f_pull: np.ndarray, osc_noise: np.ndarray,
+                jit_ref: np.ndarray, noise_on: bool, mux_jitter: float, zn: np.ndarray,
+                calibration: bool, tune_ki: float, m_os: int, fine: np.ndarray,
+                phase_err: np.ndarray, freq_out: np.ndarray, ctrl: np.ndarray) -> int:
+    """One reference cycle per iteration: drift, edge replacement, digital
+    tuning.  Returns the normal draws consumed."""
+    prev_on = 0.0
+    e = 0.0                       # output phase error at select instants
+    tune_acc = 0.0                # DCO integrator [LSB]
+    zi = 0
+    for nn in range(n_cycles):
+        d_osc = osc_noise[nn] - prev_on
+        prev_on = osc_noise[nn]
+        f_free = (osc_freq_law(tune_acc, 0, f0, gain, nl1, nl2, band_step, n_bands,
+                               v_lo, v_hi)
+                  + f_free_error + pushing * v_sup[nn] + f_pull[nn])
+        dphi_drift = TWOPI * (f_free - fout) * tref
+        e_pre = e + dphi_drift + d_osc
+        if m_os > 1:
+            for k in range(m_os):
+                fine[nn * m_os + k] = e + (dphi_drift + d_osc) * k / m_os
+        # edge replacement: output phase becomes the reference/mux edge
+        phi_inj = TWOPI * fout * jit_ref[nn]
+        if noise_on and mux_jitter > 0:
+            phi_inj += TWOPI * fout * (mux_jitter * zn[zi])
+            zi += 1
+        # digital tuning loop observes the pre-select error (BB + integ.)
+        if calibration:
+            tune_acc -= tune_ki * sgn(e_pre - phi_inj)
+        e = phi_inj
+
+        phase_err[nn] = e
+        freq_out[nn] = f_free
+        ctrl[nn] = tune_acc
+    return zi
 
 
 class MDLL(PLLBase):
@@ -143,39 +187,21 @@ class MDLL(PLLBase):
             c.fref, n_cycles, rng) / (TWOPI * c.fref)) if noise else np.zeros(n_cycles)
 
         osc_noise = osc.noise_steps(n_cycles) if noise else np.zeros(n_cycles)
-        prev_on = 0.0
-
-        e = 0.0                       # output phase error at select instants
-        tune_acc = 0.0                # DCO integrator [LSB]
         phase_err = np.empty(n_cycles)
         freq_out = np.empty(n_cycles)
         ctrl = np.empty(n_cycles)
         m_os = max(int(fine_oversample), 1)
-        fine = np.empty(n_cycles * m_os) if m_os > 1 else None
-
-        for nn in range(n_cycles):
-            d_osc = osc_noise[nn] - prev_on
-            prev_on = osc_noise[nn]
-            f_free = (c.osc.freq_law(tune_acc) + f_free_error
-                      + c.osc.pushing_hz_v * v_sup[nn] + f_pull[nn])
-            dphi_drift = TWOPI * (f_free - c.fout) * tref
-            e_pre = e + dphi_drift + d_osc
-            if fine is not None:
-                fine[nn * m_os:(nn + 1) * m_os] = \
-                    e + (dphi_drift + d_osc) * np.arange(m_os) / m_os
-            # edge replacement: output phase becomes the reference/mux edge
-            phi_inj = TWOPI * c.fout * jit_ref[nn]
-            if noise and c.mux_jitter_rms_s > 0:
-                phi_inj += TWOPI * c.fout * rng.normal(0.0, c.mux_jitter_rms_s)
-            # digital tuning loop observes the pre-select error (BB + integ.)
-            if calibration:
-                s = np.sign(e_pre - phi_inj)
-                tune_acc -= c.tune_ki_lsb * s
-            e = phi_inj
-
-            phase_err[nn] = e
-            freq_out[nn] = f_free
-            ctrl[nn] = tune_acc
+        fine_rec = np.empty(n_cycles * m_os) if m_os > 1 else np.empty(0)
+        # one standard-normal draw per cycle at most (the mux jitter)
+        zn = (rng.standard_normal(n_cycles)
+              if noise and c.mux_jitter_rms_s > 0 else np.zeros(0))
+        args: tuple[Any, ...] = (n_cycles, tref, float(c.fout), float(f_free_error),
+                    float(c.osc.pushing_hz_v), *osc_law_args(c.osc), v_sup, f_pull,
+                    osc_noise, jit_ref, bool(noise), float(c.mux_jitter_rms_s), zn,
+                    bool(calibration), float(c.tune_ki_lsb), m_os, fine_rec, phase_err,
+                    freq_out, ctrl)
+        mdll_kernel(*args)
+        fine: np.ndarray | None = fine_rec if m_os > 1 else None
 
         t = np.arange(n_cycles) * tref
         sim = SimResult(fs=c.fref, f0=c.fout, t=t, phase_err_out=phase_err,

@@ -205,6 +205,23 @@ blanket ignore reads as "type-checked".
   blank.  A sub-sampling loop reports no reference spur *because it has none*,
   and that sentence is the deliverable.
 
+* **The per-cycle code is a kernel, and it has two readers.**  Every
+  engine loop and every block's per-cycle arithmetic is a plain function of
+  scalars and arrays under `core.jit.kernel`; numba compiles it when the
+  `[fast]` extra is installed and Python runs it otherwise, and
+  `tests/test_kernels.py` requires the two to agree to the last bit on every
+  preset.  The rules that keep them agreeing are in the `core/jit.py`
+  docstring — `math.*` not `np.*` on scalars, no `**`, no numpy array
+  operations in the loop, complex division written out, random draws from a
+  pool through a cursor — and every one of them was found by breaking it.
+  A block gets its state as an array and its parameters as scalars; the
+  `*_kernel_args()` helpers in `arch/base.py` build those runs from the
+  block objects, and the kernel call takes them as one tuple (mypy cannot
+  count arguments after a star-argument of unknown length).  A new random
+  draw is one more slot per cycle in the pool and one more cursor step, in
+  the place the object used to draw; `cairn/compiled-kernels.md` has the
+  measurements and the pitfalls.
+
 ## Testing
 
 Two habits this codebase learned the hard way.

@@ -299,3 +299,79 @@ def run_band_select(osc, cfg, rng, noise: bool, enabled: bool = True):
         bs.observe(f_meas)
     osc.band = bs.band
     return np.asarray(bs.trace, dtype=float)
+
+
+# ---------------------------------------------------------------- kernels
+# The engines' compiled loops (core.jit) take block state as arrays and block
+# parameters as scalars, in fixed runs of arguments.  These build those runs
+# from the block objects, with the "absent" shape when a block is not wired,
+# so every engine spells the hand-off the same way and mypy can follow it.
+
+def osc_law_args(osc_cfg) -> tuple[float, float, float, float, float, int, float, float]:
+    """OscConfig.law_params() with its length visible to a type checker: the
+    engines' configs are typed Any on the base class, and a star-argument of
+    unknown length makes mypy count every argument after it as one too many."""
+    return osc_cfg.law_params()
+
+
+def dtc_kernel_args(dtc_cfg) -> tuple[float, float, int, np.ndarray, bool, float,
+                                      float, float, float]:
+    """(range_s, t_res, code_max, inl_poly, has_sin, sin_amp, sin_cyc,
+    sin_ph, jitter_rms_s) of a DTCConfig, or the inert run for None."""
+    if dtc_cfg is None:
+        return (0.0, 1.0, 1, np.zeros(0), False, 0.0, 0.0, 0.0, 0.0)
+    poly, has_sin, amp, cyc, ph = dtc_cfg.inl_arrays()
+    return (float(dtc_cfg.range_s), float(dtc_cfg.t_res),
+            (1 << int(dtc_cfg.n_bits)) - 1, poly, has_sin, amp, cyc, ph,
+            float(dtc_cfg.jitter_rms_s))
+
+
+def mash_kernel_args(mash, frac_cfg) -> tuple[bool, int, int, np.ndarray, int]:
+    """(has_mash, order, bits, state, frac_word)."""
+    if mash is None or frac_cfg is None:
+        return (False, 1, 1, np.zeros(8, dtype=np.int64), 0)
+    return (True, int(frac_cfg.mash_order), int(frac_cfg.bits), mash.st,
+            int(frac_cfg.frac_word))
+
+
+def cal_kernel_args(cal) -> tuple[bool, int, np.ndarray, float, float, float, float,
+                                  bool]:
+    """(has_cal, kind, state, mu, mu_final, gear_shift_n, ema, center_err) of
+    an LMS gain calibrator; the state array is what the engine loads back."""
+    from ..calibration.lms import CAL_STATE
+    if cal is None:
+        return (False, 0, np.zeros(CAL_STATE), 0.0, float("nan"), -1.0, 0.0, False)
+    return (True, int(cal.kind), cal.state(), *cal.params())
+
+
+def lut_kernel_args(lut_cal, n_cycles: int) -> tuple[bool, np.ndarray, np.ndarray,
+                                                    np.ndarray, np.ndarray, float,
+                                                    float, int, float, float, int,
+                                                    np.ndarray]:
+    """(has_lut, lut, counts, xs, state, lo, hi, k, mu, ema, ortho_every,
+    snapshots) of a LUT calibrator."""
+    if lut_cal is None:
+        z = np.zeros(1)
+        return (False, z, z, z, np.zeros(2), 0.0, 1.0, 1, 0.0, 0.0, 1,
+                np.zeros((0, 1)))
+    snaps = np.empty((n_cycles // int(lut_cal.ortho_every) + 1, int(lut_cal.k)))
+    return (True, lut_cal.lut, lut_cal.counts, lut_cal._x, lut_cal.state(),
+            float(lut_cal.lo), float(lut_cal.hi), int(lut_cal.k), float(lut_cal.mu),
+            float(lut_cal._ema), int(lut_cal.ortho_every), snaps)
+
+
+def fll_kernel_args(fll) -> tuple[bool, np.ndarray, float, float, int, float, float,
+                                  float, int]:
+    """(has_fll, state, n_target, fref, window, f_engage, f_release, i_fll,
+    hyst) of an FLL state machine."""
+    if fll is None:
+        return (False, np.zeros(5), 0.0, 1.0, 1, 0.0, 1.0, 0.0, 1)
+    return (True, fll.st, *fll.params())
+
+
+def lockdet_kernel_args(det) -> tuple[bool, np.ndarray, float, int, int]:
+    """(has_det, state, window_s, count, down_weight) of a lock detector."""
+    if det is None:
+        return (False, np.zeros(4, dtype=np.int64), 0.0, 1, 0)
+    return (True, det.st, float(det.cfg.window_s), int(det.cfg.count),
+            int(det.cfg.down_weight))

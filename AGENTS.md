@@ -121,6 +121,8 @@ what you measured, not what you expect.
 
 ```bash
 pytest tests/ -q                    # ~18 min.  Use -k <name> while iterating.
+PLLSIM_JIT=0 pytest tests/ -q       # interpreted kernels; the default compiles them
+                                    # when numba is installed (pip install -e .[fast])
 ruff check src tests examples packaging docs
 mypy                                # file list in pyproject.toml
 QT_QPA_PLATFORM=offscreen pytest tests/test_guiqt_smoke.py -q

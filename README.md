@@ -66,7 +66,8 @@ Coverage targets: fref = 19.2–500 MHz, fout up to 12 GHz, integrated jitter
 
 ```bash
 pip install -e .          # numpy, scipy, matplotlib
-pytest tests/             # 958 tests: closed-form math + architecture behavior
+pip install -e .[fast]    # + numba: the time-domain loops compile, 10-50x faster
+pytest tests/             # 962 tests: closed-form math + architecture behavior
 python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 ```
 
@@ -86,6 +87,15 @@ pllsim sweep spll_100m_8g --field cp.icp --values 0.5m,1m,2m
 pllsim corners adpll_100m_10g          # PVT report;  pllsim export ... --out dir
 pllsim config sspll_19p2m_4p8g --set fll_i=1u --out my.pllsim.json   # then --config my.pllsim.json anywhere
 ```
+
+**Speed.**  Every time-domain loop is a *kernel* (`core/jit.py`): with the
+`[fast]` extra installed, numba compiles it on first use and caches the
+machine code; without it the very same function runs as Python, so there is
+no second implementation.  Measured on 40k cycles: 12–40× on the
+once-per-edge loops, ~50× with `fine_oversample=64`, 4–7× where the FFT
+post-processing already dominated (ILCM, MDLL, the counter ADPLL).  The
+two paths are held bit-identical for every preset by `tests/test_kernels.py`;
+`PLLSIM_JIT=0` forces the Python path.
 
 Every field takes the forms' notation — `19.2M`, `680p`, `2ms`, `100k` — in
 the GUIs, in `--set`, and in the sensitivity gate that drives them.  A
@@ -297,7 +307,7 @@ All calibrators record `.trace` for convergence plots
 ```
 src/pllsim/
   core/        freqresp, noise, jitter, fom, spectrum, colored, deltasigma,
-               engine, results, dtcspurs, tdcspurs, boundaries
+               engine, results, dtcspurs, tdcspurs, boundaries, jit
   blocks/      loopfilter, oscillator, chargepump, dtc, tdc, sampler, lockdetect
   calibration/ lms, gain_cal, ftl
   arch/        base, cppll, sspll, spll, adpll, ilcm, mdll
@@ -318,7 +328,10 @@ tests/         closed-form core math + architecture-level regressions
 `ruff` on `src tests examples packaging`; `mypy` on the whole package
 (`files = ["src/pllsim"]` in `pyproject.toml` — `export/` and `webgui/` were
 the last two paths outside, fixed rather than silenced); the full test suite
-on Python 3.11 and 3.12 with a coverage floor.
+on Python 3.11 and 3.12 with a coverage floor, and on the declared floor
+(3.10, numpy 1.24) without numba; the 3.11/3.12 jobs install `[fast]`, so
+the compiled kernels are what most of the suite exercises there and the
+bit-identity test compares them against the interpreted ones.
 
 Two things the coverage number does not say.  The Streamlit pages are driven
 by 23 tests through `AppTest`, which execs each file rather than importing it,
