@@ -146,8 +146,21 @@ def cythonize(tree: Path) -> list[Path]:
 
 def compile_c(csrc: Path, include_dirs: list[Path], cc: str,
               extra: list[str], libdir: Path | None) -> Path:
+    """Compile one cythonised module.
+
+    ``-Werror=implicit-function-declaration`` matches the NDK clang's default,
+    which the host's compiler does not apply.  It does **not** make ``--host``
+    a complete proxy, and the case that taught this says why: Cython lowers
+    ``abs()`` on a complex to ``cabs()`` and only includes ``<complex.h>``
+    when it sees ``_Complex_I`` already defined -- which glibc's headers do
+    transitively and bionic's do not.  So the identical generated C built
+    green on the host and failed the cross build.  ``-include complex.h``
+    below closes that specific hole for the cross build; the flag here
+    catches the rest of the class.
+    """
     so = csrc.with_suffix(".so")
-    cmd = [cc, "-shared", "-fPIC", "-O2", "-fvisibility=hidden"]
+    cmd = [cc, "-shared", "-fPIC", "-O2", "-fvisibility=hidden",
+           "-Werror=implicit-function-declaration"]
     for inc in include_dirs:
         cmd += ["-I", str(inc)]
     cmd += extra + ["-o", str(so), str(csrc)]
@@ -277,7 +290,11 @@ def main() -> int:
                  f"{TRIPLETS[args.abi]}{API_LEVEL}-clang")
         if not Path(cc).exists():
             raise SystemExit(f"no compiler at {cc}")
-        extra = []
+        # Cython emits calls to libm's complex functions (cabs, cpow) behind
+        # macros whose header it includes only when <complex.h> already came
+        # in transitively.  glibc does that, bionic does not, so the same
+        # generated C compiled on the host and failed here.  Force the header.
+        extra = ["-include", "complex.h"]
         tag = (f"{PY_TAG}-{PY_TAG}-android_{API_LEVEL}_"
                f"{args.abi.replace('-', '_')}")
 

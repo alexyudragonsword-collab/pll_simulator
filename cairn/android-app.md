@@ -331,6 +331,13 @@ results are the desktop's to the last bit.
 takes 30 ms compiled takes the old 0.4-1.4 s interpreted; the phone's
 defaults were chosen for that budget.
 
+**Pitfall:** the first kernel version used `abs()` on a complex, which
+Cython lowers to `cabs()` without pulling in `<complex.h>` on bionic.  The
+interpreted APK built and uploaded; the compiled one failed to
+cross-compile, and `packaging/android_wheel.py --host` had been green.
+See `cairn/compiled-kernels.md` for the fix and why `--host` did not catch
+it.
+
 ### Fit: the analyzer's CSV through a text box (2026-09-09)
 
 The 11th tab.  Bridge `fit(text, mode, preset)` runs the same three fits

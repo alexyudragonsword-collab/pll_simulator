@@ -97,6 +97,20 @@ kernel, then cached under `__pycache__`).
   rounds; a `rounds > 8` run would differ at the ULP.
 - `LUTCal`'s projection used `w @ lut`; now a serial sum.  ULP-level on the
   one LUT test, inside its 20 % margin.
+- **`abs()` on a complex breaks the Android build, and `--host` will not
+  tell you.**  Cython lowers it to `cabs()` and includes `<complex.h>` only
+  where `_Complex_I` is already defined -- glibc's headers do that
+  transitively, bionic's do not, so the *identical* generated C compiled
+  green on the host and failed the NDK cross build with "call to undeclared
+  library function 'cabs'".  The APK's interpreted half had already built
+  and uploaded when the compiled half died.  Fixed three ways: the kernels
+  use `loopfilter.cmag` (an explicit `sqrt(re*re + im*im)`, which all three
+  lowerings agree on -- `abs(complex)` is libm `hypot` while `math.hypot`
+  is CPython's correctly-rounded one, and those differ in 48 of 100 000
+  draws); the cross compile passes `-include complex.h`; and `compile_c`
+  now sets `-Werror=implicit-function-declaration` like the NDK does.  That
+  last flag does **not** reproduce this case on the host (measured: the
+  build still passes), so do not treat `--host` as a full proxy.
 - **Coverage cannot see inside a compiled kernel.**  Installing the `[fast]`
   extra in the coverage job dropped the reported total from 92.4 % to
   84.0 % and failed the 88 % floor while all 887 tests passed: numba never

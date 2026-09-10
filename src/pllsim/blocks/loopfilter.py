@@ -78,6 +78,27 @@ def cdiv(a: complex, b: complex) -> complex:
 
 
 @kernel
+def cmag(z: complex) -> float:
+    """|z| in real arithmetic, for a branch threshold.
+
+    Not `abs(z)`: Cython lowers that to `cabs()`, and the NDK's clang -- unlike
+    the host compiler, which only warns -- rejects the implicit declaration,
+    so the Android APK's compiled half failed to build while everything else
+    was green.  A plain sqrt is also the one form all three lowerings
+    (CPython, numba, Cython) agree on: CPython's `abs(complex)` is libm
+    `hypot`, `math.hypot` is CPython's own correctly-rounded version, and
+    they differ in 48 of 100 000 draws.
+
+    Only ever compared against a threshold here, so the last bit does not
+    reach a result; the two branches it selects agree to 1e-16 where they
+    meet (test_seg_integral_branches_agree_where_they_meet).  It would
+    overflow above |z| ~ 1e154, which a passive RC filter's eigenvalues
+    cannot reach.
+    """
+    return math.sqrt(z.real * z.real + z.imag * z.imag)
+
+
+@kernel
 def cexpm1(z: complex) -> complex:
     """expm1 of a complex number, computed the way numpy computes it."""
     s = math.sin(z.imag / 2.0)
@@ -127,7 +148,7 @@ def lf_pulse(x: np.ndarray, ad: np.ndarray, b: np.ndarray, w: np.ndarray,
     for k in range(n):
         wt = w[k] * t_on
         ew = cmath.exp(wt)
-        if abs(wt) < 1e-8:
+        if cmag(wt) < 1e-8:
             g = t_on * (1.0 + wt / 2.0 + cdiv(wt * wt, complex(6.0, 0.0)))
         else:
             g = cdiv(ew - 1.0, w[k])
@@ -166,7 +187,7 @@ def seg_integral(t: float, a: float, b: float, wk: complex, tstep: float) -> com
     """
     p = max(t - a, 0.0)
     q = max(t - b, 0.0)
-    if abs(wk) * tstep < 1e-8:
+    if cmag(wk) * tstep < 1e-8:
         return (p - q) + 0.5 * wk * (p * p - q * q)
     # expm1 rather than exp: for a slow pole the two exponentials are both
     # near 1 and their difference is all cancellation
