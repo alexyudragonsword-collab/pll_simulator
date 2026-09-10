@@ -25,6 +25,7 @@ def test_integer_cycle_inl_is_a_single_harmonic():
     """A whole number of INL cycles across the range is one Fourier term."""
     ck = inl_fourier_coeffs((2e-12, 3, 0.0), n_harm=8)
     assert ck[2] == pytest.approx(2e-12, rel=1e-3)     # k = 3
+    # the other lines read 2.6e-28 (quadrature round-off) against a 2e-12 line
     assert np.max(np.delete(ck, 2)) < 1e-15
 
 
@@ -38,6 +39,8 @@ def test_a_partly_swept_range_spreads_one_cycle_over_every_harmonic():
     """
     full = inl_fourier_coeffs((2e-12, 3, 0.0), 1.0, n_harm=8)
     part = inl_fourier_coeffs((2e-12, 3, 0.0), 0.78, n_harm=8)
+    # measured 2026-09-10 at span 0.78: the k=3 line drops to 0.397 of the
+    # full one, k=2 comes up to 0.856 of it; energy ratio 0.999
     assert part[2] < 0.6 * full[2], "the declared line must lose energy"
     assert part[1] > 0.2 * full[2], "and the neighbours must gain it"
     # nothing is created: the spread is a redistribution, not a gain
@@ -49,7 +52,7 @@ def test_code_span_is_the_period_over_the_range():
     assert code_span(_tdc(()), 10e9) == pytest.approx(1.0)
     # the preset's TDC deliberately overshoots one period
     span = code_span(presets.adpll_100m_10g().cfg.tdc, 10e9)
-    assert 0.7 < span < 0.85
+    assert 0.7 < span < 0.85      # 0.784 for the preset's 0.5 ps x 255 range
 
 
 def test_inl_spur_lands_on_the_beat_harmonic():
@@ -59,7 +62,7 @@ def test_inl_spur_lands_on_the_beat_harmonic():
     want = min((3 * frac) % 1.0, 1.0 - (3 * frac) % 1.0) * fref
     assert len(tab) == 1
     off, dbc = next(iter(tab.items()))
-    assert off == pytest.approx(want, rel=1e-6)
+    assert off == pytest.approx(want, rel=1e-6)     # 39 MHz, exact
     # 2*pi*fout*amp/2 with no loop shaping
     assert dbc == pytest.approx(20 * np.log10(np.pi * 10e9 * 2e-12), abs=0.1)
 
@@ -83,6 +86,9 @@ def test_predicted_inl_spur_matches_the_time_domain(amp_ps):
     p.cfg.tdc.inl_sin = (amp_ps * 1e-12, 2, 0.0)
     want = p.analyze().spurs_analytic["frac_spur@600000Hz"]
     got = p.simulate(120000, noise=False, calibration=False, seed=1).spurs_fft
+    # measured 2026-09-10: sim -28.49 vs -28.18 (2 ps) and -19.63 vs -18.64
+    # (6 ps): -0.3 and -1.0 dB, the larger INL walking further into the TDC's
+    # nonlinearity than the first-order line; the span bug was 4.3 dB
     assert got[600e3] == pytest.approx(want, abs=1.5)
 
 
@@ -117,7 +123,7 @@ def test_metastability_costs_gain_in_closed_form():
     """Kbb(W)/Kbb(0) = exp(-W^2/2 sigma^2); a window of sigma is 4.34 dB."""
     assert meta_gain_penalty(0.0, 1e-12) == 1.0
     assert meta_gain_penalty(1e-12, 1e-12) == pytest.approx(np.exp(-0.5))
-    assert 20 * np.log10(meta_gain_penalty(1e-12, 1e-12)) == pytest.approx(-4.34, abs=0.02)
+    assert 20 * np.log10(meta_gain_penalty(1e-12, 1e-12)) == pytest.approx(-4.34, abs=0.02)   # -4.3429
 
 
 def test_metastability_matches_a_measured_characteristic():
@@ -129,6 +135,8 @@ def test_metastability_matches_a_measured_characteristic():
     means = [np.mean([bb.sample(dt) for _ in range(200000)]) for dt in dts]
     slope = (means[1] - means[0]) / (dts[1] - dts[0])
     want = np.sqrt(2 / np.pi) / sigma * meta_gain_penalty(w, sigma)
+    # measured 2026-09-10 (seed 0, 2 x 200k decisions): slope/want = 0.990;
+    # the binomial spread of the two means is ~0.5 % of the slope
     assert slope == pytest.approx(want, rel=0.05)
 
 
@@ -145,6 +153,7 @@ def test_metastability_is_reported_from_the_time_domain():
     p = presets.adpll_bb_100m_10g()
     p.cfg.bb_meta_window_s = 2e-12
     sim = p.simulate(20000)
+    # a 2 ps window on a 100 fs-jitter detector: 34 % of decisions measured
     assert sim.extra["bbpd_metastable_frac"] > 0.0
     assert any("coin flip" in n for n in sim.notes)
 
@@ -192,6 +201,9 @@ def test_pulling_agrees_across_domains(name, m_os):
     want = p.analyze().spurs_analytic["pull_spur"]
     kw = {} if m_os is None else {"fine_oversample": m_os}
     got = p.simulate(30000, noise=False, **kw).spurs_fft[off]
+    # measured 2026-09-10: +0.49 / +0.58 / +0.58 / +0.58 / +0.58 / +0.09 /
+    # -0.11 dB in the parametrize order; the periodogram's +0.5 dB on a
+    # narrowband line of a 30k record is the common part
     assert abs(got - want) < 1.0, f"{name}: sim {got:.2f} vs analytic {want:.2f}"
 
 
@@ -214,6 +226,7 @@ def test_loop_suppresses_pulling_only_inside_its_bandwidth():
     p.cfg.osc.pull_offset_hz = 20.0 * f_ugb
     got_out = p.analyze().spurs_analytic["pull_spur"]
     bare_out = 20 * np.log10(f_l / (20.0 * f_ugb) / 2)
+    # measured 2026-09-10: 27.8 dB of rejection at UGB/20, +0.04 dB at 20 UGB
     assert abs(got_out - bare_out) < 0.5, "out of band the loop does nothing"
 
 
@@ -224,7 +237,7 @@ def test_corner_moves_the_loop_and_does_not_retune_it():
     slow = corners.apply_corner(p, corners.SS_HOT).analyze().loop.f_ugb
     fast = corners.apply_corner(p, corners.FF_COLD).analyze().loop.f_ugb
     assert slow < nom < fast
-    assert fast / slow > 1.8, "the whole point is that the bandwidth moves"
+    assert fast / slow > 1.8, "the whole point is that the bandwidth moves"   # 2.16 measured
 
 
 def test_apply_corner_leaves_the_original_alone():

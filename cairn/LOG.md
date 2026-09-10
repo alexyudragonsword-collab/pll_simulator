@@ -2,6 +2,23 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-10 · Tolerance provenance, batches 1-3 (plan item 25)
+
+- ~45 of the bare tolerance bounds in `tests/` now say where the number came
+  from: the measured value with seed and run length, or the statistic it is
+  a multiple of.  Covered: conventions, digital impairments, block units,
+  core units, phase units, and the five architecture files.
+- Convention written down in CONTRIBUTING ("A tolerance says where it came
+  from"): algebra / measurement / statistic, and say what you measured when
+  you widen one.
+- Two findings worth keeping: the ILCM's FTL residual sits at exactly -4 LSB
+  against a 5 LSB bound (a bang-bang loop cannot beat its own LSB, so that
+  bound has one LSB of margin by design, not by luck), and the SSPLL's
+  false-lock test lands on -1.0000 fref to four decimals.
+- The remaining bare sites are mostly GUI smoke bounds ("did it produce a
+  plausible number"); the cross-domain `worst_db` ones only looked bare to a
+  line scanner -- their provenance is in the enclosing docstring.
+
 ## 2026-09-10 · P4: the six loops are kernels, compiled by numba when it is there
 
 - Every engine loop and every block's per-cycle arithmetic is a plain

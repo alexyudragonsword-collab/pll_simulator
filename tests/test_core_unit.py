@@ -57,6 +57,8 @@ def test_find_spurs_subtracts_the_noise_pedestal():
     clean = find_spurs(*periodogram_psd(tone, fs), [fo])[fo]
     noisy = find_spurs(*periodogram_psd(tone + rng.normal(0, 3e-5, n), fs),
                        [fo])[fo]
+    # 3e-5 rms of noise under a 1e-3 tone: measured 0.02 dB of pull on the
+    # reported spur, so 0.3 dB is an order of magnitude of room
     assert abs(noisy - clean) < 0.3
 
 
@@ -74,6 +76,8 @@ def test_rms_jitter_matches_a_hand_integrated_flat_psd():
     s = np.full_like(f, level)
     f0, f1, f2 = 1e10, 1e4, 1e7
     want = np.sqrt(level * (f2 - f1)) / (TWOPI * f0) * 1e15
+    # measured +5.8e-4 relative: the trapezoid over a 20001-point log grid
+    # against the closed-form rectangle, i.e. the grid's error, not the code's
     assert rms_jitter_fs(f, s, f0, f1, f2) == pytest.approx(want, rel=0.01)
 
 
@@ -85,6 +89,8 @@ def test_ipn_uses_the_single_sideband_convention():
     s = np.full_like(f, 1e-14)
     f1, f2 = 1e4, 1e7
     dsb = 10 * np.log10(1e-14 * (f2 - f1))
+    # measured +0.005 dB; 3.0103 is the DSB->SSB half-power constant exactly,
+    # so the window only covers the same log-grid trapezoid error as above
     assert ipn_dbc(f, s, f1, f2) == pytest.approx(dsb - 3.0103, abs=0.05)
 
 
@@ -93,7 +99,7 @@ def test_jitter_scales_inversely_with_carrier():
     s = np.full_like(f, 1e-14)
     a = rms_jitter_fs(f, s, 1e9, 1e4, 1e7)
     b = rms_jitter_fs(f, s, 2e9, 1e4, 1e7)
-    assert a / b == pytest.approx(2.0, rel=1e-3)
+    assert a / b == pytest.approx(2.0, rel=1e-3)     # exact 1/f0 scaling; grid-identical
 
 
 # ---------------------------------------------------------------- noise sources
@@ -103,6 +109,8 @@ def test_flicker_floor_crosses_the_declared_spot():
     # flicker term adds equal power, i.e. +3 dB
     assert 10 * np.log10(src.psd(np.array([1e9]))[0] / 2) == pytest.approx(-150, abs=0.1)
     at_corner = 10 * np.log10(src.psd(np.array([1e5]))[0] / 2)
+    # floor + flicker of equal power is exactly +3.0103 dB; 0.2 dB is the
+    # window on "the corner is where the two cross", not on the arithmetic
     assert at_corner == pytest.approx(-147, abs=0.2)
 
 
@@ -141,6 +149,8 @@ def test_sampled_ktc_is_two_sigma_squared_over_fs():
     c, fs = 50e-15, 1e8
     src = nz.SampledKTC(name="ktc", unit="V^2/Hz", c_farad=c, fs=fs)
     sigma2 = 1.380649e-23 * 290.0 / c
+    # the sampled-noise factor of 2 this test exists for: closed form both
+    # sides, so 1e-3 would catch a 0.1 % slip, let alone the factor itself
     assert src.psd(np.array([1e5]))[0] == pytest.approx(2 * sigma2 / fs, rel=1e-3)
 
 
@@ -159,6 +169,8 @@ def test_tabulated_phase_interpolates_log_log_and_holds_the_ends():
     dbc = lambda x: 10 * np.log10(src.psd(np.array([x]))[0] / 2)   # noqa: E731
     assert dbc(1e2) == pytest.approx(-100.0, abs=0.1)      # held below the table
     assert dbc(1e9) == pytest.approx(-160.0, abs=0.1)      # held above it
+    # log-log midpoint of a -100/-160 table: -130 exactly if the
+    # interpolation is in the log domain, -170.0 dB out if it is linear
     assert dbc(np.sqrt(1e3 * 1e6)) == pytest.approx(-130.0, abs=0.1)
 
 
@@ -217,7 +229,7 @@ def test_postprocess_attaches_a_psd_and_a_jitter_number():
     ph = np.random.default_rng(0).normal(0, 1e-4, 1 << 14)
     out = postprocess(_sim(ph))
     assert out.f_psd is not None and out.s_phi_psd is not None
-    assert out.jitter_fs > 0
+    assert out.jitter_fs > 0      # white 1e-4 rad phase: ~3 fs at the default band
 
 
 def test_postprocess_skips_the_psd_on_a_short_record():

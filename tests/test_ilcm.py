@@ -19,11 +19,14 @@ def pll():
 
 def test_noise_model_and_jitter(pll):
     ar = pll.analyze()
-    assert 60 < ar.jitter_fs < 200
+    assert 60 < ar.jitter_fs < 200      # 113.3 fs measured 2026-09-10
     # injection bandwidth ~ -fref ln(1-beta)/2pi = 36.5 MHz
     assert 30e6 < ar.loop.f_ugb < 45e6
     # oscillator NTF is a highpass on the phase PSD
     h = ar.ntfs["h_osc"]
+    # the realignment NTF is (1-beta)/(1-(1-beta)z^-1): exactly 0 at DC (5e-17
+    # measured) and heading for 1 well past the injection bandwidth -- 0.434
+    # away from it at 100 MHz, which is why the window is 0.7 and not tighter
     assert abs(h.h[0]) < 0.01
     assert abs(abs(h.h[np.searchsorted(h.f, 100e6)]) - 1) < 0.7
 
@@ -43,7 +46,7 @@ def test_injection_spur_matches_analytic(pll):
                        fine_oversample=4)
     spur = sim.spurs_fft[250e6]
     th = injection_spur_dbc(2 * np.pi * fe / 250e6, 0.6)
-    assert abs(spur - th) < 3.0
+    assert abs(spur - th) < 3.0     # +0.93 dB measured (seed 2, M=4)
 
 
 def test_lock_range(pll):
@@ -53,12 +56,17 @@ def test_lock_range(pll):
     assert s_in.extra["slips"] == 0
     s_out = pll.simulate(20_000, seed=0, f_free_error=1.3 * bound,
                          calibration=False, noise=False)
+    # 0 slips inside the range, 6667 outside it (one per three cycles at
+    # 1.3x the bound) -- the two are three orders apart, so 100 is a divider
     assert s_out.extra["slips"] > 100
 
 
 def test_ftl_converges_and_kills_spur(pll):
     sim = pll.simulate(150_000, seed=1, f_free_error=3e6, fine_oversample=4)
     resid = 3e6 + sim.cal_traces["ftl_fcorr"][-1]
+    # measured -80 kHz = exactly -4 LSB of the 20 kHz frequency DAC: a
+    # bang-bang FTL cannot do better than its own LSB, and this one parks
+    # four of them out.  5 LSB has one LSB of margin, deliberately no more
     assert abs(resid) < 5 * pll.cfg.ftl_f_lsb
     # spur with FTL far below the uncorrected 3 MHz case (~-38 dBc)
     spur = sim.spurs_fft.get(250e6, float("nan"))

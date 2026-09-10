@@ -239,6 +239,17 @@ and kept passing after a button was inserted ahead of it.  Where the check is
 subtle, leave the mutation in the docstring so the next reader knows what it
 is guarding.
 
+**A tolerance says where it came from.**  Every bound in a test is one of
+three things, and the line should make clear which: *algebra* (both sides are
+the same expression, so `rel=1e-9` and tighter is round-off and needs no more
+than a word), *a measurement* (state the value you saw, the seed and the run
+length: `# measured 2026-09-10 (seed 5, 400k): ratio 0.999, -0.01 dB`), or
+*a statistic* (state the spread the bound is a multiple of: `1/sqrt(2N) =
+0.35 %, so 3 % is ~8 sigma`).  A bare `< 0.35` is unfalsifiable a year later
+— nobody can tell a real budget from a number that was widened until the test
+went green, which is exactly how a 4.3 dB spur error survived.  When you widen
+a tolerance, say what you measured that made you widen it.
+
 **Numbers in prose are code.**  `tests/test_docs_consistency.py` pins the
 counts in `README.md`, `docs/index.html` and the management deck against the
 package.  If you add a preset, an example or an architecture, that test tells
