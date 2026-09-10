@@ -2,6 +2,22 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-10 · A streamlit AppTest flake on the 3.10 leg (open, not diagnosed)
+
+- `tests/test_gui_compute.py::test_modulation_runs_and_reports_evm` failed
+  once on `test-minimum` with `KeyError: 'client_state'` -- a key inside
+  streamlit's own AppTest, not in this library.  Evidence, all on the same
+  commit (6b58413): attempt 1 read `1 failed, 885 passed, 1 skipped`,
+  attempt 2 read `886 passed, 1 skipped`; the same test passed on 3.11 and
+  3.12 in that run; the commit touched only `loopfilter.cmag` and the
+  packaging script, neither of which can reach a streamlit session.
+- Recorded rather than fixed: the cause is not established, and a change
+  made to something that reproduces once in ten runs is a guess.  What
+  would settle it is a repeat on the floor stack (3.10 + streamlit 1.63);
+  six local repetitions were still running when this was written.
+- If it recurs, suspect AppTest state leaking between the pages one worker
+  runs in sequence, and start by giving `_run()` a fresh script context.
+
 ## 2026-09-10 · The mypy gate wants numba and mypy 2.x together
 
 - CI's mypy (2.3.1, with numba's stubs installed by the new `[fast]` extra)
