@@ -46,7 +46,7 @@ jobs:
           python-version: "3.10"
       - name: Install build tools
         run: pip install build cython
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@v6
         with:
           gradle-version: "8.2"
 
