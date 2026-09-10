@@ -54,16 +54,26 @@ def _wanted() -> bool:
         "0", "off", "no", "false", "")
 
 
-BACKEND = "python"
-_njit: Callable[..., Any] | None = None
-if _wanted():
+def _load_njit() -> Callable[..., Any] | None:
+    """numba's ``njit``, or None when it is absent or switched off.
+
+    Written as a function that returns rather than a module-level import
+    with a None fallback: rebinding the imported name is an assignment
+    mypy reads as "None into an overloaded function", and it only sees it
+    where numba's own stubs are installed -- which is CI, not necessarily
+    the machine the change was written on.
+    """
+    if not _wanted():
+        return None
     try:
-        from numba import njit as _numba_njit
+        from numba import njit
     except ImportError:
-        _numba_njit = None
-    if _numba_njit is not None:
-        _njit = _numba_njit
-        BACKEND = "numba"
+        return None
+    return njit
+
+
+_njit = _load_njit()
+BACKEND = "numba" if _njit is not None else "python"
 
 
 def kernel(fn: _F) -> _F:

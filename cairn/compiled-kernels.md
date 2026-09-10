@@ -97,3 +97,12 @@ kernel, then cached under `__pycache__`).
   rounds; a `rounds > 8` run would differ at the ULP.
 - `LUTCal`'s projection used `w @ lut`; now a serial sum.  ULP-level on the
   one LUT test, inside its 20 % margin.
+- **The mypy gate needs numba AND mypy 2.x in the same environment.**  The
+  container ships mypy 1.19, where rebinding an imported `njit` to None is
+  accepted; CI installs 2.3.1, where it is "None into an overloaded
+  function".  The scratch `venv_ci` had 2.3.1 but no numba (no pip in it),
+  so it inferred Any and passed too -- three environments, three answers,
+  and only CI's was the gate.  Build one venv with `mypy==2.3.1` plus the
+  `[fast]` extra and run the old code through it first: `_load_njit()`
+  returns rather than rebinds precisely because that pattern goes red there
+  and green here.

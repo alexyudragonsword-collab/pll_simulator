@@ -2,6 +2,16 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-10 · The mypy gate wants numba and mypy 2.x together
+
+- CI's mypy (2.3.1, with numba's stubs installed by the new `[fast]` extra)
+  rejected `core/jit.py`'s `from numba import njit as _x` / `_x = None`
+  fallback; the container's 1.19 and the numba-less `venv_ci` both passed
+  it.  `_load_njit()` returns instead of rebinding, and the pattern was
+  confirmed red-then-green in a venv built with mypy 2.3.1 + numba.
+- Pitfall recorded in `cairn/compiled-kernels.md`: the gate is one venv with
+  *both*, not whichever mypy is on PATH.
+
 ## 2026-09-10 · Tolerance provenance, batches 1-3 (plan item 25)
 
 - ~45 of the bare tolerance bounds in `tests/` now say where the number came
