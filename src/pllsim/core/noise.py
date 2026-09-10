@@ -42,7 +42,7 @@ class FlickerFloorPhase(NoiseSource):
     fc: float = 0.0  # flicker corner [Hz]
 
     @classmethod
-    def from_spot(cls, name: str, l_floor_dbchz: float, fc: float = 0.0) -> "FlickerFloorPhase":
+    def from_spot(cls, name: str, l_floor_dbchz: float, fc: float = 0.0) -> FlickerFloorPhase:
         return cls(name=name, unit="rad^2/Hz", level=float(sphi_from_ldbc(l_floor_dbchz)), fc=fc)
 
     def psd(self, f: np.ndarray) -> np.ndarray:
@@ -65,7 +65,7 @@ class LeesonOscillator(NoiseSource):
 
     @classmethod
     def from_spot(cls, name: str, l_dbchz: float, f_offset: float,
-                  f_1f3: float = 0.0, floor_dbchz: float = -170.0) -> "LeesonOscillator":
+                  f_1f3: float = 0.0, floor_dbchz: float = -170.0) -> LeesonOscillator:
         """Spot L at f_offset assumed on the 1/f^2 asymptote."""
         s_spot = float(sphi_from_ldbc(l_dbchz))
         k2 = s_spot * f_offset**2

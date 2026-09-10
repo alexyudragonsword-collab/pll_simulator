@@ -31,16 +31,16 @@ n_golden = int(st.number_input(L("黄金序列长度", "golden length"),
 if st.button("Export", type="primary") and sel:
     buf = io.BytesIO()
     logs = []
-    with st.spinner(L("导出中…", "exporting...")):
-        with tempfile.TemporaryDirectory() as td:
-            for nm in sel:
-                rep = export(presets.ALL_PRESETS[nm](), td, name=nm,
-                             n_golden=n_golden, n_vectors=1024)
-                logs.append(rep.summary())
-            with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
-                for p in Path(td).rglob("*"):
-                    if p.is_file():
-                        zf.write(p, p.relative_to(td))
+    with st.spinner(L("导出中…", "exporting...")), \
+            tempfile.TemporaryDirectory() as td:
+        for nm in sel:
+            rep = export(presets.ALL_PRESETS[nm](), td, name=nm,
+                         n_golden=n_golden, n_vectors=1024)
+            logs.append(rep.summary())
+        with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as zf:
+            for p in Path(td).rglob("*"):
+                if p.is_file():
+                    zf.write(p, p.relative_to(td))
     for line in logs:
         st.write("• " + line)
     st.download_button(L("下载 vams_export.zip", "download vams_export.zip"),

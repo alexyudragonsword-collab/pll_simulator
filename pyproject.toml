@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "pllsim"
-version = "0.9.3"
+version = "0.9.4"
 description = "System-level / behavioral simulation models for PLLs: CPPLL, SSPLL, SPLL, ADPLL, ILCM, MDLL with noise, spur and calibration analysis"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -72,6 +72,10 @@ ignore_missing_imports = true
 # 15 errors), fixed rather than silenced.  If something must leave the gate,
 # it goes in docs/gen_roadmap.py's TYPE_CANDIDATES so the cost stays measured.
 files = ["src/pllsim", "packaging/apk_check.py"]
+# Bodies of unannotated functions were never checked (25% of them, 68% in
+# guiqt); since 2026-09 they are, and the eleven errors that surfaced were
+# real (an Optional indexed, kwargs an engine does not take).
+check_untyped_defs = true
 
 [tool.ruff]
 line-length = 88
@@ -79,7 +83,7 @@ extend-exclude = ["examples/out"]
 
 [tool.ruff.lint]
 # E501 off: the physics comments carry derivations that read worse rewrapped
-select = ["E", "F", "W", "I"]
+select = ["E", "F", "W", "I", "B", "UP", "SIM"]
 # E731: the per-architecture t_target_of mappings read better as
 # one-line lambdas next to the call that consumes them
 ignore = ["E501", "E741", "E731"]

@@ -49,7 +49,7 @@ def test_every_entry_point_reproduces_the_same_state(field):
 def test_the_two_conventions_differ_by_exactly_half_the_power():
     u = convert_phase_noise(F0, deg=1.0)
     assert u.ipn_dbc_dsb - u.ipn_dbc_ssb == pytest.approx(HALF_POWER_DB, rel=1e-12)
-    assert HALF_POWER_DB == pytest.approx(3.0103, abs=1e-4)
+    assert pytest.approx(3.0103, abs=1e-4) == HALF_POWER_DB
 
 
 def test_reading_a_dbc_figure_under_the_wrong_convention_costs_sqrt_two():

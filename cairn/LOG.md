@@ -2,6 +2,40 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-09 · v0.9.4 cut
+
+- `pyproject` 0.9.4 + `docs/release-notes/v0.9.4.md` in one commit, as the
+  rule requires; index.html §11.24, roadmap and deck regenerated against
+  the version.  Merging the PR is the release (auto-release walks the notes
+  directory on push to main).
+
+## 2026-09-09 · Code hygiene (plan item 22), and the Windows workflow proven
+
+- One source each: `arch/base.dtc_t_target_of` (was five copies of the
+  per-architecture residue→DTC-target mapping: two engines' analyze(),
+  bridge, web, Qt); `guiutil.modulation_run/_axes` and `drift_run/_axes`
+  (the GMSK/EVM and gain-ramp experiments, eight bare `+4000`s →
+  `MOD_SKIP_CYCLES`).  `frac_spur_offsets` lives in `core/dtcspurs.py`
+  (a modulator property, not the charge-pump loop's).
+- `__all__` names `validation` and `cli`; `tests/test_package.py` pins
+  both directions.  mypy `check_untyped_defs = true` (11 real errors
+  fixed: an Optional indexed, kwargs an engine does not take).  ruff adds
+  B/UP/SIM and covers `docs/`; every `zip()` says strict= on purpose.
+  Provenance comments on the ADPLL and bridge tolerances the health check
+  named.
+- `windows-exe` dispatched from main after the reusable-workflow rewrite:
+  green in 3.5 min through `windows-exe-build.yml`, artifact produced.
+  P1-B2 closed.
+- Pitfall: the local mypy gate passed and CI's failed with 19 errors —
+  CI resolves the newest numpy (2.4: no `trapz` in the stubs) and PySide6
+  stubs, the container had older ones.  Reproduced in a fresh venv
+  (`uv venv` + latest wheels) and fixed for real: three Qt pages had
+  named their result hook `render`, shadowing `QWidget.render` with a
+  foreign signature (now `show_result`); eight layout-clearing loops
+  indexed `takeAt()`'s Optional (one `clear_layout`); Qt enums scoped;
+  the trapezoid shim resolved through `vars(np)`.  Run mypy in a fresh
+  venv before claiming the gate, not against whatever the container has.
+
 ## 2026-09-09 · P3-19: the phone gets the Fit page (11 of 13)
 
 - Bridge `fit(text, mode, preset)`: pasted (offset, dBc/Hz) text through

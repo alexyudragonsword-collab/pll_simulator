@@ -83,7 +83,7 @@ class LockStats:
 
     @staticmethod
     def from_trace(trace: np.ndarray, tref: float,
-                   first_cycle: int | None) -> "LockStats":
+                   first_cycle: int | None) -> LockStats:
         tr = np.asarray(trace, dtype=float)
         drops = int(np.sum((tr[:-1] > 0.5) & (tr[1:] < 0.5))) if tr.size > 1 else 0
         return LockStats(

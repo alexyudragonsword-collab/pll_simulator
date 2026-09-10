@@ -132,7 +132,7 @@ for tag, ar, sim in [("TDC", ar1, sim1), ("BB ", ar2, sim2)]:
     tgt = np.interp(np.log10(fm), np.log10(ar.f), ar.pn_breakdown["total"])
     edges = np.logspace(np.log10(2e4), np.log10(2.5e7), 7)
     errs = []
-    for a, b in zip(edges[:-1], edges[1:]):
+    for a, b in zip(edges[:-1], edges[1:], strict=True):
         mm = (fm >= a) & (fm < b)
         errs.append(f"{a / 1e6:.2f}-{b / 1e6:.2f}M: "
                     f"{10 * np.log10(np.mean(sm[mm]) / np.mean(tgt[mm])):+.1f} dB")

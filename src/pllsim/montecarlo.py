@@ -127,7 +127,7 @@ def plot_mc(result: MCResult, metrics: list[str] | None = None,
     nrow = (n + ncol - 1) // ncol
     fig, axes = plt.subplots(nrow, ncol, figsize=(4.2 * ncol, 3.2 * nrow),
                              squeeze=False)
-    for ax, name in zip(axes.flat, names):
+    for ax, name in zip(axes.flat, names, strict=False):
         v = result.metrics[name]
         vv = v[~np.isnan(v)]
         if vv.size:

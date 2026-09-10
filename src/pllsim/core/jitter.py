@@ -36,7 +36,7 @@ SMALL_ANGLE_RAD = 0.1
 # that silently required numpy 2 while pyproject declared >=1.24.  The
 # Android build pins numpy 1.x (no 2.x wheels for its Python), so the floor
 # has to be real: resolve whichever name this numpy provides.
-_trapezoid = getattr(np, "trapezoid", None) or getattr(np, "trapz")
+_trapezoid = vars(np).get("trapezoid") or vars(np)["trapz"]   # 2.x / 1.x
 
 
 def sphi_from_ldbc(l_dbc) -> np.ndarray:

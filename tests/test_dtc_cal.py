@@ -1,12 +1,13 @@
 """Fractional-N + DTC calibration behavior."""
 import numpy as np
 
-from pllsim.arch.cppll import CPPLL, CPPLLConfig, FracConfig, frac_spur_offsets
+from pllsim.arch.cppll import CPPLL, CPPLLConfig, FracConfig
 from pllsim.blocks.chargepump import CPConfig
 from pllsim.blocks.dtc import DTCConfig
 from pllsim.blocks.loopfilter import FilterDesign
 from pllsim.blocks.oscillator import OscConfig
 from pllsim.calibration.lms import LMSGainCal, LUTCal, SignSignLMS
+from pllsim.core.dtcspurs import frac_spur_offsets
 
 FREF = 38.4e6
 FOUT = (156 + 0.2525) * FREF

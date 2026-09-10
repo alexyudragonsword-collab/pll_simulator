@@ -296,7 +296,7 @@ def data_lines(ax):
 def plot_cal_convergence(sim: SimResult, save: str | None = None):
     fig, axes = plt.subplots(len(sim.cal_traces), 1, figsize=(9, 2.6 * len(sim.cal_traces)),
                              squeeze=False, sharex=True)
-    for ax, (name, tr) in zip(axes[:, 0], sim.cal_traces.items()):
+    for ax, (name, tr) in zip(axes[:, 0], sim.cal_traces.items(), strict=False):
         tr = np.asarray(tr)
         if tr.ndim == 1:
             ax.plot(sim.t[:tr.size] * 1e6, tr, lw=0.9)

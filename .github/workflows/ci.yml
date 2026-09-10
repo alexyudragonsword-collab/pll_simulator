@@ -181,7 +181,7 @@ jobs:
           pip install -e .[test,gui,guiqt]
           pip install ruff mypy pytest-cov pytest-xdist
       - name: Lint
-        run: ruff check src tests examples packaging
+        run: ruff check src tests examples packaging docs
       - name: Type check
         # the whole package: pyproject [tool.mypy] says files=["src/pllsim"].
         # If a path ever has to leave the gate it goes in gen_roadmap.py's

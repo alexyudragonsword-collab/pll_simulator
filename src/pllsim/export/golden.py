@@ -82,7 +82,7 @@ def sslms_vectors(w_err: int, f_gain: int, w_gain: int, sh_mu: int,
     fx = SignSignLmsFx(f_gain, FixedCoeff(2.0 ** (-sh_mu)), sh_ema,
                        gear_shift_n=gear_n,
                        mu_final=FixedCoeff(2.0 ** (-sh_muf)))
-    g = [fx.step(int(a), int(b)) for a, b in zip(err, reg)]
+    g = [fx.step(int(a), int(b)) for a, b in zip(err, reg, strict=True)]
     return {"stim_err": write_hex(outdir / "sslms_err.hex", err, w_err),
             "stim_reg": write_hex(outdir / "sslms_reg.hex", reg, w_err),
             "exp": write_hex(outdir / "sslms_gain.hex", g, w_gain), "n": n}
@@ -94,7 +94,7 @@ def ftl_vectors(w_dac: int, mu: int, gear_n: int, mu_f: int, n: int,
     pos = rng.integers(0, 2, n)
     zero = (rng.integers(0, 8, n) == 0).astype(int)
     fx = FtlFx(mu=mu, gear_n=gear_n, mu_f=mu_f)
-    code = [fx.step(bool(p), bool(z)) for p, z in zip(pos, zero)]
+    code = [fx.step(bool(p), bool(z)) for p, z in zip(pos, zero, strict=True)]
     stim = (pos << 1) | zero          # bit1 = drift_pos, bit0 = drift_zero
     return {"stim": write_hex(outdir / "ftl_drift.hex", stim, 2),
             "exp": write_hex(outdir / "ftl_code.hex", code, w_dac), "n": n}

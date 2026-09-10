@@ -34,8 +34,9 @@ on the main suite.  All numbers here were measured at 120k cycles, seed 1.
 from __future__ import annotations
 
 import copy
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from typing import Any, Callable
+from typing import Any
 
 import pytest
 

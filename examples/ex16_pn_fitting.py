@@ -45,7 +45,7 @@ csv_path = f"{OUT}/ex16_vco_meas.csv"
 with open(csv_path, "w") as fh:                          # E5052-style export
     fh.write("# Agilent E5052B SSA  6.2 GHz carrier\n"
              "Offset Frequency (Hz), Phase Noise (dBc/Hz)\n")
-    for fo, ld in zip(f_meas, l_meas):
+    for fo, ld in zip(f_meas, l_meas, strict=True):
         fh.write(f"{fo:.6g}, {ld:.3f}\n")
 
 f_csv, l_csv = load_pn_csv(csv_path)

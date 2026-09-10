@@ -29,31 +29,36 @@ import io
 import json
 import math
 import traceback
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import matplotlib.pyplot as plt
 import numpy as np
 
 from . import presets
-from .core.dtcspurs import dtc_spur_table
 from .guiutil import (
     GROUP_LABELS,
     apply_overrides,
     arch_kind,
     config_from_json,
     config_to_json,
+    drift_axes,
+    drift_precheck,
+    drift_run,
     enumerate_fields,
     fine_oversample_note,
     fine_record_mb,
     fmt_value,
     frac_presets,
     make_pll,
+    modulation_axes,
+    modulation_run,
     osc_bank_report,
     ref_spur_comparison,
     simulate_kwargs,
     supports_fine,
 )
-from .modulation import evm, gmsk_trajectory, prbs, two_point_presets
+from .modulation import two_point_presets
 from .plotting import (
     figure_cursor_data,
     plot_ipn_pie,
@@ -595,48 +600,18 @@ def _bw_sweep(preset: str, lo_hz: float = 2e5, hi_hz: float = 3e6,
 
 def _modulate(preset: str, bit_rate_hz: float = 2.5e6, dp_err: float = 0.0,
               n_cycles: int = 100_000, seed: int = 2) -> dict:
-    """Two-point GMSK modulation and EVM, mirroring the web GUI's page."""
-    pll = make_pll(preset, {})
-    fref = pll.cfg.fref
-    sps = fref / bit_rate_hz
-    n_cyc = int(n_cycles)
-    settle = max(50_000, n_cyc // 3)
-    if n_cyc - settle < 8_000:
-        raise ValueError(f"{n_cyc} cycles leaves only {n_cyc - settle} after "
-                         f"the {settle}-cycle settling window; raise cycles")
-    bits = prbs(max(64, int((n_cyc - settle) * bit_rate_hz / fref) - 20),
-                seed=7)
-    fdev, _ = gmsk_trajectory(bits, fref, bit_rate_hz)
-    mod = np.zeros(n_cyc)
-    mod[settle:settle + min(fdev.size, n_cyc - settle)] = \
-        fdev[: n_cyc - settle]
-    ideal = 2 * np.pi * np.cumsum(mod) / fref
-    mod_kw: dict[str, Any] = {"mod_freq": mod, "mod_dp_gain": 1.0 + dp_err}
-    sim = pll.simulate(n_cyc, seed=int(seed), **mod_kw)
-    e = evm(sim.phase_err_out[settle + 4000:], ideal[settle + 4000:])
-
+    """Two-point GMSK modulation and EVM: guiutil.modulation_run rendered."""
+    run = modulation_run(make_pll(preset, {}), float(bit_rate_hz), float(dp_err),
+                         int(n_cycles), int(seed))
     fig, (a1, a2) = plt.subplots(2, 1, figsize=(8, 6))
-    sl = slice(settle + 4000, settle + 4000 + int(40 * sps))
-    a1.plot(sim.t[sl] * 1e6, mod[sl] / 1e6)
-    a1.set_xlabel("t [us]")
-    a1.set_ylabel("dev [MHz]")
-    a1.grid(alpha=0.3)
-    d = sim.phase_err_out[settle + 4000:] - ideal[settle + 4000:]
-    x = np.arange(d.size)
-    d = d - np.polyval(np.polyfit(x, d, 1), x)
-    a2.plot(sim.t[settle + 4000:] * 1e3, np.degrees(d), lw=0.5)
-    a2.set_xlabel("t [ms]")
-    a2.set_ylabel("phase error [deg]")
-    a2.grid(alpha=0.3)
+    modulation_axes(run, a1, a2)
     fig.tight_layout()
     return {
-        "evm_pct": e["evm_pct"],
-        "evm_db": e["evm_db"],
-        "phase_err_rms_deg": e["phase_err_rms_deg"],
-        "sps": sps,
-        # < 8 samples/symbol: the per-ref-cycle grid floors the comparison
-        # against the continuous ideal; only the mismatch trend is real then
-        "sps_ok": bool(sps >= 8),
+        "evm_pct": run.evm["evm_pct"],
+        "evm_db": run.evm["evm_db"],
+        "phase_err_rms_deg": run.evm["phase_err_rms_deg"],
+        "sps": run.sps,
+        "sps_ok": bool(run.sps_ok),
         **_plot(fig),
     }
 
@@ -644,11 +619,8 @@ def _modulate(preset: str, bit_rate_hz: float = 2.5e6, dp_err: float = 0.0,
 def _drift_info(preset: str, eps_total: float = 0.03,
                 ramp_cycles: int = 60_000) -> dict:
     """The rate-vs-mu precheck the page shows before anything runs."""
-    frac = getattr(make_pll(preset, {}).cfg, "frac", None)
-    if frac is None or frac.dtc_cal is None:
-        raise TypeError(f"{preset} has no DTC gain calibrator to drift")
-    mu_final = frac.dtc_cal.mu_final or frac.dtc_cal.mu
-    rate = eps_total / int(ramp_cycles)
+    rate, mu_final = drift_precheck(make_pll(preset, {}), float(eps_total),
+                                    int(ramp_cycles))
     return {"rate_per_cycle": rate, "mu_final": mu_final,
             # the sign-sign slew wall is rate == mu_final
             "rate_over_mu": rate / mu_final}
@@ -656,46 +628,19 @@ def _drift_info(preset: str, eps_total: float = 0.03,
 
 def _drift(preset: str, eps_total: float = 0.03, ramp_cycles: int = 60_000,
            ramp_start: int = 80_000, seed: int = 3) -> dict:
-    """Background-calibration tracking under an accelerated gain ramp."""
+    """Background-calibration tracking under an accelerated gain ramp:
+    guiutil.drift_run rendered."""
     info = _drift_info(preset, eps_total, ramp_cycles)
-    n_ramp, start = int(ramp_cycles), int(ramp_start)
-    n = start + n_ramp
-    pll = make_pll(preset, {})
-    cal = pll.cfg.frac.dtc_cal
-    cal.gear_shift_n = min(cal.gear_shift_n or 40_000, start // 2)
-    drift = np.zeros(n)
-    drift[start:] = eps_total * np.arange(n_ramp) / n_ramp
-    drift_kw: dict[str, Any] = {"dtc_gain_drift": drift}
-    sim = pll.simulate(n, seed=int(seed), **drift_kw)
-    g = sim.cal_traces["dtc_gain"]
-    lag = np.abs(g * (1.0 + drift) - 1.0)
-    c = pll.cfg
-    if type(pll).__name__ == "SPLL":
-        def tof(r: float) -> float:
-            return -r / c.fout - c.frac.dtc.range_s / 2.0
-    elif type(pll).__name__ == "SSPLL":
-        def tof(r: float) -> float:
-            return (1.0 + r) / c.fout - c.frac.dtc.range_s / 2.0
-    else:
-        def tof(r: float) -> float:
-            return r / c.fout
-    tab = dtc_spur_table(c.frac, tof, c.fref, c.fout,
-                         gain_eps=float(lag[-1]))
-
+    run = drift_run(make_pll(preset, {}), float(eps_total), int(ramp_cycles),
+                    int(ramp_start), int(seed))
     fig, ax = plt.subplots(figsize=(9, 4))
-    t_ms = (np.arange(n) - start) / c.fref * 1e3
-    ax.plot(t_ms, lag * 100, lw=0.9, label="tracking lag")
-    ax.plot(t_ms, drift * 100, "--", lw=0.9, label="true drift")
-    ax.set_xlabel("time from ramp start [ms]")
-    ax.set_ylabel("[%]")
-    ax.legend()
-    ax.grid(alpha=0.3)
+    drift_axes(run, ax)
     return {
         **info,
-        "peak_lag_pct": float(lag[-1]) * 100.0,
-        "jitter_fs": sim.jitter_fs,
-        "lag_spur_dbc": max(tab.values()) if tab else None,
-        "notes": list(sim.notes),
+        "peak_lag_pct": run.peak_lag * 100.0,
+        "jitter_fs": run.sim.jitter_fs,
+        "lag_spur_dbc": run.lag_spur_dbc,
+        "notes": list(run.sim.notes),
         **_plot(fig),
     }
 

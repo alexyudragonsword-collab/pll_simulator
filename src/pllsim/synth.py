@@ -16,6 +16,8 @@ that breaks the textbook closed forms.
 """
 from __future__ import annotations
 
+from typing import Any
+
 import numpy as np
 from scipy.optimize import least_squares
 
@@ -304,7 +306,7 @@ def sweep_bandwidth(make_pll, f_ugb_list, int_band=None):
     Returns dict with 'f_ugb', 'jitter_fs', 'pm_deg', and per-source
     integrated-jitter breakdown 'sources' {name: [fs...]}.
     """
-    out = {"f_ugb": [], "jitter_fs": [], "pm_deg": [], "sources": {}}
+    out: dict[str, Any] = {"f_ugb": [], "jitter_fs": [], "pm_deg": [], "sources": {}}
     for bw in f_ugb_list:
         try:
             pll = make_pll(bw)

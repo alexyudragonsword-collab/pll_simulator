@@ -142,7 +142,7 @@ cursor would report numbers the drawn curve does not show.
 
 | gate | command |
 |---|---|
-| lint | `ruff check src tests examples packaging` |
+| lint | `ruff check src tests examples packaging docs` |
 | types | `mypy` (file list in `pyproject.toml`) |
 | tests | `pytest tests/ -m "not sweep and not sensitivity" -n 4` on 3.11 and 3.12; the cross-domain sweep and the field-sensitivity gate run in their own parallel job (`-m "sweep or sensitivity" -n 4`, 3.11) |
 | floor | the same suite on **3.10** with the declared minimum `numpy`/`scipy`/`matplotlib` pinned — the interpreter and wheels the phone actually runs — plus both GUI extras, and a step that refuses if an extra moved a pin (`test-minimum` job; read its *selected* count against the 3.11 job, not just the colour) |

@@ -11,6 +11,7 @@ difference with no reason a user could see.
 """
 from . import (
     appbridge,
+    cli,
     corners,
     fit,
     guiutil,
@@ -51,6 +52,7 @@ __all__ = [
     "SSPLL", "SSPLLConfig",
     "CPConfig", "DTCConfig", "FilterDesign", "OscConfig", "SamplerConfig",
     "TDCConfig",
-    "appbridge", "corners", "fit", "guiutil", "modulation", "montecarlo",
-    "plotting", "presets", "selector", "settling", "synth",
+    "appbridge", "cli", "corners", "fit", "guiutil", "modulation",
+    "montecarlo", "plotting", "presets", "selector", "settling", "synth",
+    "validation",
 ]

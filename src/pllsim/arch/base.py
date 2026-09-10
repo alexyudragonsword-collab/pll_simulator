@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import inspect
 from abc import ABC, abstractmethod
+from collections.abc import Callable
 from typing import Any
 
 import numpy as np
@@ -171,6 +172,29 @@ def attach_fine(sim: SimResult, fine: np.ndarray, m_os: int, fref: float,
     sim.notes.append(f"jitter integrated on the {m_os}x oversampled phase "
                      "(includes intra-period ripple)")
     return sim
+
+
+def dtc_t_target_of(pll) -> Callable[[float], float]:
+    """The DTC target each fractional architecture asks for, per MASH residue.
+
+    One mapping per architecture, in one place: the SSPLL delays the
+    reference edge to the *next* VCO edge, less half the DTC range so the
+    codes sit mid-scale; the SPLL delays the divided edge by minus the
+    residue on the same bipolar offset; the CPPLL and ADPLL delay by the
+    residue itself.  The engines' per-cycle loops keep the same expression
+    inline for speed; analyze() and every GUI page get it from here, which is
+    what stops the five copies this used to be from disagreeing.
+    """
+    c = pll.cfg
+    if getattr(c, "frac", None) is None or c.frac.dtc is None:
+        raise TypeError(f"{type(pll).__name__} has no DTC to map a residue onto")
+    fout, half = float(c.fout), c.frac.dtc.range_s / 2.0
+    kind = type(pll).__name__
+    if kind == "SSPLL":
+        return lambda r: (1.0 + r) / fout - half
+    if kind == "SPLL":
+        return lambda r: -r / fout - half
+    return lambda r: r / fout
 
 
 def tuning_notes(osc_cfg, v_needed: float, what: str = "fout") -> list[str]:

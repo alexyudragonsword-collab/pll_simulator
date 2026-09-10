@@ -68,5 +68,5 @@ def show_fig(fig):
 
 def metric_row(items: list[tuple[str, str]]):
     cols = st.columns(len(items))
-    for c, (name, val) in zip(cols, items):
+    for c, (name, val) in zip(cols, items, strict=False):
         c.metric(name, val)

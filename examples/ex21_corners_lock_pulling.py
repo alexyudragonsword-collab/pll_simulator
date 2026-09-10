@@ -81,7 +81,7 @@ sags = np.linspace(0.85, 1.15, 13)
 shift = [corners.apply_corner(
     pll, corners.Corner("v", vdd=v, vdd_nominal_v=1.8)).cfg.osc.f0 - f0
     for v in sags]
-for v, d in zip(sags[::4], shift[::4]):
+for v, d in zip(sags[::4], shift[::4], strict=True):
     print(f"  vdd = {v:.2f} x 1.8 V   f0 {d / 1e6:+7.3f} MHz")
 
 fig, ax = plt.subplots(figsize=(7, 3.6))

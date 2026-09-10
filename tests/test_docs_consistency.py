@@ -414,7 +414,7 @@ def test_the_deck_benchmark_table_is_the_live_one():
     f = _facts()
     live = presets.benchmark_table()
     assert len(f["benchmarks"]) == len(live)
-    for got, want in zip(f["benchmarks"], live):
+    for got, want in zip(f["benchmarks"], live, strict=True):
         assert got["paper"] == want["paper"]
         assert got["linear [fs]"] == pytest.approx(want["linear [fs]"], abs=0.1)
 

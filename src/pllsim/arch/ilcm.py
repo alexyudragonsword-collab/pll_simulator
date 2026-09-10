@@ -196,7 +196,7 @@ class ILCM(PLLBase):
         tref = 1.0 / c.fref
         v_sup = supply_ripple_v(supply_ripple, n_cycles, tref)
         f_pull = pull_hz(c.osc, n_cycles, tref)
-        c.n_mult          # validates the integer multiple; raises if not
+        _ = c.n_mult      # validates the integer multiple; raises if not
         b = c.beta
 
         osc = Oscillator(c.osc, c.fref, rng, noise=noise)

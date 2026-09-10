@@ -1,6 +1,6 @@
 # Roadmap — known gaps
 
-**Generated** by `docs/gen_roadmap.py` against v0.9.3.
+**Generated** by `docs/gen_roadmap.py` against v0.9.4.
 Every number here is measured at generation time, not remembered.
 
 This is a register of what is known to be missing, not a schedule.  A
