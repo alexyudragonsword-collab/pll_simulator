@@ -2,6 +2,27 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-10 · Every branch push was running CI twice
+
+- `ci.yml` answers to both `push` and `pull_request`, and those two see
+  different refs for the same commit (`refs/heads/<branch>` against
+  `refs/pull/<n>/merge`).  The concurrency group was `ci-${{ github.ref }}`,
+  so the two runs landed in different groups and neither cancelled the
+  other.  Found by counting: five Dependabot PRs recreated at once produced
+  ten runs in 25 seconds (runs 329-338), one `push` and one `pull_request`
+  each, at ~57 runner-minutes per full run.
+- Fixed by keying on the branch name, `ci-${{ github.head_ref ||
+  github.ref_name }}` -- `head_ref` exists only on `pull_request`,
+  `ref_name` only on `push`, so the fallback yields one string for both.
+  The obvious `github.event.pull_request.number` does **not** work: that
+  context is absent on `push`, so the push run falls back to the ref and
+  the groups stay apart.  I proposed that version first and it was wrong.
+- Measured on the fix itself: run 342 (`push`, 02bddbe) was cancelled 19 s
+  in, when run 343 (`pull_request`, same sha) entered the group.
+- Still duplicated, not addressed: resetting the branch onto main after a
+  merge re-runs the whole suite on a tree main just ran (run 341 against
+  run 340).
+
 ## 2026-09-10 · P4 on main, and what the split matrix costs the 3.11 leg
 
 - PR #60 squash-merged as `7202a55`; auto-release did nothing, as intended
