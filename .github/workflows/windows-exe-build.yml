@@ -41,7 +41,7 @@ jobs:
       EXE: ${{ inputs.builder == 'nuitka' && 'build-nuitka/pllsim-gui-qt-nuitka.exe' || 'dist/pllsim-gui-qt.exe' }}
       SUFFIX: ${{ inputs.builder == 'nuitka' && '-nuitka' || '' }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
@@ -103,7 +103,7 @@ jobs:
       EXE: ${{ inputs.builder == 'nuitka' && 'build-nuitka/pllsim-gui-web-nuitka.exe' || 'dist/pllsim-gui-web.exe' }}
       SUFFIX: ${{ inputs.builder == 'nuitka' && '-nuitka' || '' }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v7
       - uses: actions/setup-python@v7
         with:
           python-version: "3.11"
