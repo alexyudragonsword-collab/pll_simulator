@@ -12,11 +12,14 @@ This file records substantive progress in reverse-chronological order — newest
   3.12 in that run; the commit touched only `loopfilter.cmag` and the
   packaging script, neither of which can reach a streamlit session.
 - Recorded rather than fixed: the cause is not established, and a change
-  made to something that reproduces once in ten runs is a guess.  What
-  would settle it is a repeat on the floor stack (3.10 + streamlit 1.63);
-  six local repetitions were still running when this was written.
-- If it recurs, suspect AppTest state leaking between the pages one worker
-  runs in sequence, and start by giving `_run()` a fresh script context.
+  made to something that reproduces once in ten runs is a guess.  Six
+  repetitions on the exact floor stack (3.10.20, streamlit 1.63.0, numpy
+  1.24.4) came back 24 of 24 clean each time with zero `client_state`
+  occurrences -- but *serially*, because that venv has no xdist.  CI runs
+  the leg under `-n 4`, so parallelism is the one variable left untested
+  and the first place to look if it recurs; after that, AppTest state
+  leaking between the pages one worker runs in sequence (`_run()` giving a
+  fresh script context).
 
 ## 2026-09-10 · The mypy gate wants numba and mypy 2.x together
 

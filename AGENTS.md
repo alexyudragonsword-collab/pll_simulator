@@ -119,13 +119,19 @@ what you measured, not what you expect.
 
 ## Commands
 
+> **Do not add `-q` to these.**  `pyproject` already sets `addopts = "-q"`,
+> so a second one makes it `-qq` and pytest stops printing the count line
+> entirely -- which is the one thing this project insists you read.  Several
+> runs in one session came back "green" with no number at all before anyone
+> noticed.
+
 ```bash
-pytest tests/ -q                    # ~18 min.  Use -k <name> while iterating.
-PLLSIM_JIT=0 pytest tests/ -q       # interpreted kernels; the default compiles them
+pytest tests/                       # ~18 min.  Use -k <name> while iterating.
+PLLSIM_JIT=0 pytest tests/          # interpreted kernels; the default compiles them
                                     # when numba is installed (pip install -e .[fast])
 ruff check src tests examples packaging docs
 mypy                                # file list in pyproject.toml
-QT_QPA_PLATFORM=offscreen pytest tests/test_guiqt_smoke.py -q
+QT_QPA_PLATFORM=offscreen pytest tests/test_guiqt_smoke.py
 ```
 
 The full suite is long enough that it is tempting to report before it
@@ -142,9 +148,9 @@ drift this project has had was invisible from the source.
 
 | surface | how to actually verify it |
 |---|---|
-| web | `QT_QPA_PLATFORM=offscreen pytest tests/test_gui_smoke.py tests/test_gui_compute.py -q` — Streamlit `AppTest` execs each page |
-| Qt | `QT_QPA_PLATFORM=offscreen pytest tests/test_guiqt_smoke.py -q`, then **read the count**: these tests *skip* without PySide6 and the system GL libs (`libegl1 libgl1 libxkbcommon0 libdbus-1-3`) instead of failing, and that silence is how the two GUIs drifted for several releases.  In CI they fail: both test jobs set `PLLSIM_CI=1`, which `tests/_require.py` turns into a hard import (set it locally to get the same behaviour) |
-| Android bridge | `pytest tests/test_appbridge.py -q` — pure Python, no SDK needed |
+| web | `QT_QPA_PLATFORM=offscreen pytest tests/test_gui_smoke.py tests/test_gui_compute.py` — Streamlit `AppTest` execs each page |
+| Qt | `QT_QPA_PLATFORM=offscreen pytest tests/test_guiqt_smoke.py`, then **read the count**: these tests *skip* without PySide6 and the system GL libs (`libegl1 libgl1 libxkbcommon0 libdbus-1-3`) instead of failing, and that silence is how the two GUIs drifted for several releases.  In CI they fail: both test jobs set `PLLSIM_CI=1`, which `tests/_require.py` turns into a hard import (set it locally to get the same behaviour) |
+| Android bridge | `pytest tests/test_appbridge.py` — pure Python, no SDK needed |
 | Android page | `python tests/android_page_harness.py` — starts its own shim for `window.host` and drives every tab in real Chromium against the real bridge, including the plot viewer's pinch (real multi-touch, through CDP).  Needs `pip install playwright`; not in CI.  The overlay that swallowed every tap, and the ADPLL crash in the measured spectrum, were both found this way and by nothing else |
 | Android build | Actions → *Android APK* → Run workflow, or locally `gradle -p android :app:assembleDebug`.  Manual only; it does not run on push.  Every run makes **two** APKs — interpreted (.py from an sdist) and compiled (`core`/`arch`/`blocks`/`calibration` as `.so`, from wheels `packaging/android_wheel.py` cross-compiles).  The workflow looks *inside* both rather than trusting the build log: one must carry source and the other objects, because the two builds share a workspace and a reused pip output would silently ship the same APK twice |
 

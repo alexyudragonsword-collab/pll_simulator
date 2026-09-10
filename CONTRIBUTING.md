@@ -26,10 +26,14 @@ checked**, by running them rather than by reading them:
 
 ```bash
 QT_QPA_PLATFORM=offscreen pytest tests/test_gui_smoke.py \
-    tests/test_gui_compute.py -q            # web pages, via Streamlit AppTest
-QT_QPA_PLATFORM=offscreen pytest tests/test_guiqt_smoke.py -q   # read the count
-pytest tests/test_appbridge.py -q           # the Android bridge, no SDK needed
+    tests/test_gui_compute.py               # web pages, via Streamlit AppTest
+QT_QPA_PLATFORM=offscreen pytest tests/test_guiqt_smoke.py    # read the count
+pytest tests/test_appbridge.py              # the Android bridge, no SDK needed
 ```
+
+No `-q` on any of those: `pyproject` already sets it, a second one makes it
+`-qq`, and pytest then prints no count at all — which is the number the Qt
+line above tells you to read.
 
 The Android *page* is not covered by any of those.  `python
 tests/android_page_harness.py` is: it stands up its own shim for
