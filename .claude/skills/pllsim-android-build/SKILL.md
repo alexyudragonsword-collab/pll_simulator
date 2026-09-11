@@ -101,10 +101,12 @@ protection and nothing else.  Read `references/compiled.md` before changing
 ## In CI
 
 Actions → **Android APK** → Run workflow.  Manual on purpose: the APK is a
-sideload artifact rather than a release gate, and the Chaquopy build costs real
-runner minutes against a private repo's budget.  One run does both builds back
-to back in one workspace and uploads `pllsim-debug-apk-interpreted` and
-`pllsim-debug-apk-compiled`.
+sideload artifact rather than a release gate, and the Chaquopy build is long
+enough to hold a runner for a while.  (This used to say the minutes came off a
+private repo's budget — the repository is public and Actions minutes are free;
+the cost that remains is wall clock and queue contention.)  One run does both
+builds back to back in one workspace and uploads
+`pllsim-debug-apk-interpreted` and `pllsim-debug-apk-compiled`.
 
 They share an application id, so installing one replaces the other on a phone.
 Side-by-side would be an `applicationIdSuffix` away — ask first.  The

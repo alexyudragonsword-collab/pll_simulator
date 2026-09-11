@@ -2,6 +2,30 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-10 · Correction: the repository is public, and main was not the default branch
+
+- Two premises this log has leaned on turn out to be wrong as of today's
+  measurement.  **The repository is public** (`private: false` from the
+  repository API), so Actions minutes are not metered; the entries below
+  dated 2026-08 that reason from "private-repo minutes" stay as written,
+  because they record what was believed then and I cannot date the
+  visibility change.  The live statements that gave that reason -- in
+  `ci.yml`, `android.yml`, `.cairn/config.yaml` and the android-build
+  skill -- are corrected in place.  Every decision they justified stands;
+  the surviving cost is wall clock and runner contention, not money
+  (measured: a full queue delayed one job by 17 minutes today).
+- **The default branch was `claude/pll-system-simulation-model-vbi9s9`, not
+  `main`**, until it was changed today.  That explains three things this
+  log had recorded as unexplained or mis-attributed: Dependabot opened its
+  PRs against a working branch that gets reset onto main, so merging them
+  there would have discarded them; resetting that branch rewrote the
+  repository's default branch; and each reset made Dependabot recreate
+  every open PR, which is what produced the ten runs in 25 seconds noted
+  in the entry below.  I had written there that I could not determine what
+  issued the `recreate` -- it was my own branch resets.
+- Note for readers: cairn/ is committed and the repository is public, so
+  these notes are published.
+
 ## 2026-09-10 · Every branch push was running CI twice
 
 - `ci.yml` answers to both `push` and `pull_request`, and those two see

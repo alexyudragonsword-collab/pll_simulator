@@ -234,10 +234,13 @@ jobs:
           python examples/ex21_corners_lock_pulling.py
           test -f examples/out/ex21_corner_jitter.png
       - name: Run every example (main only)
-        # the examples are the figures in docs/ and the only exercise several
-        # code paths get, but this is a private repo on a monthly minute
-        # budget -- so it gates merges to main rather than charging every
-        # branch push for it.
+        # the examples are the figures in docs/ and the only exercise
+        # several code paths get, but running them on every branch push
+        # costs wall clock and a runner -- so it gates merges to main
+        # instead.  (An earlier version of this comment blamed a private
+        # repo's monthly minute budget; the repository is public and the
+        # minutes are free.  Contention is not: on 2026-09-10 a full queue
+        # delayed a job by 17 minutes.)
         #
         # On 3.12, the compiled leg, because 3.11 is the tight one: it runs
         # the kernels interpreted *and* carries the coverage floor, which put

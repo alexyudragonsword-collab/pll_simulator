@@ -11,9 +11,11 @@ cairn:
   # changelog.
   skill_spec_date: "2026-08-07"
   # git_policy: track | ignore | private_sync
-  # Chosen per-project: this is a private repository whose knowledge is worth
-  # the same review as the code, so cairn/ is committed and no .gitignore rule
-  # is written for it.
+  # Chosen per-project: this project's knowledge is worth the same review as
+  # the code, so cairn/ is committed and no .gitignore rule is written for it.
+  # Note the repository is PUBLIC, so everything in cairn/ is published with
+  # it.  (This line previously said "private repository" and used that as the
+  # reason; the reason is review, not secrecy.)
   git_policy: "track"
   # language: en | zh | ... — language used when writing
   # AGENTS.md/LOG.md/ROADMAP.md/topic notes for this project. Chosen to match
