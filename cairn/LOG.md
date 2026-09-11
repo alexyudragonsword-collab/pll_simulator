@@ -2,6 +2,20 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-11 · v0.9.6 cut: the MDLL record fix ships
+
+- `pyproject` to 0.9.6 with `docs/release-notes/v0.9.6.md` in the same
+  commit.  One change above v0.9.5, the field-reported MDLL mismatch and the
+  gate/product divergence behind it; the entry below has the measurements.
+- No stock figure moves, same reason as last time and re-checked: `jitter_fs`
+  integrates the periodogram exactly as before.  Counts 962 -> 967, main 892,
+  sweep 75.
+- Local trap worth remembering: `test_an_untagged_release_says_why_in_its_own
+  _notes` went red on v0.9.5.md until `git fetch --tags`.  This container's
+  clone had no tags, so the test could not tell "released" from "never
+  tagged".  Not a defect -- CI checks out with `fetch-depth: 0` -- but the
+  failure reads like a real one, so check the local tag list first.
+
 ## 2026-09-11 · MDLL's two views disagreed because the gate read a different record
 
 - Field report from the APK and the Windows exe: the MDLL's frequency- and
