@@ -2,6 +2,29 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-11 · v0.9.5 cut: the six loops ship compiled
+
+- `pyproject` to 0.9.5 with `docs/release-notes/v0.9.5.md` in the same
+  commit, because the notes *cause* the release and cannot be backfilled.
+  Six commits had accumulated above v0.9.4 including the P4 kernels -- the
+  same shape as the v0.9.1 tag that was lost, which is why this was the
+  first thing cleared.
+- No stock figure moves, and that is measured rather than hoped: no preset
+  sets `bb_meta_window_s` (default 0.0), so the one deliberate realization
+  change cannot reach anything shipped; the golden comparison had already
+  put ILCM, MDLL and both ADPLL modes bit-identical and the analog loops at
+  1e-16..1e-9 relative.  Counts measured at 962 total, 887 main, 75 sweep --
+  README and index.html already said 962.
+- Generated artefacts regenerated rather than hand-edited: roadmap,
+  config-reference, facts.json and the deck.  `pllsim.__version__` reads
+  installed metadata, so `pip install -e . --no-deps` is needed before the
+  generators see a new version -- the first roadmap run still said v0.9.4.
+- Pre-existing drift fixed on the way past: `docs/reports/README.md` named
+  the v0.9.3 deck while v0.9.4 was the shipped one.
+- Both doc gates were broken on purpose to confirm they are live: hiding
+  the notes file fails `test_the_version_being_shipped_has_notes`, and a
+  wrong count in facts.json fails `test_the_shipped_deck_matches_those_facts`.
+
 ## 2026-09-10 · Correction: the repository is public, and main was not the default branch
 
 - Two premises this log has leaned on turn out to be wrong as of today's
