@@ -1,9 +1,14 @@
 name: Android APK
 
 # Manual only.  The APK is a sideload artifact, not a release gate, and the
-# Chaquopy build (SDK + three native wheels per ABI) costs real runner
-# minutes on a private repo's monthly budget -- so it runs when a human asks,
-# not on every push.
+# Chaquopy build (SDK + three native wheels per ABI) is long -- so it runs
+# when a human asks, not on every push.
+#
+# This used to say the minutes came off a private repo's monthly budget.
+# The repository is public, so Actions minutes are not metered; the reason
+# the decision survives is wall clock and runner contention, which are
+# real either way (measured 2026-09-10: five recreated Dependabot PRs
+# filled the queue and delayed an unrelated job by 17 minutes).
 #
 # Every run produces TWO APKs from the same source:
 #
