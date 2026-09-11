@@ -49,6 +49,35 @@ validation pass); supersedes the scattered per-test knowledge before it.
 
 ## Pitfalls (contains: pitfall)
 
+- **The gate and the product compared different records for a year.**
+  Reported from the field: the MDLL's frequency-domain and time-domain
+  views disagreed on the APK and the Windows exe.  They did, by 8–11 dB, and
+  the sweep was green the whole time because it was reading a different
+  record.  `plot_pn_breakdown` drew `sim.f_psd`, sampled once per reference
+  edge; the grid named `psd_source="fine"` for the MDLL points by hand, with
+  no comment saying why.  Measured on `mdll_150m_2p4g` over one identical
+  300 kHz–67 MHz band: the reference-edge record reads −11.5/−9.3/−8.6/
+  −8.0/−7.7/−7.0 dB against the model, the oversampled one −3.2…−1.8.
+  Physically the reference-edge record samples the phase exactly where edge
+  replacement just realigned it, so it misses the intra-period accumulation
+  that *is* the MDLL's jitter — which is why `attach_fine` had already
+  replaced `jitter_fs` from the oversampled record and said so in its
+  docstring.  The result object reported one record and drew another.
+  `SimResult.reported_psd` is now the single answer and both callers defer
+  to it; `tests/test_psd_record_shown.py` pins that the drawn curve is the
+  record the number came from, and that the grid never names a record again.
+- **Swapping the compared record changes the estimator's variance, and that
+  looks exactly like a model gap.**  Routing the comparator to the fine
+  record made `ilcm-fref-x2.0` read 2.37 dB against a 2.0 base with no flag
+  — a "model defect" by the sweep's own rule.  It was not: the fine record
+  was a single full-length periodogram, ~5.6 dB spread per bin, and its
+  lowest band held 32 points.  Across seeds 1–5 that band read +2.37, +1.56,
+  +1.22, −0.50, +1.97 dB.  `attach_fine` now stores a Welch estimate of the
+  same trace beside the periodogram — resolution for the spur table, segment
+  averaging for the comparison, which is what the tolerances were set
+  against — and the worst-band spread over the same five seeds fell from
+  2.87 dB to 0.73 dB (0.92–1.65).  Pinning that 2.37 as a gap, or widening
+  ILCM's base, would both have recorded noise as physics.
 - **A sweep harness can fabricate its own gaps.**  Scaling fref on a
   fractional preset without keeping `cfg.frac.frac` consistent locks the
   loop to the configured fraction, MHz away from cfg.fout.  Every

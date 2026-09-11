@@ -2,6 +2,45 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-09-11 · v0.9.6 cut: the MDLL record fix ships
+
+- `pyproject` to 0.9.6 with `docs/release-notes/v0.9.6.md` in the same
+  commit.  One change above v0.9.5, the field-reported MDLL mismatch and the
+  gate/product divergence behind it; the entry below has the measurements.
+- No stock figure moves, same reason as last time and re-checked: `jitter_fs`
+  integrates the periodogram exactly as before.  Counts 962 -> 967, main 892,
+  sweep 75.
+- Local trap worth remembering: `test_an_untagged_release_says_why_in_its_own
+  _notes` went red on v0.9.5.md until `git fetch --tags`.  This container's
+  clone had no tags, so the test could not tell "released" from "never
+  tagged".  Not a defect -- CI checks out with `fetch-depth: 0` -- but the
+  failure reads like a real one, so check the local tag list first.
+
+## 2026-09-11 · MDLL's two views disagreed because the gate read a different record
+
+- Field report from the APK and the Windows exe: the MDLL's frequency- and
+  time-domain views do not agree.  They did not, by 8-11 dB, and the sweep
+  was green throughout because it compared the oversampled record while
+  every front end drew the reference-edge one.  `plot_pn_breakdown` took
+  `sim.f_psd` for all six architectures; the sweep grid named
+  `psd_source="fine"` for the MDLL by hand with no comment.  Details and
+  the per-band numbers: `cairn/cross-domain.md`, Pitfalls.
+- Fixed at the single point that can no longer disagree:
+  `SimResult.reported_psd` returns the record `jitter_fs` was integrated
+  from, and both the plot and `compare_domains` defer to it.  All three
+  surfaces go through that one plotting call, checked by search rather than
+  assumed.
+- Second finding, which nearly became a fake gap: routing the comparator to
+  the fine record put `ilcm-fref-x2.0` at 2.37 dB over a 2.0 base with no
+  flag.  Seeds 1-5 read +2.37, +1.56, +1.22, -0.50, +1.97 in that band -- a
+  raw periodogram's variance, not physics.  `attach_fine` now keeps a Welch
+  estimate of the same trace for comparison and display and the periodogram
+  for the spur table; the worst-band spread over those seeds fell 2.87 ->
+  0.73 dB.
+- Measured after: sweep 56 passed with every pinned gap unmoved, and no
+  documented figure changes -- `jitter_fs` still comes from the periodogram
+  (MDLL 345.4/281.2 fs, ILCM 113.3/114.5, CPPLL 258.3/236.0 as before).
+
 ## 2026-09-11 · v0.9.5 cut: the six loops ship compiled
 
 - `pyproject` to 0.9.5 with `docs/release-notes/v0.9.5.md` in the same

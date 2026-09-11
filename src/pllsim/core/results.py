@@ -73,3 +73,32 @@ class SimResult:
     jitter_fs: float | None = None                 # from time-domain PSD if computed
     notes: list[str] = field(default_factory=list)  # caveats about the numbers
     extra: dict = field(default_factory=dict)
+
+    def reported_psd(self) -> tuple[str, np.ndarray, np.ndarray, float]:
+        """The record ``jitter_fs`` came from: ``(name, f, S_phi, fs)``.
+
+        Anything that shows a measured spectrum has to read this, so that the
+        picture and the printed number can never describe different runs.
+        They did, for a year: the MDLL drew its reference-rate record -- which
+        edge replacement leaves nearly flat, because that record samples the
+        phase exactly where it was just realigned -- against a model of the
+        real output phase.  8-11 dB apart on all three front ends, while the
+        cross-domain sweep asked for the oversampled record by hand, read
+        2-3 dB, and stayed green.
+
+        The answer is derived rather than stored because ``arch.base
+        .attach_fine`` is the only writer of the fine record and it replaces
+        ``jitter_fs`` in the same breath: the record's presence *is* the
+        statement that it, not the reference-rate one, is what this result
+        reports.  A separate flag would be a second thing to forget.
+        """
+        extra = self.extra or {}
+        fine_f = extra.get("fine_f_avg", extra.get("fine_f"))
+        if fine_f is not None:
+            fine_s = extra.get("fine_psd_avg", extra.get("fine_psd"))
+            return ("fine", np.asarray(fine_f), np.asarray(fine_s),
+                    float(extra["fine_fs"]))
+        if self.f_psd is None or self.s_phi_psd is None:
+            raise ValueError(
+                "this simulation carries no PSD (record too short?)")
+        return "ref", self.f_psd, self.s_phi_psd, float(self.fs)

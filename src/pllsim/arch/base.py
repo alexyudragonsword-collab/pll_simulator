@@ -157,12 +157,23 @@ def attach_fine(sim: SimResult, fine: np.ndarray, m_os: int, fref: float,
     it contains the intra-period ripple that the reference-rate record drops.
     """
     from ..core.jitter import rms_jitter_fs
-    from ..core.spectrum import find_spurs, periodogram_psd
+    from ..core.spectrum import find_spurs, periodogram_psd, phase_psd
     fs_fine = m_os * fref
     n0 = fine.size // 4
     f_p, s_p = periodogram_psd(fine[n0:], fs_fine)
     sim.extra["fine_fs"] = fs_fine
     sim.extra["fine_f"], sim.extra["fine_psd"] = f_p, s_p
+    # Two estimators of the same record, each for what it is good at.  The
+    # full-length periodogram above resolves the spurs; it is also a single
+    # realization, ~5.6 dB of spread per bin, which is far too coarse to
+    # compare against a model band by band -- one ILCM point read +2.37,
+    # +1.56, +1.22, -0.50 and +1.97 dB in its lowest band across five seeds.
+    # The Welch estimate below is what the reference-rate record already used
+    # and what the comparison tolerances were set against.  Same record, so
+    # the picture and the number still describe one run; different estimator,
+    # because a spur table and a band average want opposite things.
+    f_w, s_w = phase_psd(fine[n0:], fs_fine)
+    sim.extra["fine_f_avg"], sim.extra["fine_psd_avg"] = f_w, s_w
     want = [fref, 2.0 * fref] + list(offsets or [])
     sim.spurs_fft.update(find_spurs(f_p, s_p, [o for o in want
                                                if 0 < o < 0.45 * fs_fine]))

@@ -247,25 +247,27 @@ def active_flags(ctx: BoundaryContext) -> frozenset[str]:
 # ---------------------------------------------------------------- comparator
 
 def _pick_source(sim: Any, band_hi: float) -> tuple[str, np.ndarray, np.ndarray, float]:
-    """Choose the PSD record that can actually cover the requested band.
+    """Compare against the record the result reports.
 
-    The reference-rate Welch PSD is the default: it is segment-averaged, so
-    its variance is what the historical tolerances were set against.  The
-    fine record (plain periodogram, no averaging) is used only when the band
-    reaches past what the reference-rate record can show -- switching to it
-    gratuitously would change the variance floor under every caller.
+    ``SimResult.reported_psd`` answers this, and deferring to it is the whole
+    point: the gate has to read what the product shows.  When these were two
+    rules the MDLL drew its reference-rate record on every front end and read
+    8-11 dB from its own model, while this comparator was handed the
+    oversampled record by name in the sweep grid and read 2-3 dB.  Both were
+    correct about different things, so neither went red.
+
+    This supersedes an earlier rule that kept the reference-rate record
+    unless the requested band reached past it, on the grounds that its
+    segment averaging is the variance the historical tolerances were set
+    against.  That reasoning still holds for a run with no fine record, which
+    is every analog-loop run that did not ask for oversampling, and those are
+    unaffected.  Where a fine record exists it is what ``jitter_fs`` was
+    integrated from, and comparing against anything else compares against a
+    number the result does not report.  ``band_hi`` is kept in the signature
+    because callers pass it and a future rule may need it again.
     """
-    f_ref = sim.f_psd
-    have_ref = f_ref is not None and band_hi <= NYQ_FRACTION * sim.fs
-    if have_ref:
-        return "ref", sim.f_psd, sim.s_phi_psd, float(sim.fs)
-    extra = sim.extra or {}
-    if "fine_f" in extra:
-        return ("fine", np.asarray(extra["fine_f"]),
-                np.asarray(extra["fine_psd"]), float(extra["fine_fs"]))
-    if f_ref is None:
-        raise ValueError("simulation carries no PSD (record too short?)")
-    return "ref", sim.f_psd, sim.s_phi_psd, float(sim.fs)
+    del band_hi
+    return sim.reported_psd()  # type: ignore[no-any-return]
 
 
 def compare_domains(pll: Any, *, n_cycles: int, seed: int,
