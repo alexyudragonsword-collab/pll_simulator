@@ -133,9 +133,14 @@ def P(id, build, arch, flags=(), **kwargs):  # noqa: N802 - grid shorthand
 
 
 CLIP = "jitter-band-clip"
-ILCM_KW = dict(band=(1e5, 60e6), psd_source="ref",
-               sim_kwargs={"f_free_error": 3e6})
-MDLL_KW = dict(band=(3e5, 2.5e8), psd_source="fine", n_bins=6,
+# No `psd_source` here any more, and that absence is the fix rather than a
+# tidy-up.  These two used to name their record by hand -- "ref" for the
+# ILCM, "fine" for the MDLL -- with no comment saying why, which is how the
+# grid came to compare a record the front ends never drew.  `compare_domains`
+# now defers to `SimResult.reported_psd`, the same answer `plot_pn_breakdown`
+# uses, so the gate and the product cannot describe different runs again.
+ILCM_KW = dict(band=(1e5, 60e6), sim_kwargs={"f_free_error": 3e6})
+MDLL_KW = dict(band=(3e5, 2.5e8), n_bins=6,
                sim_kwargs={"f_free_error": 2e6})
 
 GRID = [
@@ -234,18 +239,18 @@ GRID = [
     # ------------------------------------------------------------ ILCM/MDLL
     P("ilcm-stock", lambda: _preset("ilcm_250m_12g"), "ILCM", [], **ILCM_KW),
     P("ilcm-fref-x0.5", lambda: _fref_scaled("ilcm_250m_12g", 0.5), "ILCM",
-      [CLIP], band=(1e5, 30e6), psd_source="ref",
+      [CLIP], band=(1e5, 30e6),
       sim_kwargs={"f_free_error": 3e6}),
     P("ilcm-fref-x2.0", lambda: _fref_scaled("ilcm_250m_12g", 2.0), "ILCM",
-      [], band=(1e5, 120e6), psd_source="ref",
+      [], band=(1e5, 120e6),
       sim_kwargs={"f_free_error": 3e6}),
     P("mdll-stock", lambda: _preset("mdll_150m_2p4g"), "MDLL", [CLIP],
       **MDLL_KW),
     P("mdll-fref-x0.5", lambda: _fref_scaled("mdll_150m_2p4g", 0.5), "MDLL",
-      [CLIP], band=(3e5, 1.25e8), psd_source="fine", n_bins=6,
+      [CLIP], band=(3e5, 1.25e8), n_bins=6,
       sim_kwargs={"f_free_error": 2e6}),
     P("mdll-fref-x2.0", lambda: _fref_scaled("mdll_150m_2p4g", 2.0), "MDLL",
-      [], band=(3e5, 5e8), psd_source="fine", n_bins=6,
+      [], band=(3e5, 5e8), n_bins=6,
       sim_kwargs={"f_free_error": 2e6}),
 ]
 

@@ -470,7 +470,7 @@
 <h2 id="repro"><span class="num">10</span><span class="en">Reproducing everything</span><span class="zh">复现方法</span></h2>
 <pre><code>pip install -e .            # numpy, scipy, matplotlib
 pip install -e .[fast]      # + numba: the time-domain loops compile, 10-50x faster
-pytest tests/               # 962 tests: closed-form math + architecture regressions
+pytest tests/               # 967 tests: closed-form math + architecture regressions
 python examples/ex01_cppll_intn_19p2m_4p8g.py     # each ex writes plots to examples/out/
 python examples/ex02_cppll_fracn_dtc_38p4m_6g.py
 python examples/ex03_sspll_19p2m_4p8g.py

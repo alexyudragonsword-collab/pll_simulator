@@ -23,9 +23,17 @@ def plot_pn_breakdown(ar: AnalysisResult, sim: SimResult | None = None,
         ax.semilogx(ar.f, ldbc_from_sphi(ar.pn_breakdown[k]), lw=1.0, label=k)
     ax.semilogx(ar.f, ldbc_from_sphi(ar.pn_breakdown["total"]), "k", lw=2.2,
                 label="total (linear model)")
-    if sim is not None and sim.f_psd is not None:
-        ax.semilogx(sim.f_psd, ldbc_from_sphi(sim.s_phi_psd), color="0.55",
-                    alpha=0.6, lw=0.8, label="time-domain sim")
+    if sim is not None and (sim.f_psd is not None or "fine_f" in (sim.extra or {})):
+        # `reported_psd` and not `sim.f_psd`: the two differ for any engine
+        # that keeps an intra-period trace, and drawing the reference-rate
+        # one next to a jitter figure integrated from the other is how the
+        # MDLL came to read 8-11 dB apart from its own model on every front
+        # end.  The suffix names the record, because a curve that quietly
+        # changed which run it describes is the thing that hid this.
+        src, f_s, s_s, _fs = sim.reported_psd()
+        label = "time-domain sim" if src == "ref" else "time-domain sim (fine)"
+        ax.semilogx(f_s, ldbc_from_sphi(s_s), color="0.55",
+                    alpha=0.6, lw=0.8, label=label)
     ax.set_xlim(ar.f[0], fmax or ar.f[-1])
     ax.set_ylim(-180, None)
     ax.set_xlabel("offset frequency [Hz]")
