@@ -69,7 +69,7 @@ jobs:
           mkdir -p out
           mv android/app/build/outputs/apk/debug/app-debug.apk \
              out/pllsim-interpreted-debug.apk
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pllsim-debug-apk-interpreted
           path: out/pllsim-interpreted-debug.apk
@@ -110,7 +110,7 @@ jobs:
         run: |
           mv android/app/build/outputs/apk/debug/app-debug.apk \
              out/pllsim-compiled-debug.apk
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pllsim-debug-apk-compiled
           path: out/pllsim-compiled-debug.apk
