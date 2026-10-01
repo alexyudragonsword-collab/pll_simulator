@@ -207,15 +207,40 @@ def cmd_corners(args) -> int:
 
 
 def cmd_export(args) -> int:
-    from .export import export
+    """Verilog-AMS tree (--out) and/or a clock phase-noise profile
+    (--clock-profile); either alone is a complete request."""
     pll, name = _load(args)
-    flavors = tuple(f.strip() for f in args.flavors.split(",") if f.strip())
-    rep = export(pll, args.out, name=name, flavors=flavors,
-                 n_golden=args.n_golden, n_vectors=args.n_vectors)
-    d = {"preset": name, "kind": rep.kind, "outdir": str(rep.outdir),
-         "files": rep.files, "warnings": rep.warnings}
-    text = rep.summary() + "".join(f"\nwarning: {w}" for w in rep.warnings)
-    _emit(args, d, text)
+    if not args.out and not args.clock_profile:
+        raise SystemExit("export needs --out DIR and/or --clock-profile FILE")
+    d: dict[str, Any] = {"preset": name}
+    parts: list[str] = []
+    if args.out:
+        from .export import export
+        flavors = tuple(f.strip() for f in args.flavors.split(",") if f.strip())
+        rep = export(pll, args.out, name=name, flavors=flavors,
+                     n_golden=args.n_golden, n_vectors=args.n_vectors)
+        d.update({"kind": rep.kind, "outdir": str(rep.outdir),
+                  "files": rep.files, "warnings": rep.warnings})
+        parts.append(rep.summary() + "".join(f"\nwarning: {w}" for w in rep.warnings))
+    if args.clock_profile:
+        from .export.clock_profile import (
+            default_source,
+            profile_grid,
+            write_clock_profile,
+        )
+        # the profile spans 100 Hz..f0/2 and the exporter refuses to
+        # extrapolate, so the analysis is done on that grid, not the default
+        ar = pll.analyze(f=profile_grid(pll.cfg.fout))
+        path = write_clock_profile(ar, args.clock_profile,
+                                   source=default_source(name), fref=pll.cfg.fref)
+        d["clock_profile"] = {"path": str(path), "f0_hz": float(ar.f0),
+                              "n_points": int(ar.f.size),
+                              "n_spurs": len(ar.spurs_analytic),
+                              "jitter_fs": _finite(ar.jitter_fs)}
+        parts.append(f"clock profile {path}: {ar.f.size} points to "
+                     f"{ar.f0 / 2e9:.4g} GHz, {ar.jitter_fs:.1f} fs over "
+                     f"{ar.int_band[0] / 1e3:.0f} kHz-{ar.int_band[1] / 1e6:.0f} MHz")
+    _emit(args, d, "\n".join(parts))
     return 0
 
 
@@ -290,12 +315,15 @@ def build_parser() -> argparse.ArgumentParser:
     _common(p)
     p.set_defaults(fn=cmd_corners)
 
-    p = sub.add_parser("export", help="Verilog-AMS / RNM / RTL export")
+    p = sub.add_parser("export", help="Verilog-AMS / RNM / RTL export, clock phase-noise profile")
     _common(p)
-    p.add_argument("--out", required=True, metavar="DIR")
+    p.add_argument("--out", metavar="DIR", help="Verilog-AMS / RNM / RTL tree goes under DIR/<preset>/")
     p.add_argument("--flavors", default="rtl,rnm,ams")
     p.add_argument("--n-golden", type=int, default=16384)
     p.add_argument("--n-vectors", type=int, default=4096)
+    p.add_argument("--clock-profile", metavar="FILE",
+                   help="write the linear model's L(f) + spurs as a YAML clock profile "
+                        "(100 Hz..f0/2) for a SerDes link simulator")
     p.set_defaults(fn=cmd_export)
 
     p = sub.add_parser("config", help="write a config file, or --check one")

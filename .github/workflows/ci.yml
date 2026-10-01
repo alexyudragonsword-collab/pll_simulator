@@ -233,6 +233,8 @@ jobs:
           test -f examples/out/export/INDEX.md
           python examples/ex21_corners_lock_pulling.py
           test -f examples/out/ex21_corner_jitter.png
+          python examples/ex22_export_clock_profile.py
+          test -f examples/out/clock_profiles/bench_elshazly13_mdll_375m_1p5g.yaml
       - name: Run every example (main only)
         # the examples are the figures in docs/ and the only exercise
         # several code paths get, but running them on every branch push

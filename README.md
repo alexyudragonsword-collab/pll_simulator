@@ -53,11 +53,16 @@ injection pulling** (`pllsim.corners` applies SS/FF/SF/FS without retuning
 the loop, `blocks.lockdetect` is the asymmetric up/down counter real silicon
 ships, `OscConfig.pull_*` is Adler — ex21), **Monte Carlo yield analysis**
 (`pllsim.montecarlo` — multiprocess mismatch/corner sweeps with calibration
-running per chip, ex11: 100 chips in ~77 s), and a **Verilog-AMS export
+running per chip, ex11: 100 chips in ~77 s), a **Verilog-AMS export
 bridge** (`pllsim.export`, ex13 — per config: bit-true synthesizable RTL for
 the digital blocks verified with iverilog at zero tolerance, a cycle-true
 wreal/RNM top with golden-CSV testbench for Cadence digital-top regressions,
-and an electrical VAMS netlist for block-level AMS verification).
+and an electrical VAMS netlist for block-level AMS verification), and a
+**clock phase-noise profile export** (`pllsim.export.clock_profile`, ex22 —
+the total L(f) on a log-uniform 100 Hz–f0/2 grid plus the spur table as a
+small YAML file, the one thing a SerDes link simulator needs to run on a
+pllsim clock instead of on white jitter; `pllsim export ... --clock-profile`
+writes it from the shell).
 
 Coverage targets: fref = 19.2–500 MHz, fout up to 12 GHz, integrated jitter
 50–200 fs (1 kHz–100 MHz band, configurable).
@@ -67,7 +72,7 @@ Coverage targets: fref = 19.2–500 MHz, fout up to 12 GHz, integrated jitter
 ```bash
 pip install -e .          # numpy, scipy, matplotlib
 pip install -e .[fast]    # + numba: the time-domain loops compile, 10-50x faster
-pytest tests/             # 967 tests: closed-form math + architecture behavior
+pytest tests/             # 1027 tests: closed-form math + architecture behavior
 python examples/ex01_cppll_intn_19p2m_4p8g.py   # plots land in examples/out/
 ```
 
@@ -311,7 +316,8 @@ src/pllsim/
   blocks/      loopfilter, oscillator, chargepump, dtc, tdc, sampler, lockdetect
   calibration/ lms, gain_cal, ftl
   arch/        base, cppll, sspll, spll, adpll, ilcm, mdll
-  export/      RTL + RNM + electrical-VAMS emitters, golden engine, manifest
+  export/      RTL + RNM + electrical-VAMS emitters, golden engine, manifest,
+               clock_profile (L(f) + spurs as YAML for a SerDes link simulator)
   guiqt/       PySide6 desktop GUI      webgui/  Streamlit web GUI
   corners.py  fit.py  modulation.py  montecarlo.py  selector.py
   settling.py  synth.py  validation.py
@@ -319,7 +325,7 @@ src/pllsim/
   appbridge.py JSON bridge for embedded hosts (the Android app)
   cli.py       the `pllsim` command: analyze / simulate / sweep / corners / export / config
   plotting.py  presets.py
-examples/      ex01..ex21 (plots into examples/out/)
+examples/      ex01..ex22 (plots into examples/out/)
 tests/         closed-form core math + architecture-level regressions
 ```
 
