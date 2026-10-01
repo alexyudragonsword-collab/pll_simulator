@@ -2,6 +2,27 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-10-01 · Clock phase-noise profile export: the seam to Halo_Serdes
+
+- New `export/clock_profile.py`, `pllsim export --clock-profile`, ex22 and 60
+  tests: the linear model's total L(f) on a log-uniform 100 Hz..f0/2 grid
+  plus the spur table as the YAML file Halo_Serdes reads; the seven JSSC
+  anchors of ex14 are the seven files it ships.  Contract, decisions and
+  measurements: `cairn/clock-profile.md`.
+- The decision worth remembering: the exporter refuses a grid that stops
+  short of f0/2 instead of holding the tail flat -- measured on the Dartizio
+  ADPLL the flat tail integrates to 747 fs against the model's own 179 fs,
+  because the default grid ends on a lobe at 2 fref.  The CLI and ex22
+  analyse on `profile_grid(f0)`, so the file is the model point for point
+  and integrates back to `ar.jitter_fs` to round-off.
+- Two findings for the consumer side, not defects here: the whole-profile
+  jitter of the sampled-loop clocks is far above the in-band figure (ILCM
+  639 vs 83 fs) and a 60/decade log grid resolves their lobes above fref
+  only roughly (ADPLL 179 / 160 / 176 fs at 60 / 200 / 600 per decade).
+- Environment trap, again: a fresh container has no iverilog and no tags, and
+  with PLLSIM_CI=1 that reads as 4 failed + 4 errors in test_export_rtl and
+  test_docs_consistency; `apt-get install iverilog` + `git fetch --tags`.
+
 ## 2026-09-11 · v0.9.6 cut: the MDLL record fix ships
 
 - `pyproject` to 0.9.6 with `docs/release-notes/v0.9.6.md` in the same
