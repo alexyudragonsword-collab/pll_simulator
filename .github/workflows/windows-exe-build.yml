@@ -83,7 +83,7 @@ jobs:
         env:
           PLLSIM_SMOKE: "1"
         run: '& "$env:EXE"'
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pllsim-gui-qt${{ env.SUFFIX }}-windows
           path: ${{ env.EXE }}
@@ -183,7 +183,7 @@ jobs:
           Write-Output "== exe stderr =="; Get-Content exe-err.log -ErrorAction SilentlyContinue
           if (-not $ok) { Write-Error "web exe never served HTTP 200 + healthy"; exit 1 }
           Write-Output "web exe served HTTP 200 and reports healthy"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: pllsim-gui-web${{ env.SUFFIX }}-windows
           path: ${{ env.EXE }}
