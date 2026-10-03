@@ -2,6 +2,24 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-10-03 · upload-artifact 4→7 and setup-java 5→6, verified by real builds
+
+- #69 and #68 merged (`b2aed7e`, `67ec655`).  Both touch only
+  dispatch-only workflows, so their green PR CI never ran either action;
+  verification was three builds dispatched on `67ec655`: Android #24,
+  windows-exe #12 (both), windows-exe-nuitka #11 (qt).  All green.
+- Release notes read first: Node 24 (runner >= 2.327.1), ESM, v7's
+  `archive` input defaulting to the old zipped upload, setup-java dropping
+  `adopt*` and adding checksum/signature checks.  None touches the inputs
+  used here.
+- Measured: APKs 84,334,996 / 88,337,380 B; qt 107,598,846, web
+  121,801,151, qt-nuitka 69,158,789 B; all within 0.07 % of the previous
+  success.  `apk_check`: interpreted 34 source / 0 native, compiled 0 / 68.
+  No "Node.js 20" line in any log, so the last Node 20 action is gone.
+- Still unexercised: setup-java resolved Temurin 17.0.20+1 from the tool
+  cache, and a cache hit is not re-verified, so the new checks never ran.
+  `actions/cache@v6` has now saved (nuitka-qt key) but not yet restored.
+
 ## 2026-10-01 · Clock phase-noise profile export: the seam to Halo_Serdes
 
 - New `export/clock_profile.py`, `pllsim export --clock-profile`, ex22 and 60
