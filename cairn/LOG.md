@@ -2,6 +2,23 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-11-11 · Clock profile after an integer ×N multiplier (issue #71)
+
+- mmw60_trx needs its 60.48 GHz LO as a profile file.  Added `multiply_by`,
+  `floor_dbchz` and `spur_rejection_db` to `write_clock_profile`, matching CLI
+  flags, 27 tests, and the N = 10 file in ex22.  Contract and measurements:
+  `cairn/clock-profile.md`, "After an integer multiplier".
+- The issue's 60.48/6.253 = 9.672 is not a realisable N.  The ×10 file
+  retunes Wu'19 to 6.048 GHz and recentres its VCO, which otherwise trips
+  `tuning-swing`.
+- Floor and rejection have no defaults, because nothing here measures them.
+  ex22's values are labelled placeholders in the file itself.
+- Unmultiplied files are byte-identical to before (8 presets diffed).
+- Twelve mutations each turn a test red; one first "passed" only because its
+  search string matched nothing, and was redone.
+- Two corrections to my first issue reply, recorded in the topic note: the
+  floor/LO-level mix-up, and one leakage spur entry rather than two.
+
 ## 2026-10-03 · upload-artifact 4→7 and setup-java 5→6, verified by real builds
 
 - #69 and #68 merged (`b2aed7e`, `67ec655`).  Both touch only

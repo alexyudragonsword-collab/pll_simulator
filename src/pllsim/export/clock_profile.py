@@ -58,6 +58,12 @@ POINTS_PER_DECADE = 60
 _SPUR_AT = re.compile(r"^.+_spur@(?P<f>[0-9.eE+-]+)Hz$")
 _KEYS = ("f0_hz", "f_hz", "l_dbc_hz", "spurs", "source")
 
+#: Written only into a multiplied profile, all four or none.  They are keys
+#: of their own, not words in ``source``, so a consumer can find the f_in/2
+#: boundary without parsing free text; an unmultiplied file never carries
+#: them, so a reader that rejects unknown keys is not broken by them.
+_MULT_KEYS = ("multiply_by", "f_in_hz", "floor_dbchz", "spur_rejection_db")
+
 
 # ------------------------------------------------------------------ grid
 def profile_grid(f0: float, *, f_lo: float = F_LO_HZ,
@@ -115,6 +121,73 @@ def profile_curve(ar: AnalysisResult) -> tuple[np.ndarray, np.ndarray]:
             "extrapolate -- analyse on it: "
             "pll.analyze(f=pllsim.export.clock_profile.profile_grid(f0))")
     return grid, np.interp(np.log10(grid), np.log10(f), l_dbc)
+
+
+# ------------------------------------------------------------ multiplier
+def integer_multiplier(n) -> int:
+    """``n`` as an int >= 2, or an error naming ``multiply_by``.
+
+    A frequency multiplier selects a harmonic, so N is an integer.  The
+    request that introduced this (issue #71) moved a 6.253 GHz profile to
+    60.48 GHz by 20*log10(9.672); the realisable chain retunes the PLL to
+    f_c/N and multiplies that, so a non-integer N is refused, not rounded.
+    """
+    if isinstance(n, bool) or not isinstance(n, (int, float, np.integer, np.floating)):
+        raise TypeError(f"multiply_by must be an integer, got {n!r}")
+    x = float(n)
+    if not math.isfinite(x) or x != round(x):
+        raise ValueError(
+            f"multiply_by must be an integer, got {n!r}: a multiplier selects a "
+            "harmonic, so retune the PLL to f_c/N instead")
+    k = int(round(x))
+    if k < 2:
+        raise ValueError(f"multiply_by must be 2 or more, got {k}")
+    return k
+
+
+def multiply_curve(f_in_hz: float, f: np.ndarray, l_dbc: np.ndarray, n: int,
+                   floor_dbchz: float) -> tuple[np.ndarray, np.ndarray]:
+    """L(f) after an ideal x``n`` multiplier with an additive white floor.
+
+    ``(f, l_dbc)`` is the input profile on ``profile_grid(f_in_hz)``; the
+    result is on ``profile_grid(n * f_in_hz)``.  Up to f_in/2 the output is
+    ``n**2 * L_in + floor`` in linear power -- phase multiplies by n, so
+    jitter in seconds is unchanged.  Above f_in/2 the input profile says
+    nothing (those offsets belong to the neighbouring harmonic zones), so
+    the output there is the floor alone; nothing is extrapolated.  The step
+    at f_in/2 is real information, not a defect: it is where the PLL's
+    curve ends.
+
+    The two log grids cannot share points, so the input is interpolated in
+    (log f, dB): measured worst 0.00007 dB against the model evaluated on
+    the output points (Wu'19 at 6.048 GHz, x10).
+    """
+    grid = profile_grid(n * f_in_hz)
+    out = np.full(grid.shape, float(floor_dbchz))
+    inside = grid <= 0.5 * f_in_hz
+    l_in = np.interp(np.log10(grid[inside]), np.log10(f), l_dbc)
+    out[inside] = 10.0 * np.log10(
+        n * n * 10.0 ** (l_in / 10.0) + 10.0 ** (floor_dbchz / 10.0))
+    return grid, out
+
+
+def multiply_spurs(spurs: list[tuple[float, float]], f_in_hz: float, n: int,
+                   spur_rejection_db: float) -> list[tuple[float, float]]:
+    """Spurs after the multiplier, offset ascending.
+
+    Every input spur grows by 20*log10(n): narrow-band phase modulation,
+    valid while the spur's phase deviation stays small (true for any spur a
+    usable PLL has).  The n-1 and n+1 harmonics leaking past the selection
+    filter sit at -f_in and +f_in; the format's spur is a phase-modulation
+    pair, one sideband of ``dbc`` on each side, so the leakage is ONE entry
+    at f_in with ``dbc = -spur_rejection_db``.  Treating harmonic leakage as
+    phase modulation is an approximation (it is partly amplitude); the
+    consumer that asked for it does not use the spur table, and says so.
+    """
+    gain = 20.0 * math.log10(n)
+    rows = [(f, d + gain) for f, d in spurs]
+    rows.append((float(f_in_hz), -float(spur_rejection_db)))
+    return sorted(rows)
 
 
 # ----------------------------------------------------------------- spurs
@@ -221,7 +294,10 @@ def _quoted(s: str) -> str:
 
 
 def write_clock_profile(ar: AnalysisResult, path, *, source: str,
-                        fref: float | None = None) -> Path:
+                        fref: float | None = None,
+                        multiply_by: int | None = None,
+                        floor_dbchz: float | None = None,
+                        spur_rejection_db: float | None = None) -> Path:
     """Write ``ar`` as a clock phase-noise profile; returns the path.
 
     ``source`` is the free-text provenance the consumer shows (English; see
@@ -229,14 +305,56 @@ def write_clock_profile(ar: AnalysisResult, path, *, source: str,
     holds a ``ref_spur``, whose offset the result does not carry.  The
     values written are Python floats and lists: nothing of numpy's reaches
     the file.
+
+    With ``multiply_by`` the file is the clock after an integer x N
+    multiplier (``multiply_curve``, ``multiply_spurs``): ``f0_hz`` becomes
+    N * ar.f0 and the four multiplier parameters are written as keys of
+    their own.  ``floor_dbchz`` (the multiplier's additive white L floor,
+    dBc/Hz at the output) and ``spur_rejection_db`` (how far the N-1 / N+1
+    harmonics sit below the carrier) are required and have no defaults:
+    this library has no multiplier measurement to take one from, and a
+    plausible-looking default would be read as a sourced number.
     """
+    mult: tuple[int, float, float] | None = None   # (N, floor, rejection)
+    if multiply_by is None:
+        if floor_dbchz is not None or spur_rejection_db is not None:
+            raise ValueError("floor_dbchz / spur_rejection_db describe a "
+                             "multiplier; pass multiply_by as well")
+    else:
+        n = integer_multiplier(multiply_by)
+        vals = []
+        for name, v in (("floor_dbchz", floor_dbchz),
+                        ("spur_rejection_db", spur_rejection_db)):
+            if v is None:
+                raise ValueError(f"{name} is required with multiply_by: it has no "
+                                 "default, because nothing here measures one")
+            x = float(v)
+            if not math.isfinite(x):
+                raise ValueError(f"{name} must be finite, got {v!r}")
+            vals.append(x)
+        if vals[1] <= 0.0:
+            raise ValueError("spur_rejection_db is a rejection: it must be "
+                             f"positive, got {spur_rejection_db!r}")
+        mult = (n, vals[0], vals[1])
     f, l_dbc = profile_curve(ar)
     spurs = spur_entries(ar, fref)
     f0 = float(ar.f0)
-    lines = [
+    header = [
         "# pllsim clock phase-noise profile",
         "# l_dbc_hz is the total L(f) = S_phi/2 of the linear model in dBc/Hz;",
         "# timing is phase / (2 pi f0_hz).  Offsets are log-uniform, 100 Hz..f0/2.",
+    ]
+    f_in = f0
+    if mult is not None:
+        n, floor, rejection = mult
+        f, l_dbc = multiply_curve(f_in, f, l_dbc, n, floor)
+        spurs = multiply_spurs(spurs, f_in, n, rejection)
+        f0 = n * f_in
+        header += [
+            f"# Multiplied x{n} from f_in_hz: up to f_in_hz/2 it is N^2 times the PLL",
+            "# plus floor_dbchz; above f_in_hz/2 it is floor_dbchz alone (a model).",
+        ]
+    lines = header + [
         f"f0_hz: {yaml_float(f0)}",
         "f_hz: " + _flow_list([float(v) for v in f.tolist()]),
         "l_dbc_hz: " + _flow_list([float(v) for v in l_dbc.tolist()]),
@@ -247,6 +365,11 @@ def write_clock_profile(ar: AnalysisResult, path, *, source: str,
                   for fs, d in spurs]
     else:
         lines.append("spurs: []")
+    if mult is not None:
+        lines += [f"multiply_by: {mult[0]}",
+                  f"f_in_hz: {yaml_float(f_in)}",
+                  f"floor_dbchz: {yaml_float(mult[1])}",
+                  f"spur_rejection_db: {yaml_float(mult[2])}"]
     lines.append(f"source: {_quoted(str(source))}")
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
@@ -281,7 +404,7 @@ def read_clock_profile(path) -> dict:
         m = _KEY_LINE.match(ln)
         if m and not ln[0].isspace():
             key = m.group(1)
-            if key not in _KEYS:
+            if key not in _KEYS and key not in _MULT_KEYS:
                 raise ValueError(f"{path}: unknown key {key!r}")
             raw[key] = [m.group(2)]
         elif key is not None:
@@ -308,10 +431,22 @@ def read_clock_profile(path) -> dict:
         if not m:
             raise ValueError(f"{path}: bad spur row {row!r}")
         spurs.append({"f_hz": float(m.group("f")), "dbc": float(m.group("d"))})
-    return {
+    out: dict = {
         "f0_hz": float(" ".join(raw["f0_hz"])),
         "f_hz": floats(raw["f_hz"]),
         "l_dbc_hz": floats(raw["l_dbc_hz"]),
         "spurs": spurs,
-        "source": _unquote(" ".join(raw["source"])),
     }
+    have = [k for k in _MULT_KEYS if k in raw]
+    if have:
+        # all four or none: three of them is a hand-edited file whose f_in/2
+        # boundary cannot be trusted
+        absent = [k for k in _MULT_KEYS if k not in raw]
+        if absent:
+            raise ValueError(f"{path}: a multiplied profile needs all of "
+                             f"{list(_MULT_KEYS)}; missing {absent}")
+        out["multiply_by"] = int(" ".join(raw["multiply_by"]))
+        for k in _MULT_KEYS[1:]:
+            out[k] = float(" ".join(raw[k]))
+    out["source"] = _unquote(" ".join(raw["source"]))
+    return out

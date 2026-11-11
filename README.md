@@ -62,7 +62,9 @@ and an electrical VAMS netlist for block-level AMS verification), and a
 the total L(f) on a log-uniform 100 Hz–f0/2 grid plus the spur table as a
 small YAML file, the one thing a SerDes link simulator needs to run on a
 pllsim clock instead of on white jitter; `pllsim export ... --clock-profile`
-writes it from the shell).
+writes it from the shell, and `--multiply-by N` writes the clock after an
+integer ×N multiplier, with the multiplier's floor and harmonic rejection
+as required inputs rather than invented defaults).
 
 Coverage targets: fref = 19.2–500 MHz, fout up to 12 GHz, integrated jitter
 50–200 fs (1 kHz–100 MHz band, configurable).
