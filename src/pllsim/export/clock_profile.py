@@ -19,7 +19,17 @@ Two conventions that the consumer relies on and that are easy to lose:
 
 * ``l_dbc_hz`` is **L(f) = S_phi/2** in dBc/Hz (single sideband), not the
   double-sideband S_phi this package carries internally.  The 3 dB between
-  them is a sqrt(2) on every jitter the consumer computes.
+  them is a sqrt(2) on every jitter the consumer computes.  The same holds
+  for anything integrated from it: phase variance is the integral of
+  S_phi = 2 * 10^(L/10), and an integrated figure quoted in single-sideband
+  dBc (``AnalysisResult.ipn_dbc``) is 10*log10(variance / 2).  A consumer
+  that converted ipn_dbc to variance without the 2 was 3 dB low on every
+  phase-noise EVM term (issue #71), which is why the file header now says
+  "single-sideband" in words rather than only as ``S_phi/2``.
+* A spur's ``dbc`` is one sideband of a phase-modulation pair, as
+  everywhere in this package (``20*log10(beta/2)``): peak phase deviation
+  2 * 10^(dbc/20) rad, RMS 1/sqrt(2) of that.  A tone synthesised from it
+  with the RMS value as its sine amplitude is 3 dB low.
 * Timing is phase divided by **2 pi f0_hz** -- the carrier the profile is
   for.  A half-rate clock at f_baud/2 with the same dBc/Hz carries twice the
   seconds, which is why the file states f0 and the consumer must not derive
@@ -341,7 +351,11 @@ def write_clock_profile(ar: AnalysisResult, path, *, source: str,
     f0 = float(ar.f0)
     header = [
         "# pllsim clock phase-noise profile",
-        "# l_dbc_hz is the total L(f) = S_phi/2 of the linear model in dBc/Hz;",
+        "# l_dbc_hz: total L(f) of the linear model, dBc/Hz, SINGLE-sideband.",
+        "#   Phase PSD S_phi = 2 * 10^(L/10) rad^2/Hz; phase variance = integral of",
+        "#   S_phi (an integrated L in dBc, single-sideband, is 10*log10(variance/2)).",
+        "# spurs: dbc is ONE sideband of a phase-modulation pair (both sides at dbc);",
+        "#   peak phase deviation 2 * 10^(dbc/20) rad, RMS 1/sqrt(2) of that.",
         "# timing is phase / (2 pi f0_hz).  Offsets are log-uniform, 100 Hz..f0/2.",
     ]
     f_in = f0
@@ -353,6 +367,8 @@ def write_clock_profile(ar: AnalysisResult, path, *, source: str,
         header += [
             f"# Multiplied x{n} from f_in_hz: up to f_in_hz/2 it is N^2 times the PLL",
             "# plus floor_dbchz; above f_in_hz/2 it is floor_dbchz alone (a model).",
+            "# floor_dbchz is single-sideband like l_dbc_hz; the harmonic leakage is",
+            "# one spur at f_in_hz with dbc = -spur_rejection_db, per sideband.",
         ]
     lines = header + [
         f"f0_hz: {yaml_float(f0)}",

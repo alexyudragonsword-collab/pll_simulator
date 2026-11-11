@@ -84,9 +84,11 @@ spur_rejection_db)` / `pllsim export --multiply-by`:
   issue reply said "two entries"; one is what the format means.
 - **Four keys of their own** (`multiply_by`, `f_in_hz`, `floor_dbchz`,
   `spur_rejection_db`), all or none, written only when multiplied.  The
-  unmultiplied files are byte-identical to before (checked on 8 presets),
-  because this library's own reader rejected unknown keys and Halo_Serdes'
-  reader is not known to accept them.
+  unmultiplied files kept the same keys and data, byte for byte (checked on
+  8 presets), because this library's own reader rejected unknown keys and
+  Halo_Serdes' reader is not known to accept them.  (Correction 2026-11-11:
+  the comment lines have changed since, see "Sideband wording" below; the
+  data lines have not.)
 - **Frequency-plan finding, not a model one:** 60.48 GHz / 52 MHz =
   15120/13, so every integer N puts the divider on a k/13 fraction and the
   first fractional tone at fref/13 = 4 MHz: -63.7 dBc at 6.048 GHz, -43.7 x10.
@@ -108,6 +110,22 @@ spur_rejection_db)` / `pllsim export --multiply-by`:
 - `ar.jitter_fs` on the profile grid differs from the default-grid figure by
   up to 3e-6 relative (Markulic 164.7116 vs 164.7121 fs): same model, a
   different trapezoid.  The benchmark tests keep reading the default grid.
+
+## Sideband wording in the file header (2026-11-11)
+
+mmw60_trx converted `ipn_dbc` to phase variance without the factor 2 and was
+3 dB low on every phase-noise EVM term; the file said `L(f) = S_phi/2` but
+not "single-sideband" in words.  The header now states, and tests check
+against the library: `l_dbc_hz` is SSB; S_phi = 2 * 10^(L/10); an
+integrated SSB dBc is 10*log10(variance/2) (equals `ipn_dbc` to 1e-9 dB on
+all seven anchors); a spur's `dbc` is one sideband of a PM pair, peak phase
+deviation 2 * 10^(dbc/20) (`find_spurs` on a synthetic tone agrees to
+< 1e-4 dB; the RMS reading would be 3.01 dB off).  Only `#` lines changed.
+
+Open, not ours to fix: the Halo_Serdes plan document gives a spur's sine
+amplitude as sqrt(2 * 10^(dbc/10)) / (2 pi f0).  That is the RMS phase, not
+the peak, so a sine built with it is 3 dB low.  The plan is a document, and
+whether Halo_Serdes' code does this is unverified.
 
 ## Pitfalls
 

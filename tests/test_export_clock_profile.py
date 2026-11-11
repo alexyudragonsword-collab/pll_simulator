@@ -302,3 +302,47 @@ def test_the_cli_can_do_both_in_one_call(capsys, tmp_path):
     d = json.loads(capsys.readouterr().out)
     assert (tmp_path / "mdll_150m_2p4g" / "README.md").exists()
     assert out.exists() and d["clock_profile"]["path"] == str(out)
+
+
+# ------------------------------------------- the conventions the header states
+# The header states three formulas in words, because a consumer converted
+# ipn_dbc to phase variance without the factor 2 and was 3 dB low on every
+# phase-noise EVM term (issue #71).  Each formula is checked against the
+# library here, so the words cannot drift from what the numbers mean.
+def test_the_header_says_single_sideband_in_words(written):
+    _pll, _ar, p = written["bench_wu19_spll_frac_52m_6p253g"]
+    head = "\n".join(ln for ln in p.read_text(encoding="utf-8").splitlines()
+                     if ln.startswith("#"))
+    assert "SINGLE-sideband" in head
+    assert "S_phi = 2 * 10^(L/10)" in head
+    assert "10*log10(variance/2)" in head
+    assert "2 * 10^(dbc/20)" in head
+
+
+@pytest.mark.parametrize("name", BENCH)
+def test_integrated_l_in_ssb_dbc_is_ten_log_half_the_variance(written, name):
+    """The header's 'integrated L ... is 10*log10(variance/2)' is exactly
+    AnalysisResult.ipn_dbc, computed from the file alone.  Algebra plus the
+    file's round trip, so 1e-9 dB."""
+    _pll, ar, p = written[name]
+    d = read_clock_profile(p)
+    s_phi = 2.0 * 10.0 ** (np.asarray(d["l_dbc_hz"]) / 10.0)
+    var = integrate_pn(np.asarray(d["f_hz"]), s_phi, *ar.int_band)
+    assert 10 * math.log10(var / 2) == pytest.approx(ar.ipn_dbc, abs=1e-9)
+
+
+@pytest.mark.parametrize("beta", [1e-3, 1e-2])
+def test_a_spur_level_is_one_sideband_of_the_pm_pair(beta):
+    """The header's 'peak phase deviation 2 * 10^(dbc/20)': a phase tone
+    beta*sin(2 pi f t), measured by the same find_spurs the time domain
+    uses, reads 20*log10(beta/2).  Measured 2026-11-11: agrees to better
+    than 1e-4 dB at both levels (2^16 samples, tone on a bin); reading the
+    level as RMS instead would be 3.01 dB off, so 0.01 dB separates them."""
+    from pllsim.core.spectrum import find_spurs, periodogram_psd
+    fs, n, fo = 1.0e6, 2 ** 16, 1.0e6 * 1000 / 2 ** 16
+    t = np.arange(n) / fs
+    rng = np.random.default_rng(0)
+    phase = beta * np.sin(2 * np.pi * fo * t) + 1e-7 * rng.standard_normal(n)
+    f, s = periodogram_psd(phase, fs, detrend="constant")
+    dbc = find_spurs(f, s, [fo])[fo]
+    assert dbc == pytest.approx(20 * math.log10(beta / 2), abs=0.01)
