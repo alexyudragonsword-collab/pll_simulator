@@ -2,6 +2,19 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-11-11 · Profile header says "single-sideband" in words; topology A declined
+
+- mmw60_trx lost a factor 2 converting `ipn_dbc` to variance.  The profile
+  header now states SSB, S_phi = 2*10^(L/10), integrated SSB dBc =
+  10*log10(variance/2), and spur dbc = one PM sideband (peak 2*10^(dbc/20));
+  tests check each against the library.  Only `#` lines change.
+- Topology A wants 54 GHz from an 18 GHz (x3) or 13.5 GHz (x4) PLL.  Stated
+  coverage ends at 12 GHz and the highest anchor is 10.25 GHz, so no file is
+  made rather than extrapolate a VCO.  54 GHz / 52 MHz = 13500/13: the same
+  4 MHz tone as topology B for x3, x4 and x9.
+- Halo_Serdes' plan gives spur sine amplitude as the RMS phase (3 dB low);
+  noted in `cairn/clock-profile.md`, unverified in their code.
+
 ## 2026-11-11 · Clock profile after an integer ×N multiplier (issue #71)
 
 - mmw60_trx needs its 60.48 GHz LO as a profile file.  Added `multiply_by`,
