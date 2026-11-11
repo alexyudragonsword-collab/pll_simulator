@@ -145,6 +145,15 @@ raised as halo_serdes#149:
 Its shipped profiles cite `67fe1c7`, reachable only as refs/pull/67/head;
 the tree equals main's squash commit `63d1012`.
 
+Update 2026-11-11: halo_serdes accepted both, in its PR #150 (not merged
+when checked).  Its `f0_hz` docs now restrict the override to "another
+clock, same dBc/Hz".  The four keys are now part of its format, as metadata
+on `ClockProfile.multiplier`, validated on load (all or none, integer N >= 2,
+f_in * N == f0 within 1e-6).  Checked against #150's head `1466f5b` with 60
+files from our exporter and CLI (7 unmultiplied, 53 multiplied, N 2..32):
+every field equal to ours, and f_in * N == f0 exactly, because we write f0
+as that same float product.
+
 ## Pitfalls
 
 - A profile written from a default `analyze()` of a > 2 GHz preset is
@@ -152,3 +161,8 @@ the tree equals main's squash commit `63d1012`.
   a wider tolerance and not a flat tail.
 - The `source` line carries the commit of the checkout the writer ran from,
   so a file regenerated after a merge changes in that line only.
+- `read_clock_profile` parses only what `write_clock_profile` writes
+  (flow lists, one-line spur rows).  A file saved by halo_serdes'
+  `ClockProfile.save` uses block-style spur rows and is refused (`bad spur
+  row`).  Nothing feeds such files back today; read them with a real YAML
+  parser if that changes.

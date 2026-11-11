@@ -2,6 +2,14 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-11-11 · halo_serdes#149 answered: both accepted in their PR #150, verified with real files
+
+- They fixed the `f0_hz` override's documented use and adopted the four
+  multiplier keys as validated metadata.  Our 60 real files (N 2..32) load
+  through #150's reader with every field equal; f_in*N == f0 exactly.
+- Asymmetry noted, not fixed: our reader refuses their `save` output.
+  Details: `cairn/clock-profile.md`.
+
 ## 2026-11-11 · Halo_Serdes consumer side read; two requests raised (halo_serdes#149)
 
 - My "unverified 3 dB spur amplitude" worry was only in their plan document:
