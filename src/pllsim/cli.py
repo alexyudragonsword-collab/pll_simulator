@@ -212,6 +212,10 @@ def cmd_export(args) -> int:
     pll, name = _load(args)
     if not args.out and not args.clock_profile:
         raise SystemExit("export needs --out DIR and/or --clock-profile FILE")
+    mult_args = (args.multiply_by, args.floor_dbchz, args.spur_rejection_db)
+    if not args.clock_profile and any(v is not None for v in mult_args):
+        raise SystemExit("--multiply-by / --floor-dbchz / --spur-rejection-db "
+                         "shape the clock profile; pass --clock-profile FILE")
     d: dict[str, Any] = {"preset": name}
     parts: list[str] = []
     if args.out:
@@ -223,22 +227,41 @@ def cmd_export(args) -> int:
                   "files": rep.files, "warnings": rep.warnings})
         parts.append(rep.summary() + "".join(f"\nwarning: {w}" for w in rep.warnings))
     if args.clock_profile:
+        import numpy as np
+
+        from .core.jitter import rms_jitter_fs
         from .export.clock_profile import (
             default_source,
             profile_grid,
+            read_clock_profile,
             write_clock_profile,
         )
         # the profile spans 100 Hz..f0/2 and the exporter refuses to
         # extrapolate, so the analysis is done on that grid, not the default
         ar = pll.analyze(f=profile_grid(pll.cfg.fout))
         path = write_clock_profile(ar, args.clock_profile,
-                                   source=default_source(name), fref=pll.cfg.fref)
-        d["clock_profile"] = {"path": str(path), "f0_hz": float(ar.f0),
-                              "n_points": int(ar.f.size),
-                              "n_spurs": len(ar.spurs_analytic),
-                              "jitter_fs": _finite(ar.jitter_fs)}
-        parts.append(f"clock profile {path}: {ar.f.size} points to "
-                     f"{ar.f0 / 2e9:.4g} GHz, {ar.jitter_fs:.1f} fs over "
+                                   source=default_source(name), fref=pll.cfg.fref,
+                                   multiply_by=args.multiply_by,
+                                   floor_dbchz=args.floor_dbchz,
+                                   spur_rejection_db=args.spur_rejection_db)
+        # report what the file says, not what the model said: with a
+        # multiplier and its floor the two differ, and the file is the product
+        prof = read_clock_profile(path)
+        f = np.asarray(prof["f_hz"])
+        s_phi = 2.0 * 10.0 ** (np.asarray(prof["l_dbc_hz"]) / 10.0)
+        jit = rms_jitter_fs(f, s_phi, prof["f0_hz"], *ar.int_band)
+        d["clock_profile"] = {"path": str(path), "f0_hz": prof["f0_hz"],
+                              "n_points": len(prof["f_hz"]),
+                              "n_spurs": len(prof["spurs"]),
+                              "jitter_fs": _finite(jit)}
+        mult = ""
+        if "multiply_by" in prof:
+            d["clock_profile"].update({k: prof[k] for k in (
+                "multiply_by", "f_in_hz", "floor_dbchz", "spur_rejection_db")})
+            mult = (f", x{prof['multiply_by']} from {prof['f_in_hz'] / 1e9:.4g} GHz "
+                    f"(floor {prof['floor_dbchz']:g} dBc/Hz)")
+        parts.append(f"clock profile {path}: {len(f)} points to "
+                     f"{prof['f0_hz'] / 2e9:.4g} GHz{mult}, {jit:.1f} fs over "
                      f"{ar.int_band[0] / 1e3:.0f} kHz-{ar.int_band[1] / 1e6:.0f} MHz")
     _emit(args, d, "\n".join(parts))
     return 0
@@ -324,6 +347,15 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--clock-profile", metavar="FILE",
                    help="write the linear model's L(f) + spurs as a YAML clock profile "
                         "(100 Hz..f0/2) for a SerDes link simulator")
+    p.add_argument("--multiply-by", type=float, metavar="N",
+                   help="the clock after an integer xN multiplier: f0 becomes N*fout, "
+                        "N^2*L(f) plus the floor up to fout/2, the floor alone above")
+    p.add_argument("--floor-dbchz", type=float, metavar="DBC",
+                   help="the multiplier's additive white floor at its output [dBc/Hz]; "
+                        "required with --multiply-by, no default")
+    p.add_argument("--spur-rejection-db", type=float, metavar="DB",
+                   help="N-1 / N+1 harmonic leakage below the carrier [dB]; "
+                        "required with --multiply-by, no default")
     p.set_defaults(fn=cmd_export)
 
     p = sub.add_parser("config", help="write a config file, or --check one")

@@ -58,13 +58,13 @@ else:
 # ------------------------------------------------------------------- VCO
 st.subheader("VCO FoM")
 st.code("FoM = L(df) - 20*log10(f0/df) + 10*log10(P/1mW)", language="text")
-c = st.columns(5)
-f0 = c[0].text_input(L("载波 f0 [Hz]", "carrier f0 [Hz]"), "10e9")
-off = c[1].text_input(L("偏移 df [Hz]", "offset df [Hz]"), "1e6")
-ldbc = c[2].text_input(L("L(df) [dBc/Hz] 单边带",
+cv = st.columns(5)
+f0 = cv[0].text_input(L("载波 f0 [Hz]", "carrier f0 [Hz]"), "10e9")
+off = cv[1].text_input(L("偏移 df [Hz]", "offset df [Hz]"), "1e6")
+ldbc = cv[2].text_input(L("L(df) [dBc/Hz] 单边带",
                          "L(df) [dBc/Hz] single-sideband"), "-120")
-vpwr = c[3].text_input(L("功耗 [mW]", "power [mW]"), "10", key="vco_pwr")
-ftr = c[4].text_input(L("调谐范围 [%]（选填）",
+vpwr = cv[3].text_input(L("功耗 [mW]", "power [mW]"), "10", key="vco_pwr")
+ftr = cv[4].text_input(L("调谐范围 [%]（选填）",
                         "tuning range [%] (optional)"), "")
 
 try:

@@ -58,6 +58,40 @@ in the Halo_Serdes repository, not here.
   a frequency annotation, not a spur, and is left out; a non-finite level is
   left out too.
 
+## After an integer multiplier (issue #71, 2026-11-11)
+
+Second consumer: mmw60_trx (60 GHz transceiver) builds its LO as a sub-7 GHz
+PLL followed by xN, and reads only the file.  Agreed on the issue and
+implemented as `write_clock_profile(..., multiply_by, floor_dbchz,
+spur_rejection_db)` / `pllsim export --multiply-by`:
+
+- **N is an integer >= 2.**  The request moved a 6.253 GHz profile to
+  60.48 GHz by 20*log10(9.672); the realisable chain retunes the PLL to
+  f_c/N.  Wu'19 at 6.048 GHz (N = 10) also needs `osc.f0` recentred: from
+  6.2 GHz it trips `tuning-swing` (-2.53 V); 82.16 fs either way.
+- **Up to f_in/2: N^2 * L_in + floor; above: floor alone.**  The PLL's
+  profile has no information past f_in/2, so nothing is extrapolated and the
+  step at f_in/2 is where the PLL's curve ends.  Interpolating the input onto
+  the output grid costs 0.00007 dB worst (measured on the 6.048 GHz curve).
+- **No defaults for the floor or the harmonic rejection.**  Nothing here
+  measures a multiplier; ex22's -160 dBc/Hz / 40 dB are labelled placeholders
+  in the file's `source`.  Correction to my first reply on the issue: I took
+  mmw60_trx's "-85..-110 dBc/Hz @ 1 MHz" for a multiplier floor; it is the
+  LO level at 1 MHz they sweep (Wu'19 x10 is -98.5 there).  A floor shows
+  only above the PLL's far-out x N^2 level, about -134 dBc/Hz.
+- **Spurs:** input spurs + 20*log10(N); the N-1 / N+1 leakage is ONE entry
+  at f_in, because the format's spur is already a PM sideband pair.  My
+  issue reply said "two entries"; one is what the format means.
+- **Four keys of their own** (`multiply_by`, `f_in_hz`, `floor_dbchz`,
+  `spur_rejection_db`), all or none, written only when multiplied.  The
+  unmultiplied files are byte-identical to before (checked on 8 presets),
+  because this library's own reader rejected unknown keys and Halo_Serdes'
+  reader is not known to accept them.
+- **Frequency-plan finding, not a model one:** 60.48 GHz / 52 MHz =
+  15120/13, so every integer N puts the divider on a k/13 fraction and the
+  first fractional tone at fref/13 = 4 MHz: -63.7 dBc at 6.048 GHz, -43.7 x10.
+  Only a different reference frequency moves it.
+
 ## Known limits (measured 2026-10-01, the seven anchors on the profile grid)
 
 - The whole-profile jitter (100 Hz..f0/2) is what a consumer integrating the

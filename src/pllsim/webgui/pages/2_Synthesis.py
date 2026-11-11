@@ -74,11 +74,11 @@ with tab_sp:
     st.caption(L("采参考的采样 PLL：与 SSPLL 同一离散环路，但鉴相增益经分频器"
                  "折算 1/N", "reference-sampling PLL: the SSPLL discrete loop "
                  "with the detector gain referred through the divider (1/N)"))
-    c = st.columns(4)
-    amp_s = float(c[0].text_input("amp [V]", "0.8", key="sp_amp"))
-    gm_s = float(c[1].text_input("gm [S]", "10e-3", key="sp_gm"))
-    pw_s = float(c[2].text_input("pulse [s]", "1e-9", key="sp_pw"))
-    n_s = float(c[3].text_input("N (fout/fref)", "80", key="sp_n"))
+    cs = st.columns(4)
+    amp_s = float(cs[0].text_input("amp [V]", "0.8", key="sp_amp"))
+    gm_s = float(cs[1].text_input("gm [S]", "10e-3", key="sp_gm"))
+    pw_s = float(cs[2].text_input("pulse [s]", "1e-9", key="sp_pw"))
+    n_s = float(cs[3].text_input("N (fout/fref)", "80", key="sp_n"))
     c2 = st.columns(4)
     kvco_s = float(c2[0].text_input("Kvco [Hz/V]", "60e6", key="sp_kv"))
     ugb_s = float(c2[1].text_input("UGB [Hz]", "3e5", key="sp_ugb"))
@@ -97,10 +97,10 @@ with tab_sp:
             st.error(str(e))
 
 with tab_dlf:
-    c = st.columns(3)
-    fref3 = float(c[0].text_input("fref [Hz]", "100e6", key="d_fr"))
-    ugb3 = float(c[1].text_input("UGB [Hz]", "1e6", key="d_ugb"))
-    pm3 = float(c[2].text_input("PM [deg]", "55", key="d_pm"))
+    cd = st.columns(3)
+    fref3 = float(cd[0].text_input("fref [Hz]", "100e6", key="d_fr"))
+    ugb3 = float(cd[1].text_input("UGB [Hz]", "1e6", key="d_ugb"))
+    pm3 = float(cd[2].text_input("PM [deg]", "55", key="d_pm"))
     if st.button("Synthesize", key="dlf"):
         try:
             alpha, rho = design_adpll_dlf(fref3, ugb3, pm3)
