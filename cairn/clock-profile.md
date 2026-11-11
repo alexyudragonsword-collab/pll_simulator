@@ -127,6 +127,24 @@ amplitude as sqrt(2 * 10^(dbc/10)) / (2 pi f0).  That is the RMS phase, not
 the peak, so a sine built with it is 3 dB low.  The plan is a document, and
 whether Halo_Serdes' code does this is unverified.
 
+Correction 2026-11-11, after reading halo_serdes@13ef843: its code is right.
+`tx/clock.py::spur_amplitudes_s` uses the peak, 2 * 10^(dbc/20), and its
+docstring names the RMS form as the RMS.  The 3 dB error was only ever in
+the plan document.  The same read found two real consumer-side problems,
+raised as halo_serdes#149:
+
+- Its `f0_hz` override is documented for "a divided or multiplied clock"
+  and changes only the phase-to-seconds scale.  For xN the curve should rise
+  20*log10(N) and seconds stay put, so the override gives N times too little
+  jitter: measured with its own `ClockProfile`, Wu'19 reads 80.85 fs, the
+  override to x10 reads 8.09 fs, our real x10 file reads 80.85 fs.
+- Its loader rejects unknown keys, so a multiplied file from #72 does not
+  load (`unknown clock-profile key(s) ['f_in_hz', ...]`).  The format is
+  theirs to extend; until they decide, multiplied files are for mmw60_trx.
+
+Its shipped profiles cite `67fe1c7`, reachable only as refs/pull/67/head;
+the tree equals main's squash commit `63d1012`.
+
 ## Pitfalls
 
 - A profile written from a default `analyze()` of a > 2 GHz preset is

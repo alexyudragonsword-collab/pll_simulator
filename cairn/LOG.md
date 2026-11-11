@@ -2,6 +2,15 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-11-11 · Halo_Serdes consumer side read; two requests raised (halo_serdes#149)
+
+- My "unverified 3 dB spur amplitude" worry was only in their plan document:
+  their code uses the peak.  Correction recorded in `cairn/clock-profile.md`.
+- Raised instead: their `f0_hz` override is documented for multiplied and
+  divided clocks and is wrong by N there (Wu'19 x10: 8.09 fs against 80.85);
+  and their loader rejects #72's four multiplier keys.  The format is
+  theirs; both are their decision.  Vendored colored/jitter: no drift.
+
 ## 2026-11-11 · Profile header says "single-sideband" in words; topology A declined
 
 - mmw60_trx lost a factor 2 converting `ipn_dbc` to variance.  The profile
