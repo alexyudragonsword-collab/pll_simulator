@@ -18,6 +18,8 @@ This file records substantive progress in reverse-chronological order — newest
   search string matched nothing, and was redone.
 - Two corrections to my first issue reply, recorded in the topic note: the
   floor/LO-level mix-up, and one leakage spur entry rather than two.
+- CI went red on mypy 2.4.1 (unpinned): it types `st.columns(n)` by length,
+  and two web pages reused one name for rows of different widths.  Renamed.
 
 ## 2026-10-03 · upload-artifact 4→7 and setup-java 5→6, verified by real builds
 
