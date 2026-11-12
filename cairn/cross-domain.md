@@ -185,6 +185,16 @@ validation pass); supersedes the scattered per-test knowledge before it.
   dead-zone table is monotone (+3.7 at 0.26 bin, +0.8 at 0.41, within 0.9 dB
   from 0.5 bin up).  Only configurations with TDC jitter > 0 change; no
   preset has any.
+  Confirmed independently 2026-11-12 (fmcw_radar, closing #76 on
+  `5564c64`, their own loop, CW integer-N, 30/100/300 kHz): `tdc_jitter`
+  equals the term they had added to 1 +- 2e-16; simulate - analyze is
+  +5.5/+5.9/+10.9 dB at 1 ps (0.22 bin, flagged), +0.1/+0.9/+1.6 at 2 ps
+  (0.41 bin, flagged), within 1.7 dB at 5 ps, where the issue had read
+  +4.0 dB at 3-10 MHz -- mostly the clipping, not the missing term.  Their
+  ramp runs stay within 0.7 dB, unchanged by the wrap.  The 1 ps row is
+  the dead zone the note warns about, consistent with our +7.0 dB at 0.21
+  bin.  They pick up both fixes only when polar_tx re-vendors `adpll.py`
+  (still at `d7be4712`; polar_tx's open item, not ours).
 
 ## Where the numbers live
 

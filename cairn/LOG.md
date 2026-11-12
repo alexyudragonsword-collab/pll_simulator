@@ -2,6 +2,17 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-11-12 · Licence as an SPDX string; #76 and halo_serdes#149 closed
+
+- `pyproject`: `license = "MIT"` + `license-files`, setuptools floor 68 ->
+  77 (76 rejects the string form; measured).  Removes the deprecation that
+  becomes a build failure on 2027-02-18.  Wheel package files identical
+  by sha256, sdist file list identical (183), metadata gains
+  `License-Expression: MIT`.
+- fmcw_radar closed #76 after re-running its loop on `5564c64`; numbers in
+  `cairn/cross-domain.md`.  halo_serdes#150 merged, #149 closed; correction
+  in `cairn/clock-profile.md`.
+
 ## 2026-11-12 · TDC jitter wraps at the range edge instead of being clipped
 
 - Decided the open item from #77: TDC jitter is input-referred, so the

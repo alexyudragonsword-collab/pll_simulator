@@ -1,5 +1,8 @@
 [build-system]
-requires = ["setuptools>=68"]
+# 77 is the first release that reads `project.license` as an SPDX string
+# (PEP 639).  Older ones reject that form outright, and the table form it
+# replaces stops being supported on 2027-02-18.
+requires = ["setuptools>=77"]
 build-backend = "setuptools.build_meta"
 
 [project]
@@ -8,7 +11,8 @@ version = "0.9.6"
 description = "System-level / behavioral simulation models for PLLs: CPPLL, SSPLL, SPLL, ADPLL, ILCM, MDLL with noise, spur and calibration analysis"
 readme = "README.md"
 requires-python = ">=3.10"
-license = { text = "MIT" }
+license = "MIT"
+license-files = ["LICENSE"]
 dependencies = [
     # Floors are measured, not aspirational: the full suite passes on Python
     # 3.10 with numpy 1.24.4 + scipy 1.8.1 (the oldest stack the Android
