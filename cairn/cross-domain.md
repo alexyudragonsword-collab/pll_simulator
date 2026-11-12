@@ -178,6 +178,13 @@ validation pass); supersedes the scattered per-test knowledge before it.
   5-6 dB under analyze(), frac 0.5 (at the edge half the time) about 3 dB,
   frac 0.37 within 1 dB.  Whether "input-referred" jitter should wrap like
   reference jitter (as jit_ref does) is a modelling decision not yet taken.
+  Resolved 2026-11-12: it wraps.  The field is documented as input-referred,
+  so it now shifts the TDC sampling instant exactly as `jit_ref` does, count
+  and fraction together; the random draw order is unchanged.  Jitter
+  dominant, all three patterns now read +0.3..+0.7 dB (seeds 1-3), and the
+  dead-zone table is monotone (+3.7 at 0.26 bin, +0.8 at 0.41, within 0.9 dB
+  from 0.5 bin up).  Only configurations with TDC jitter > 0 change; no
+  preset has any.
 
 ## Where the numbers live
 

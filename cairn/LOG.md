@@ -2,6 +2,18 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-11-12 · TDC jitter wraps at the range edge instead of being clipped
+
+- Decided the open item from #77: TDC jitter is input-referred, so the
+  kernel now applies it to the sampling instant like reference jitter, and
+  a sample pushed across a DCO edge wraps.  It used to be clamped at 0, at
+  exactly the integer-N lock point.
+- Jitter dominant: integer -5.33 -> +0.33..+0.68 dB, fraction 0.5 -2.74 ->
+  +0.32..+0.70, fraction 0.37 unchanged at +0.35..+0.71.  The dead-zone
+  table is now monotone and the 0.5-bin threshold fits it better.
+- No preset sets TDC jitter, so no stock number moves; same draw order, so
+  interpreted and compiled kernels stay bit-identical.
+
 ## 2026-11-12 · TDC ADPLL: tdc_jitter term and the integer-N dead zone (issue #76)
 
 - fmcw_radar's two findings reproduced to the decibel.  `analyze()` gains

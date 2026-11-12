@@ -213,13 +213,19 @@ def adpll_tdc_kernel(n_cycles: int, tref: float, fout: float, fref: float, fcw: 
             r_acc += (mod_freq[n - 1] if n > 0 else 0.0) * tref
         # reference jitter shifts the sampling instant of the DCO phase
         phi_sample = phi_v + jit_ref[n] * fv
+        if noise_on and tdc_jitter > 0:
+            # TDC jitter is input-referred, so it shifts the same instant:
+            # count and fraction move together and a sample pushed across a
+            # DCO edge wraps to it.  It used to be added to the fraction
+            # after the count and clamped at 0, which cut part of it at the
+            # integer-N lock point, where the TDC sits at its range edge
+            # (issue #76: -5..-6 dB with the jitter dominant).
+            phi_sample = phi_sample + tdc_jitter * zn[zi] * fv
+            zi += 1
         count = float(math.floor(phi_sample))
         frac_ui = phi_sample - count
         tdco = 1.0 / fv
         dt_meas = frac_ui * tdco
-        if noise_on and tdc_jitter > 0:
-            dt_meas = dt_meas + tdc_jitter * zn[zi]
-            zi += 1
         code = tdc_measure(dt_meas, tdc_t_lsb_true, tdc_code_max, tdc_has_sin,
                            tdc_sin_amp, tdc_sin_cyc, tdc_sin_ph)
         if has_tcal and calibration:

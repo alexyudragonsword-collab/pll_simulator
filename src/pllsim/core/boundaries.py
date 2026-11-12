@@ -43,11 +43,13 @@ SETTLE_FRAC = 0.25
 #: edge, and analyze()'s white t_res^2/12 tdc_quant term does not describe
 #: that.  The dither that matters is the RMS timing at the TDC input -- its own
 #: jitter combined with the loop's phase error, both in seconds -- measured
-#: in bins.  Measured 2026-11 (issue #76's 15 GHz loop and three variants,
-#: 400k cycles, seed 3, simulate - analyze averaged over 30-300 kHz):
-#: +16.9 / +8.0 / +7.0 / +3.1 / +2.4 / +1.6 dB at 0.08 / 0.26 / 0.21 / 0.33 /
-#: 0.47 / 0.41 bins, and within 1 dB from 0.5 bin up wherever TDC jitter is
-#: not itself dominant.  A frequency ramp or a fractional FCW sweeps the phase
+#: in bins.  Measured 2026-11-12 with the TDC jitter wrapping at the range
+#: edge (issue #76's 15 GHz loop and three variants, 400k cycles, seed 3,
+#: simulate - analyze averaged over 30-300 kHz): +16.9 / +7.0 / +3.7 /
+#: +2.4 / +2.3 / +0.8 dB at 0.08 / 0.21 / 0.26 / 0.47 / 0.33 / 0.41 bins,
+#: and -0.3..+0.9 dB at every point from 0.5 bin up.  (Measured the day
+#: before, with the jitter still clipped, the jitter rows read up to 4 dB
+#: higher below 0.5 bin and up to 10 dB lower above it.)  A frequency ramp or a fractional FCW sweeps the phase
 #: across bins and dithers it regardless; analyze() cannot see a ramp, which
 #: is why the note it raises says so rather than the predicate.
 #:

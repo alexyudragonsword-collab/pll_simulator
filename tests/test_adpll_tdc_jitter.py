@@ -10,11 +10,12 @@ fmcw_radar found two things, both reproduced here to the decibel:
   t_res^2/12.  That is a validity limit of the linear model, now flagged by
   ``core.boundaries.tdc_dead_zone`` (a note here, a boundary in the sweep).
 
-The jitter term is checked where it can be checked: with the jitter
-dominant and the TDC phase swept across the period by a fractional FCW.  In
-integer-N the time domain parks the TDC at its range edge and clips part of
-the jitter (measured 5-6 dB low with the jitter dominant), which is a
-separate simulate() matter and not what these tests are about.
+Checking the jitter term turned up a third thing, on the simulate() side:
+in integer-N the loop locks with the TDC at its range edge, and the kernel
+clamped TDC jitter there instead of wrapping it, reading 5-6 dB low with
+the jitter dominant.  The jitter is input-referred, so it now shifts the
+sampling instant like reference jitter does, and the wrap test below holds
+all three phase patterns (integer, 0.5, 0.37) to the same agreement.
 """
 from __future__ import annotations
 
@@ -73,17 +74,44 @@ def test_tdc_jitter_is_tdc_quant_with_sigma_for_q_over_sqrt12(sigma):
                                   rel=1e-12)
 
 
+@pytest.mark.parametrize("label, fout", [
+    ("integer: the TDC parks at its range edge", 15.0e9),
+    ("fraction 0.5: at the edge every other cycle", 15.05e9),
+])
+def test_tdc_jitter_wraps_at_the_range_edge_instead_of_being_clipped(label, fout):
+    """The jitter is input-referred: timing noise on the TDC's input edge.
+    It has to move the sampling instant -- count and fraction together, as
+    reference jitter already does -- so that a sample pushed across a DCO
+    edge wraps to the previous edge rather than being clamped at code 0.
+
+    Until 2026-11-12 the kernel took the count first, added the jitter to
+    the fraction only and clamped at 0.  An integer-N loop locks with the
+    TDC at about 0, its range edge, so part of the jitter was cut: measured
+    -5.33 dB (integer) and -2.74 dB (0.5) on this test before the fix,
+    +0.33..+0.68 and +0.32..+0.70 after (seeds 1-3).  Same configuration
+    and tolerance as the dominance test.
+    """
+    pll = _issue_loop(5e-12, fout=fout, t_res=0.5e-12, pn=-105.0,
+                      n_bits=8, floor=-150.0, ref=-165.0)
+    f = np.geomspace(3e4, 3e6, 9)
+    bd = pll.analyze(f).pn_breakdown
+    assert np.min(bd["tdc_jitter"] / bd["total"]) > 0.9, "jitter is not dominant"
+    sim = pll.simulate(200_000, noise=True, seed=1)
+    d = 10 * np.log10(np.interp(f, sim.f_psd, sim.s_phi_psd) / bd["total"])
+    assert abs(d.mean()) < 1.5, f"{label}: band-mean {d.mean():+.2f} dB: {np.round(d, 1)}"
+
+
 @pytest.mark.parametrize("seed", [1, 2])
 def test_with_tdc_jitter_dominant_the_two_domains_agree(seed):
     """Drive the source to dominance before comparing (CONTRIBUTING).
 
     5 ps of jitter on a 0.5 ps bin with a quiet DCO puts tdc_jitter at 98 %
     of the in-band budget; a fractional FCW (0.37) sweeps the TDC phase
-    across the period so the time domain's range-edge clipping does not
-    enter.  Measured 2026-11-11, 200k cycles, mean over 9 log-spaced
-    offsets 30 kHz-3 MHz: +0.23 / +0.40 / +0.56 dB at seeds 1-3 (100k:
-    -0.71..+0.54).  Without the term analyze() would read ~17 dB low, so
-    1.5 dB is ~3x the spread and a tenth of the defect.
+    across the period.  Measured 2026-11-12, 200k cycles, mean over 9
+    log-spaced offsets 30 kHz-3 MHz: +0.35 / +0.57 / +0.71 dB at seeds 1-3
+    (integer FCW +0.33..+0.68, fraction 0.5 +0.32..+0.70).  Without the
+    term analyze() would read ~17 dB low, so 1.5 dB is ~2x the spread and
+    a tenth of the defect.
     """
     pll = _issue_loop(5e-12, fout=15.037e9, t_res=0.5e-12, pn=-105.0,
                       n_bits=8, floor=-150.0, ref=-165.0)
