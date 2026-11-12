@@ -197,6 +197,12 @@ GRID = [
     P("adpll-fref-x2.0", lambda: _fref_scaled("adpll_100m_10g", 2.0),
       "ADPLL", [CLIP]),
     P("adpll-tdc-x4", lambda: _tdc_x4(), "ADPLL", [CLIP]),
+    # integer-N, where the TDC has nothing to dither it (issue #76): the
+    # stock loop agrees anyway; the 4x coarser TDC is a pinned gap
+    P("adpll-intn", lambda: _integer_n("adpll_100m_10g"), "ADPLL",
+      [CLIP, "tdc-dead-zone"]),
+    P("adpll-intn-tdc-x4", lambda: _integer_n("adpll_100m_10g", tdc_mult=4.0),
+      "ADPLL", [CLIP, "tdc-dead-zone"]),
     # --------------------------------------------------------- fractional-N
     P("cppll_frac-stock", lambda: _preset("cppll_frac_38p4m_6g"), "CPPLL",
       [CLIP, "dsm-tonal"]),
@@ -258,6 +264,16 @@ GRID = [
 def _flicker_x10():
     p = _preset("sspll_19p2m_4p8g")
     p.cfg.osc.pn_f1f3 *= 10
+    return p
+
+
+def _integer_n(name: str, tdc_mult: float = 1.0):
+    """Move fout to the nearest integer multiple of fref (the FCW becomes
+    an integer) and optionally coarsen the TDC.  The stock TDC ADPLL is
+    fractional, which dithers its TDC; this is the case it hides."""
+    p = _preset(name)
+    p.cfg.fout = round(p.cfg.fout / p.cfg.fref) * p.cfg.fref
+    p.cfg.tdc.t_res *= tdc_mult
     return p
 
 

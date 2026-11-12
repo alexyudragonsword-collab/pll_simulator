@@ -37,7 +37,7 @@ from ..core.dtcspurs import frac_spur_offsets
 from ..core.engine import detect_lock, postprocess
 from ..core.freqresp import FreqResponse, default_grid, loop_metrics
 from ..core.jit import kernel
-from ..core.jitter import ipn_dbc, rms_jitter_fs
+from ..core.jitter import integrate_pn, ipn_dbc, rms_jitter_fs
 from ..core.noise import (
     DcoQuantPhase,
     FlickerFloorPhase,
@@ -378,11 +378,30 @@ class ADPLL(PLLBase):
         return FreqResponse(f, TWOPI * c.osc.gain * (1.0 / c.fref) * zinv / (1.0 - zinv))
 
     # ------------------------------------------------------------- analyze
-    def analyze(self, f: np.ndarray | None = None) -> AnalysisResult:
+    def tdc_dither_rms_s(self) -> float:
+        """RMS timing [s] at the TDC input that can carry it across bins.
+
+        The TDC's own jitter combined with the loop's phase error, the
+        latter integrated from 1 kHz to fref/2 with the three quantization
+        terms taken out: tdc_quant and tdc_jitter are what the dither acts on,
+        and dco_quant stops being random once the TDC code stops changing.
+        This is the quantity ``core.boundaries.tdc_dead_zone`` compares with
+        one bin.
+        """
         c = self.cfg
-        if f is None:
-            f = default_grid(1e2, 1e9)
-        notes = []
+        fg = np.geomspace(1e3, c.fref / 2.0, 400)
+        _gol, _kdet, _h, paths, _notes = self._noise_paths(fg)
+        bd = output_psd(paths, fg)
+        s = (bd["total"] - bd.get("tdc_quant", 0.0) - bd.get("tdc_jitter", 0.0)
+             - bd.get("dco_quant", 0.0))
+        sigma_loop_s = math.sqrt(max(integrate_pn(fg, s, fg[0], fg[-1]), 0.0)) \
+            / (TWOPI * c.fout)
+        return math.hypot(c.tdc.jitter_rms_s, sigma_loop_s)
+
+    def _noise_paths(self, f: np.ndarray):
+        """(gol, kdet, h, paths, notes) on grid ``f``: the noise model alone."""
+        c = self.cfg
+        notes: list[str] = []
         if c.mode == "tdc":
             gol, kdet = self._gol_tdc(f)
         else:
@@ -404,6 +423,16 @@ class ADPLL(PLLBase):
             paths.append(NoisePath(
                 ShapedQuantization(name="tdc_quant", unit="rad^2/Hz",
                                    q=TWOPI * q_ui, fs=c.fref, order=0), h))
+            if c.tdc.jitter_rms_s > 0:
+                # TDC.measure adds it to the interval once per reference
+                # cycle, before quantizing, so it is a sampled white source on
+                # the same path as tdc_quant and in the same convention:
+                # 2 sigma^2 / fref (tdc_quant is the sigma = q/sqrt(12) case).
+                # Until 2026-11 only simulate() read this field (issue #76).
+                paths.append(NoisePath(
+                    NoiseSource(name="tdc_jitter", unit="rad^2/Hz",
+                                level=2.0 * (TWOPI * c.fout * c.tdc.jitter_rms_s) ** 2
+                                / c.fref), h))
         else:
             if c.div_pn_dbchz is not None:
                 # divider output phase enters at the PD like the reference:
@@ -435,10 +464,35 @@ class ADPLL(PLLBase):
                     ShapedQuantization(name="dsm_residual", unit="rad^2/Hz",
                                        q=TWOPI * eps, fs=c.fref,
                                        order=c.frac.mash_order - 1), h))
+        return gol, kdet, h, paths, notes
+
+    def analyze(self, f: np.ndarray | None = None) -> AnalysisResult:
+        c = self.cfg
+        if f is None:
+            f = default_grid(1e2, 1e9)
+        gol, kdet, h, paths, notes = self._noise_paths(f)
+        err = 1.0 - h
 
         m = loop_metrics(gol, f_limit=c.fref / 2)
         bd = output_psd(paths, f)
         jit = rms_jitter_fs(f, bd["total"], c.fout, *c.int_band)
+        if c.mode == "tdc":
+            from ..core.boundaries import TDC_DITHER_BINS, tdc_dead_zone
+            dither_s = self.tdc_dither_rms_s()
+            if tdc_dead_zone(c.fcw, c.tdc.t_res, dither_s):
+                notes.append(
+                    f"TDC dead zone: integer-N (FCW {c.fcw:g}) with "
+                    f"{dither_s / c.tdc.t_res:.2f} TDC bins of RMS dither at "
+                    f"its input, under {TDC_DITHER_BINS:g}.  The loop parks "
+                    "inside one bin and cannot see the DCO drift there, so "
+                    "tdc_quant's white t_res^2/12 is not supported: "
+                    "simulate() can read up to ~20 dB more below the loop "
+                    "bandwidth (measured +16.9 dB at 0.08 bin, but +0.3 dB "
+                    "for the stock loop at 0.20 bin -- the size depends on "
+                    "the loop, so compare with simulate()).  A "
+                    "frequency ramp or two-point modulation dithers the TDC "
+                    "and this does not apply; neither does it in fractional-N."
+                    "  TDC jitter of ~0.5 bin or more also dithers it.")
         if m.f_ugb > c.fref / 10:
             notes.append("UGB > fref/10: discrete loop peaking significant")
         from ..core.boundaries import conditionally_stable
