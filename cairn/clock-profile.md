@@ -153,6 +153,9 @@ f_in * N == f0 within 1e-6).  Checked against #150's head `1466f5b` with 60
 files from our exporter and CLI (7 unmultiplied, 53 multiplied, N 2..32):
 every field equal to ours, and f_in * N == f0 exactly, because we write f0
 as that same float product.
+Correction 2026-11-12: #150 is merged and halo_serdes#149 closed (checked
+via the API), so "not merged when checked" above is out of date.  Not
+re-run against their merged main.
 
 ## Pitfalls
 
