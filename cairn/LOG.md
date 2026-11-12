@@ -2,6 +2,19 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-11-12 · TDC ADPLL: tdc_jitter term and the integer-N dead zone (issue #76)
+
+- fmcw_radar's two findings reproduced to the decibel.  `analyze()` gains
+  `tdc_jitter` (sampled white, tdc_quant's path and convention); with the
+  jitter dominant on a fractional FCW the domains agree within 0.6 dB.
+- New boundary `tdc-dead-zone`: integer-N with < 0.5 bin of dither.  The
+  dither threshold is conservative: stock-at-integer-N (0.20 bin) is flagged
+  and agrees; 4x coarser TDC is pinned at 13.91 dB.  Data and the reason a
+  single threshold cannot predict the size: `cairn/cross-domain.md`.
+- Found while checking the term, and left open: simulate() clips TDC jitter
+  at the integer-N lock point (TDC parked at its range edge).
+- No stock number moves: every ADPLL preset's analyze() is identical to main.
+
 ## 2026-11-11 · halo_serdes#149 answered: both accepted in their PR #150, verified with real files
 
 - They fixed the `f0_hz` override's documented use and adopted the four

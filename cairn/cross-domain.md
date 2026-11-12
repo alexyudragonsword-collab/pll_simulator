@@ -155,6 +155,30 @@ validation pass); supersedes the scattered per-test knowledge before it.
   same-band pair.  This mismatch is also how sspll_frac's −6.8 dB hid from
   the ±35% scalar jitter test for its whole life.
 
+- **A grid built from one preset inherits that preset's blind spots**
+  (2026-11-11, issue #76 from fmcw_radar).  Every TDC-ADPLL point derived
+  from `adpll_100m_10g`, which is fractional (FCW 100.503), and a fractional
+  FCW dithers the TDC.  So the integer-N dead zone -- the loop parked inside
+  one TDC bin, simulate() up to ~20 dB over analyze() in band -- had no
+  point that could see it.  Now `tdc-dead-zone` (predicate in
+  core/boundaries.py, note in ADPLL.analyze), with `adpll-intn` (stock at
+  integer N, 0.20 bin, flagged but within 0.6 dB) and `adpll-intn-tdc-x4`
+  (0.05 bin, pinned 13.91 dB).  The flag is conservative on purpose: dither
+  in bins does not predict the size (the DCO's step per code word does too),
+  so it marks where the white-quantization model is unsupported.
+- **`tdc.jitter_rms_s` was simulate()-only** until the same issue: analyze()
+  had no term, and the field-sensitivity gate passed it because it accepts
+  a change in either domain.  `tdc_jitter` is now a sampled white term,
+  2 sigma^2/fref on tdc_quant's path; with the jitter dominant and a
+  fractional FCW the domains agree to +0.2..+0.6 dB (seeds 1-3, 200k).
+- **Open, simulate() side: integer-N parks the TDC at its range edge and
+  clips TDC jitter.**  The kernel takes the cycle count before adding TDC
+  jitter and clamps the measured interval at 0, so jitter that should wrap
+  to the previous DCO edge is cut.  With jitter dominant: integer-N reads
+  5-6 dB under analyze(), frac 0.5 (at the edge half the time) about 3 dB,
+  frac 0.37 within 1 dB.  Whether "input-referred" jitter should wrap like
+  reference jitter (as jit_ref does) is a modelling decision not yet taken.
+
 ## Where the numbers live
 
 Boundary table + pinned gaps: docs/roadmap.md (generated).  Per-preset

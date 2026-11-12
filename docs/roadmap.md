@@ -42,6 +42,7 @@ enforced by `tests/test_cross_domain_sweep.py` on every push.
 | `conditional-stability` | — | The open loop crosses unity gain more than once; phase margin at one crossing does not describe the loop and the linear jitter integral spans a non-small-signal region. |
 | `bbpd-linearization` | +1.5 dB | The BBPD linear gain is a describing-function approximation; when the loop is quantization-dominated it over-predicts in-band noise by 2-4 dB and the time domain is the reference. |
 | `dsm-tonal` | +1.5 dB | The linear model budgets the DSM/DTC residual as white noise (ShapedQuantization); the actual residual is deterministic and tonal, concentrated at frac-related offsets.  For near-rational fractions most of that power sits in tones outside (or at the edge of) the comparison band, so the in-band PSDs legitimately differ -- the frac_spur table is the deterministic complement the white budget stands in for. |
+| `tdc-dead-zone` | — | An integer-N TDC loop with under half a TDC bin of RMS dither at the TDC (its jitter plus the loop's own phase error) parks inside one bin.  analyze()'s white t_res^2/12 term does not describe that, and simulate() can read up to ~20 dB more in band.  How much depends on the loop: the stock loop at integer-N (0.20 bin) measures +0.3 dB, the same loop with a 4x coarser TDC (0.05 bin) is pinned below.  A chirp, two-point modulation or a fractional FCW dithers the TDC; analyze() sees only the last.  Reported from fmcw_radar, issue #76. |
 
 ## Cross-domain gaps — pinned here, re-measured on every push
 
@@ -65,6 +66,7 @@ means this register no longer describes the tool.
 | `sspll_frac-near-int` | `dsm-tonal` | 6.79 dB |
 | `spll-fref-x0.5` | `ct-peaking` | 2.08 dB |
 | `mdll-fref-x2.0` | `zoh-approx` | 3.45 dB |
+| `adpll-intn-tdc-x4` | `tdc-dead-zone` | 13.91 dB |
 
 ## Limits that are scope, not backlog
 

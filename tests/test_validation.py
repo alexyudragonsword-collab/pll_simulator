@@ -95,6 +95,13 @@ def _fout_stepped(name, n_steps):
     return p
 
 
+def _integer_n(name):
+    """The FCW made an integer: a TDC loop with nothing to dither its TDC."""
+    p = presets.ALL_PRESETS[name]()
+    p.cfg.fout = round(p.cfg.fout / p.cfg.fref) * p.cfg.fref
+    return p
+
+
 @pytest.mark.parametrize("code", [b.code for b in BOUNDARIES])
 def test_every_boundary_code_can_fire(code, quick):
     """A predicate over a field that does not exist is decorative: it reads
@@ -142,6 +149,10 @@ def test_every_boundary_code_can_fire(code, quick):
             sim=None, band=(1e5, 1e6), n_cycles=1),
         "tuning-swing": BoundaryContext(
             pll=_fout_stepped("cppll_19p2m_4p8g", 10), ar=None, sim=None,
+            band=(1e5, 1e6), n_cycles=1),
+        # the stock TDC ADPLL moved to integer N: 0.20 bin of dither
+        "tdc-dead-zone": BoundaryContext(
+            pll=_integer_n("adpll_100m_10g"), ar=None, sim=None,
             band=(1e5, 1e6), n_cycles=1),
     }
     assert code in triggering, f"no trigger case written for {code}"

@@ -41,6 +41,7 @@ from .core.boundaries import (
     ct_approx_exceeded,
     flicker_floor_hz,
     jitter_band_clipped,
+    tdc_dead_zone,
     tuning_law_railed,
     tuning_swing_exceeded,
 )
@@ -230,6 +231,23 @@ BOUNDARIES: tuple[Boundary, ...] = (
         extra_db=1.5,     # cppll_frac measured 3.0 vs the 2.5 base; the
                           # sspll_frac near-rational extreme (6.84 dB) is
                           # pinned as a KnownGap instead of widened here
+    ),
+    Boundary(
+        code="tdc-dead-zone",
+        statement=(
+            "An integer-N TDC loop with under half a TDC bin of RMS dither "
+            "at the TDC (its jitter plus the loop's own phase error) parks "
+            "inside one bin.  analyze()'s white t_res^2/12 term does not "
+            "describe that, and simulate() can read up to ~20 dB more in "
+            "band.  How much depends on the loop: the stock loop at integer-"
+            "N (0.20 bin) measures +0.3 dB, the same loop with a 4x coarser "
+            "TDC (0.05 bin) is pinned below.  A chirp, two-point modulation "
+            "or a fractional FCW dithers the TDC; analyze() sees only the "
+            "last.  Reported from fmcw_radar, issue #76."),
+        applies=lambda c: getattr(c.pll.cfg, "mode", "") == "tdc" and tdc_dead_zone(
+            c.pll.cfg.fcw, c.pll.cfg.tdc.t_res, c.pll.tdc_dither_rms_s()),
+        # 0.0: informational where it fires without an error (the stock loop
+        # at integer-N); the large case is a pinned KnownGap, not a widening
     ),
 )
 
@@ -449,6 +467,13 @@ CROSS_DOMAIN_GAPS: tuple[KnownGap, ...] = (
     KnownGap("mdll-fref-x2.0", "zoh-approx", 3.45,
              "MDLL at twice the design fref: the 1-ZOH oscillator NTF "
              "approximation sits at the edge of its 3.5 dB tolerance."),
+    KnownGap("adpll-intn-tdc-x4", "tdc-dead-zone", 13.91,
+             "TDC ADPLL at integer N with a 4x coarser TDC (2 ps, 0.05 bin "
+             "of dither): the loop parks inside one bin and limit-cycles; "
+             "simulate() reads +14 dB at the lowest comparison band, and "
+             "+11 to +20 dB per decade from 1 kHz to 100 kHz on a 1.6M-cycle "
+             "record.  Issue #76; the same loop with the stock 0.5 ps TDC is "
+             "the adpll-intn point, within 0.6 dB."),
     # Three adpll_bb off-plan entries (12-16 dB) were pinned here briefly
     # and removed the same day: the numbers measured a sweep-harness bug
     # (fref scaled without keeping cfg.frac.frac consistent, so the loop
