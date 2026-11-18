@@ -241,9 +241,13 @@ BOUNDARIES: tuple[Boundary, ...] = (
             "describe that, and simulate() can read up to ~20 dB more in "
             "band.  How much depends on the loop: the stock loop at integer-"
             "N (0.20 bin) measures +0.3 dB, the same loop with a 4x coarser "
-            "TDC (0.05 bin) is pinned below.  A chirp, two-point modulation "
-            "or a fractional FCW dithers the TDC; analyze() sees only the "
-            "last.  Reported from fmcw_radar, issue #76."),
+            "TDC (0.05 bin) is pinned below.  A fractional FCW takes the "
+            "loop out of it.  A chirp or two-point modulation sweeps the TDC "
+            "across bins but does not dither it: under half a bin the "
+            "quantization error repeats with the modulation, a simulate() "
+            "note rather than a boundary because the PSD level still agrees "
+            "(issue #80, correcting this statement's first version).  "
+            "Reported from fmcw_radar, issue #76."),
         applies=lambda c: getattr(c.pll.cfg, "mode", "") == "tdc" and tdc_dead_zone(
             c.pll.cfg.fcw, c.pll.cfg.tdc.t_res, c.pll.tdc_dither_rms_s()),
         # 0.0: informational where it fires without an error (the stock loop

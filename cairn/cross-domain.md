@@ -166,6 +166,25 @@ validation pass); supersedes the scattered per-test knowledge before it.
   (0.05 bin, pinned 13.91 dB).  The flag is conservative on purpose: dither
   in bins does not predict the size (the DCO's step per code word does too),
   so it marks where the white-quantization model is unsupported.
+  Correction 2026-11-18 (issue #80): the note and the boundary said a chirp
+  or two-point modulation dithers the TDC.  It sweeps it, which is not the
+  same: the sweep repeats every ramp, so under 0.5 bin the quantization
+  error follows the ramp.  On #80's loop (12.2 ps, 5.5 codes per DCO
+  period, 1 ps jitter = 0.09 bin) the band-averaged PSD still matches
+  analyze() (within 1.5 dB 0.3-10 MHz, -2.4..-3.4 at 100 kHz), but the
+  part common to 16 ramps is 3.2-8.4 dB under the total instead of 12;
+  at 6.5 ps (0.53 bin) it is back to -11..-13.  The 5 ps TDC (13 codes)
+  at 0.22 bin is mostly random already, so the 0.5-bin threshold is
+  conservative here too.  Not a cross-domain boundary, because the level
+  agrees: a simulate() note (`tdc_modulation_repeats`), pinned by
+  tests/test_adpll_tdc_ramp.py.  For a radar that integrates over ramps
+  this is the quantity that matters, and no PSD comparison can see it.
+- **The lock check read every sawtooth chirp as unlocked** (found with
+  #80): it compared the tail mean of freq_out with fout, modulation
+  included, so a ramp whose last 5000 cycles sit on its upper half read
+  hundreds of MHz off.  Both engines that take mod_freq put mod_freq[n]
+  into freq_out[n], so `ferr_signed` now subtracts it sample for sample.
+  GMSK never showed it: its mean deviation is about zero.
 - **`tdc.jitter_rms_s` was simulate()-only** until the same issue: analyze()
   had no term, and the field-sensitivity gate passed it because it accepts
   a change in either domain.  `tdc_jitter` is now a sampled white term,
