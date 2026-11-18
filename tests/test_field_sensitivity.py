@@ -45,6 +45,7 @@ TYPICAL = {
     "bb_meta_window_s": 5e-14, "kdco_est_error": 0.1, "tdc.gain_error": 0.05,
     "osc.v_min": None, "osc.v_max": None,        # computed from v_for below
     "q_tank": 10.0, "i_ratio": 0.2,
+    "tdc.dither_lsb": 1.0,                       # 1e-3 LSB is not a dither
 }
 JITTER_LIKE = ("jitter_rms_s",)                # any *_jitter_rms_s at 0 -> 1 ps
 
@@ -54,6 +55,10 @@ INT_RULE = {"n_bits": "2", "gear_shift_n": "500", "n_bands": "3", "bits": "8",
 
 # a field that only acts together with another one: set the partner too
 PARTNER = {
+    # refused on its own (it describes the dither DTC); with the dither on
+    # the run moves anyway, so whether eps itself acts is pinned by
+    # tests/test_adpll_tdc_dither.py's gain-error term, not here
+    "tdc.dither_gain_error": {"tdc.dither_lsb": "20"},
     "osc.band_step_hz": {"osc.n_bands": "3"},
     "osc.n_bands": {"osc.band_step_hz": "2e8"},
     "osc.pull_lock_range_hz": {"osc.pull_offset_hz": "5e6"},
