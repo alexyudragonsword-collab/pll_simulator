@@ -2,6 +2,19 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-11-18 · Issue #80 part 2: subtractive TDC dither
+
+- `TDCConfig.dither_lsb` / `dither_gain_error`, TDC mode only (dtc_bbpd
+  refuses them); `analyze()` gains `tdc_dither_gain`, and
+  `ADPLL.tdc_dither_mod_residual(f, dev_rms)` covers modulation.
+- 1 LSB makes #80's ramp error random; integer-N CW needs 2-3 LSB because
+  the DCO-edge bin is short.  Notes count the dither's RMS rather than
+  trusting an integer width -- a deviation from what fmcw_radar asked,
+  driven by the +2.9 dB it would have hidden.
+- Corrected my own estimate on #80: the modulation residual is -19.5 dB
+  under tdc_quant for their loop, not -34.  Details and every number:
+  `cairn/cross-domain.md`.
+
 ## 2026-11-18 · Issue #80 part 1: a ramp sweeps the TDC, it does not dither it
 
 - fmcw_radar's 12.2 ps TDC on a +-500 MHz sawtooth: PSD level agrees with

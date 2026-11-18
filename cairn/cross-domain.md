@@ -185,6 +185,37 @@ validation pass); supersedes the scattered per-test knowledge before it.
   hundreds of MHz off.  Both engines that take mod_freq put mod_freq[n]
   into freq_out[n], so `ferr_signed` now subtracts it sample for sample.
   GMSK never showed it: its mean deviation is about zero.
+- **Subtractive TDC dither** (#80 part 2, 2026-11-18): `TDCConfig.dither_lsb`
+  / `dither_gain_error`.  A pseudo-random k LSB moves the sampling instant
+  and is subtracted digitally; its own SeedSequence stream, applied with
+  noise=False too; off is bit-identical to main (480 000 samples, checked
+  against a worktree that really imported main).  Measured on #80's loop:
+  ramp common part -10.3..-14.3 dB at 1 LSB (random -12), level within
+  0.8 dB; CW integer-N band mean +16.8..+17.1 -> +2.4..+2.9 (1 LSB), -1.2..-1.55
+  (2), -0.2..-0.8 (3).
+  - **Integer LSB is not enough, and why.** The whitening theorem needs
+    equal steps; at 5.46 codes per DCO period the bin at the DCO edge is
+    0.46 LSB, and integer N parks right there.  With exactly 5 codes per
+    period 1 LSB reads -0.46..+0.02.  So fmcw's request (skip the notes for
+    an integer width) would have hidden +2.9 dB; the dither's RMS (0.29 bin
+    per LSB) counts in `tdc_dither_rms_s` instead, and 2 LSB clears both
+    notes.
+  - **The modulation residual has a second half I first missed.** Under a
+    deviation dev the TDC's codes-per-period normalisation is off by
+    dev/fout; the error is (dev/fout)(m - u), m the edges the dither
+    crossed, u the in-period position.  With u sweeping, variance
+    dev^2 (sigma_d^2 + T^2/12).  I first wrote sigma_d^2 only (and told #80
+    -34 dB); the T^2/12 part dominates narrow dither (19 ps vs 3.5 ps at
+    1 LSB), so it is -19.5 dB.  Checked: constant offset on a fractional
+    FCW -0.83..+0.23 dB, ramp -0.4..+0.5 dB once the deviation is
+    Hann-weighted (a centred Hann keeps 0.24 of a sawtooth's mean-square).
+    With the phase parked (integer FCW + constant offset) it under-reads,
+    up to 4.4 dB at 0.9 period of dither.
+  - `tdc_dither_gain` (eps*k*t_res left over) within 0.42 dB at 59-80 %.
+  - The field-sensitivity gate perturbs a 0-valued float to 1e-3 and
+    counts a refusal as checked: dither_gain_error alone was refused, so it
+    "passed" without acting.  It now gets dither_lsb as a partner; whether
+    eps itself acts is pinned by the gain-term test.
 - **`tdc.jitter_rms_s` was simulate()-only** until the same issue: analyze()
   had no term, and the field-sensitivity gate passed it because it accepts
   a change in either domain.  `tdc_jitter` is now a sampled white term,

@@ -291,7 +291,7 @@ reference-sampling PLL — `presets.spll_frac_52m_6p253g()`, 51 fields.
 
 ## ADPLL (TDC)
 
-all-digital PLL, counter + TDC — `presets.adpll_100m_10g()`, 35 fields.
+all-digital PLL, counter + TDC — `presets.adpll_100m_10g()`, 37 fields.
 
 ### Top level
 
@@ -347,6 +347,8 @@ all-digital PLL, counter + TDC — `presets.adpll_100m_10g()`, 35 fields.
 | `tdc.inl_sin` | s,cyc,rad | `()` | sine INL (amplitude, cycles, phase) / 正弦 INL（幅度, 周期数, 相位） |
 | `tdc.jitter_rms_s` | s | `0` | additive jitter / 附加抖动 |
 | `tdc.gain_error` | — | `0` | TDC gain error (unknown to the loop) / TDC 增益误差（环路不知情） |
+| `tdc.dither_lsb` | LSB | `0` | subtractive dither width (0 = off) / 扣除式 dither 宽度（0=关） |
+| `tdc.dither_gain_error` | — | `0` | dither DTC gain error / dither DTC 增益误差 |
 
 ## ADPLL (BBPD)
 
