@@ -2,6 +2,19 @@
 
 This file records substantive progress in reverse-chronological order — newest entry at the top, right below this line. Keep each entry short — summary and pointer only; conclusions settle into `cairn/<topic>.md`.
 
+## 2026-11-18 · Issue #80 part 1: a ramp sweeps the TDC, it does not dither it
+
+- fmcw_radar's 12.2 ps TDC on a +-500 MHz sawtooth: PSD level agrees with
+  analyze(); the part common to every ramp is 3-8 dB under the total at
+  0.09 bin (random: -12 dB over 16 ramps) and makes radar ghost targets.
+- Corrected the three places that said a ramp dithers the TDC; added a
+  simulate() note (`tdc_modulation_repeats`, < 0.5 bin with mod_freq).
+- Fixed on the way: the lock check left mod_freq in freq_out, so every
+  sawtooth chirp read "never reached fout".  ADPLL and SSPLL.
+- Part 2 (subtractive TDC dither, `TDCConfig.dither_lsb` /
+  `dither_gain_error`) is proposed on #80, waiting for their reply.
+  Numbers and reasoning: `cairn/cross-domain.md`.
+
 ## 2026-11-12 · Licence as an SPDX string; #76 and halo_serdes#149 closed
 
 - `pyproject`: `license = "MIT"` + `license-files`, setuptools floor 68 ->

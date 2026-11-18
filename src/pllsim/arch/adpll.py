@@ -496,9 +496,11 @@ class ADPLL(PLLBase):
                     "bandwidth (measured +16.9 dB at 0.08 bin, but +0.3 dB "
                     "for the stock loop at 0.20 bin -- the size depends on "
                     "the loop, so compare with simulate()).  A "
-                    "frequency ramp or two-point modulation dithers the TDC "
-                    "and this does not apply; neither does it in fractional-N."
-                    "  TDC jitter of ~0.5 bin or more also dithers it.")
+                    "frequency ramp moves the TDC across bins but does not "
+                    "dither it: under 0.5 bin the quantization error then "
+                    "repeats with the ramp, which simulate() notes.  Not "
+                    "applicable in fractional-N.  TDC jitter of ~0.5 bin or "
+                    "more dithers the TDC.")
         if m.f_ugb > c.fref / 10:
             notes.append("UGB > fref/10: discrete loop peaking significant")
         from ..core.boundaries import conditionally_stable
@@ -714,8 +716,29 @@ class ADPLL(PLLBase):
         offs = add_pull_offset(offs, c.osc, c.fref)
         if supply_ripple is not None and supply_ripple[1] < 0.45 * c.fref:
             offs = (offs or []) + [supply_ripple[1]]
+        if mod_freq is not None and np.any(np.asarray(mod_freq) != 0.0):
+            from ..core.boundaries import TDC_DITHER_BINS, tdc_modulation_repeats
+            dither_s = self.tdc_dither_rms_s()
+            if tdc_modulation_repeats(c.tdc.t_res, dither_s):
+                # issue #80: a ramp sweeps the TDC across bins without
+                # dithering it, so the error is a function of the ramp
+                sim.notes.append(
+                    f"TDC quantization follows the modulation: "
+                    f"{dither_s / c.tdc.t_res:.2f} TDC bins of RMS dither, "
+                    f"under {TDC_DITHER_BINS:g}.  The modulation sweeps the "
+                    "TDC across bins deterministically, so the quantization "
+                    "error repeats with it from one modulation period to "
+                    "the next.  Its PSD level can still agree with analyze()"
+                    "; what fails is the randomness: averaging or coherently "
+                    "integrating over periods does not reduce it (measured "
+                    "on a 12.2 ps TDC, 1 ps jitter, 0.08 bin: the part "
+                    "common to all ramps 3-8 dB below the total at "
+                    "0.3-10 MHz, against 12 dB for random noise over 16 "
+                    "ramps).  More TDC jitter breaks it up at the cost of "
+                    "in-band noise.")
         return postprocess(sim, int_band=c.int_band, spur_offsets=offs,
-                           flicker_corner_hz=flicker_corner_hz(c))
+                           flicker_corner_hz=flicker_corner_hz(c),
+                           mod_freq=mod_freq)
 
     def _sim_bbpd(self, n_cycles, noise, calibration, seed, f_start_offset,
                   dtc_gain_init_error, dtc_gain_drift=None,

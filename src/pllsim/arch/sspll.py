@@ -497,7 +497,8 @@ class SSPLL(PLLBase):
             spur_offsets = (spur_offsets or []) + [supply_ripple[1]]
         spur_offsets = add_pull_offset(spur_offsets, c.osc, c.fref)
         sim = postprocess(sim, int_band=c.int_band, spur_offsets=spur_offsets,
-                          flicker_corner_hz=flicker_corner_hz(c))
+                          flicker_corner_hz=flicker_corner_hz(c),
+                          mod_freq=mod_freq)
         sim = tuning_sim_notes(sim, c.osc)
         if fine is not None:
             return attach_fine(sim, fine, m_os, c.fref, c.int_band, spur_offsets)
